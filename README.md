@@ -10,7 +10,7 @@ So far? Nothing
 
 - Visual Studio Code of course
 - The [Shader languages support for VS Code](https://marketplace.visualstudio.com/items?itemName=slevesque.shader) extension
-- The [OpenGL / OpenGL ES Reference Compiler](https://www.khronos.org/opengles/sdk/tools/Reference-Compiler/) (for convenience, put it in your PATH)
+- The [OpenGL / OpenGL ES Reference Compiler](https://cvs.khronos.org/svn/repos/ogl/trunk/ecosystem/public/sdk/tools/glslang/Install/) (for convenience, put it in your PATH)
 
 ## Extension Settings
 
@@ -23,4 +23,5 @@ It doesn't work yet I guess...
 ## Release Notes
 
 ### X.X.X
-I added code. It does nothing really. 
+
+I added code. It does nothing really.
