@@ -1,0 +1,55 @@
+{
+    "name": "vscode-mc-shader",
+    "displayName": "vscode-mc-shader",
+    "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
+    "version": "0.0.1",
+    "publisher": "Strum355",
+    "engines": {
+        "vscode": "^1.23.0"
+    },
+    "categories": [
+        "Linters",
+        "Programming Languages"
+    ],
+    "activationEvents": [
+        "onLanguage:glsl"
+    ],
+    "extensionDependencies": [
+        "slevesque.shader"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "languages": [{
+            "id": "glsl",
+            "extensions": [
+                ".fsh",
+                ".vsh",
+                ".glsl"
+            ]
+        }],
+        "configuration": {
+            "title": "Minecraft GLSL configurations",
+            "properties": {
+                "mcglsl.glslangValidatorPath": {
+                    "type": "string",
+                    "default": "glslangValidator",
+                    "description": "The path to the glslangValidator binary. By default it assumes its in your PATH"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "npm run compile && node ./node_modules/vscode/bin/test"
+    },
+    "devDependencies": {
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.6",
+        "tslint": "^5.8.0",
+        "@types/node": "^7.0.43",
+        "@types/mocha": "^2.2.42"
+    }
+}
