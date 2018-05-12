@@ -1,65 +1,26 @@
-# vscode-mc-shader README
+# vscode-mc-shader
 
-This is the README for your extension "vscode-mc-shader". After writing up a brief description, we recommend including the following sections.
+This is an extension for [Visual Studio Code](https://code.visualstudio.com/). It (will) provide linting, syntax highlighting, warnings for unused uniforms, some cool DRAWBUFFERS stuff, auto-complete options and whatever else I think of for developing Minecraft GLSL Shaders using [Optifine](http://optifine.net).
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+So far? Nothing
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- Visual Studio Code of course
+- The [Shader languages support for VS Code](https://marketplace.visualstudio.com/items?itemName=slevesque.shader) extension
+- The [OpenGL / OpenGL ES Reference Compiler](https://www.khronos.org/opengles/sdk/tools/Reference-Compiler/) (for convenience, put it in your PATH)
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: enable/disable this extension
-* `myExtension.thing`: set to `blah` to do something
+- `mcglsl.glslangValidatorPath` : The path to the glslangValidator executable
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+It doesn't work yet I guess...
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
------------------------------------------------------------------------------------------------------------
-
-## Working with Markdown
-
-**Note:** You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+CMD+V` on macOS or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux) or `Cmd+Space` (macOS) to see a list of Markdown snippets
-
-### For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+### X.X.X
+I added code. It does nothing really. 
