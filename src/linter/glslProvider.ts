@@ -20,6 +20,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     
     subs.push(this)
     this.config = this.initConfig()
+    this.checkBinary()
 
     vscode.workspace.onDidOpenTextDocument(this.lint, this)
     vscode.workspace.onDidSaveTextDocument(this.lint, this)
@@ -28,9 +29,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     vscode.workspace.onDidChangeConfiguration(this.configChange, this)
 
-    vscode.workspace.onDidCloseTextDocument((document: vscode.TextDocument) => {
-       this.diagnosticCollection.delete(document.uri)
-    }, null, subs)
+    vscode.workspace.textDocuments.forEach((doc: vscode.TextDocument) => {
+      this.lint(doc)
+    })
   }
 
   private initConfig(): config {
@@ -45,6 +46,21 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     }
   }
 
+  private checkBinary() {
+    var isWin = require('os').platform().indexOf('win') > -1;
+
+    var out = cp.execSync(`${isWin ? 'where' : 'whereis'} ${this.config.glslangPath}`);
+
+    if (out.toString().split(' ')[1] == null) {
+      vscode.window.showErrorMessage(
+        'glslangValidator not found. Please check that you\'ve given the right path.' +
+        ' Use the config option "mcglsl.glslangValidatorPath" to point to its location'
+      )
+    } else {
+      vscode.window.showInformationMessage('glslangValidator found!')
+    }
+  }
+
   public dispose() {
     this.diagnosticCollection.clear()
     this.diagnosticCollection.dispose()
@@ -54,6 +70,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     if (e.affectsConfiguration('mcglsl')) {
       console.log('config changed')
       this.config = this.initConfig()
+      this.checkBinary()
     }
   }
 
@@ -61,14 +78,18 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     this.lint(e.document)
   }
 
-  private async lint(document: vscode.TextDocument) {
+  private lint(document: vscode.TextDocument) {
     if(document.languageId !== 'glsl') {
       return
     }
 
-    fs.mkdirSync(`${this.config.tmpdir}/shaders`)
+/*     let diags: vscode.Diagnostic[] = []
+    let diag = new vscode.Diagnostic(new vscode.Range(11, 0, 11, 0), 'stuff n things', vscode.DiagnosticSeverity.Error)
+    diags.push(diag)
+    this.diagnosticCollection.set(document.uri, diags) */
+    /* fs.mkdirSync(`${this.config.tmpdir}/shaders`)
     sym(`${vscode.workspace.rootPath}/shaders/composite.frag`, `${this.config.tmpdir}/shaders/composite.banana`)
-      .catch((err) => {console.log(err)})
+      .catch((err) => {console.log(err)}) */
   }
 
   public provideCodeActions(document: vscode.TextDocument, 
