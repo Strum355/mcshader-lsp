@@ -6,8 +6,7 @@
 		"curly": true,
 		"class-name": true,
 		"semicolon": [
-			true,
-			"always"
+			false,
 		],
 		"triple-equals": true
 	},

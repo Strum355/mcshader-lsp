@@ -4,6 +4,10 @@
     "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
     "version": "0.0.1",
     "publisher": "Strum355",
+    "license": "MIT",
+    "repository": {
+        "url": "https://github.com/Strum355/vscode-mc-shader"
+    },
     "engines": {
         "vscode": "^1.23.0"
     },
@@ -19,14 +23,16 @@
     ],
     "main": "./out/extension",
     "contributes": {
-        "languages": [{
-            "id": "glsl",
-            "extensions": [
-                ".fsh",
-                ".vsh",
-                ".glsl"
-            ]
-        }],
+        "languages": [
+            {
+                "id": "glsl",
+                "extensions": [
+                    ".fsh",
+                    ".vsh",
+                    ".glsl"
+                ]
+            }
+        ],
         "configuration": {
             "title": "Minecraft GLSL configurations",
             "properties": {
@@ -46,10 +52,14 @@
         "test": "npm run compile && node ./node_modules/vscode/bin/test"
     },
     "devDependencies": {
-        "typescript": "^2.6.1",
-        "vscode": "^1.1.6",
-        "tslint": "^5.8.0",
+        "@types/mocha": "^2.2.42",
         "@types/node": "^7.0.43",
-        "@types/mocha": "^2.2.42"
+        "@types/create-symlink": "./node_modules/@types/create-symlink",
+        "tslint": "^5.8.0",
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.6"
+    },
+    "dependencies": {
+        "create-symlink": "^1.0.0"
     }
 }
