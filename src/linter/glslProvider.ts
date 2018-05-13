@@ -3,8 +3,8 @@
 import * as vscode from 'vscode'
 import * as os from 'os'
 import * as cp from 'child_process'
-import * as sym from 'create-symlink'
 import * as fs from 'fs'
+import * as shell from 'shelljs'
 
 interface config {
   glslangPath: string
@@ -22,6 +22,14 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     this.config = this.initConfig()
     this.checkBinary()
 
+    try {
+      shell.mkdir('-p', `${this.config.tmpdir}/shaders`)
+      console.log('[MC-GLSL] Successfully made temp directory', `${this.config.tmpdir}/shaders`)
+    } catch(e) {
+      console.error('[MC-GLSL] Error creating temp dir', e)
+      vscode.window.showErrorMessage('[MC-GLSL] Error creat ing temp directory. Check developer tools for more info.')
+    }
+
     vscode.workspace.onDidOpenTextDocument(this.lint, this)
     vscode.workspace.onDidSaveTextDocument(this.lint, this)
     
@@ -37,27 +45,25 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private initConfig(): config {
     const c = vscode.workspace.getConfiguration('mcglsl')
 
-    console.log('glslangValidatorPath set to', c.get('glslangValidatorPath'))
-    console.log('temp dir set to', os.tmpdir())
+    console.log('[MC-GLSL] glslangValidatorPath set to', c.get('glslangValidatorPath'))
+    console.log('[MC-GLSL] temp directory root set to', `${os.tmpdir()}/${vscode.workspace.name}`)
 
     return {
       glslangPath: c.get('glslangValidatorPath') as string,
-      tmpdir: os.tmpdir()
+      tmpdir: `${os.tmpdir()}/${vscode.workspace.name}`
     }
   }
 
   private checkBinary() {
-    var isWin = require('os').platform().indexOf('win') > -1;
+    let ret = shell.which(this.config.glslangPath)
 
-    var out = cp.execSync(`${isWin ? 'where' : 'whereis'} ${this.config.glslangPath}`);
-
-    if (out.toString().split(' ')[1] == null) {
+    if (ret == null) {
       vscode.window.showErrorMessage(
-        'glslangValidator not found. Please check that you\'ve given the right path.' +
+        '[MC-GLSL] glslangValidator not found. Please check that you\'ve given the right path.' +
         ' Use the config option "mcglsl.glslangValidatorPath" to point to its location'
       )
     } else {
-      vscode.window.showInformationMessage('glslangValidator found!')
+      vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
     }
   }
 
@@ -68,7 +74,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   private configChange(e: vscode.ConfigurationChangeEvent) {
     if (e.affectsConfiguration('mcglsl')) {
-      console.log('config changed')
+      console.log('[MC-GLSL] config changed')
       this.config = this.initConfig()
       this.checkBinary()
     }
@@ -82,14 +88,6 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     if(document.languageId !== 'glsl') {
       return
     }
-
-/*     let diags: vscode.Diagnostic[] = []
-    let diag = new vscode.Diagnostic(new vscode.Range(11, 0, 11, 0), 'stuff n things', vscode.DiagnosticSeverity.Error)
-    diags.push(diag)
-    this.diagnosticCollection.set(document.uri, diags) */
-    /* fs.mkdirSync(`${this.config.tmpdir}/shaders`)
-    sym(`${vscode.workspace.rootPath}/shaders/composite.frag`, `${this.config.tmpdir}/shaders/composite.banana`)
-      .catch((err) => {console.log(err)}) */
   }
 
   public provideCodeActions(document: vscode.TextDocument, 

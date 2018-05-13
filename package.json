@@ -29,6 +29,7 @@
                 "extensions": [
                     ".fsh",
                     ".vsh",
+                    ".gsh",
                     ".glsl"
                 ]
             }
@@ -54,12 +55,12 @@
     "devDependencies": {
         "@types/mocha": "^2.2.42",
         "@types/node": "^7.0.43",
-        "@types/create-symlink": "./node_modules/@types/create-symlink",
+        "@types/shelljs": "^0.7.9",
         "tslint": "^5.8.0",
         "typescript": "^2.6.1",
         "vscode": "^1.1.6"
     },
     "dependencies": {
-        "create-symlink": "^1.0.0"
+        "shelljs": "^0.8.2"
     }
 }
