@@ -4,11 +4,14 @@
 		"no-unused-expression": true,
 		"no-duplicate-variable": true,
 		"curly": true,
+		"prefer-for-of": true,
+		"no-duplicate-switch-case": true,
+		"no-shadowed-variable": true,
+		"no-use-before-declare": true,
 		"class-name": true,
 		"semicolon": [
-			false,
+			false
 		],
-		"triple-equals": true
 	},
 	"defaultSeverity": "warning"
 }

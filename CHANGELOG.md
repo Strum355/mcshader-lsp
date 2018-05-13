@@ -1,7 +1,11 @@
 # Change Log
+
 All notable changes to the "vscode-mc-shader" extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
-- Initial release
+
+### Added
+- Basic linting with highlighting.
+- Support for .fsh, .vsh and .gsh files
