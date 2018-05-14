@@ -25,7 +25,10 @@ const extensions: { [id: string] : string } = {
 // These will be used to filter out error messages that are irrelevant/incorrect for us
 // Lot of testing needed to find all the ones that we need to match
 const filters: RegExp[] = [
-  /(not supported for this version or the enabled extensions)/g
+  /(required extension not requested: GL_GOOGLE_include_directive)/,
+  /('#include' : must be followed by a header name)/,
+  /(No code generated)/,
+  /(compilation terminated)/
 ]
 
 export default class GLSLProvider implements vscode.CodeActionProvider {
@@ -105,11 +108,21 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     this.lint(e.document)
   }
 
-  // This doesnt work yet >:( note: use .test instead of .match
+  // Returns true if the string matches any of the regex
   private matchesFilters(s: string): boolean {
     return filters.some((reg: RegExp, i: number, array: RegExp[]) => {
       return reg.test(s)
     })
+  }
+
+  // Split output by line, remove empty lines, remove the first and 2 trailing lines,
+  // and then remove all lines that match any of the regex
+  private parseOutput(linkname: string): string[] {
+    let res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
+    return res.split(/(?:\n)/g)
+      .filter((s: string) => { return s != '' })
+      .slice(1, -2) // why did this work as -1 before and now it needs -2???
+      .filter((s: string) => { return !this.matchesFilters(s)} )
   }
 
   // The big boi that does all the shtuff
@@ -120,21 +133,11 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     let linkname = path.join(this.config.tmpdir, `${path.basename(document.fileName, path.extname(document.fileName))}${extensions[path.extname(document.fileName)]}`)
 
-    if(!fs.existsSync(linkname)) {
-      console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating.`)
-      shell.ln('-s', document.uri.fsPath, linkname)
-      if (shell.error()) {
-        vscode.window.showErrorMessage('[MC-GLSL] Error creating symlink')
-      }
-    }
+    this.createSymlinks(linkname, document)
 
-    let res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
-    let lines = res.split(/(?:\n)/g)
-      .filter((s: string) => { return s != '' })
-      .slice(1, -1)
-      .filter((s: string) => { return this.matchesFilters(s)} )
-
-      if (lines.length < 1) {
+    let lines = this.parseOutput(linkname)
+    
+    if (lines.length < 1) {
       // If there were no errors, we need to set the list empty so that the editor reflects that
       this.diagnosticCollection.set(document.uri, [])
       return
@@ -161,6 +164,17 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
       diags.push(new vscode.Diagnostic(range, message, severity))
     })
     this.diagnosticCollection.set(document.uri, diags)
+  }
+
+  private createSymlinks(linkname: string, document: vscode.TextDocument) {
+    if(!fs.existsSync(linkname)) {
+      console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating.`)
+      shell.ln('-s', document.uri.fsPath, linkname)
+      if (shell.error()) {
+        vscode.window.showErrorMessage('[MC-GLSL] Error creating symlink')
+      }
+    }
+
   }
 
   public provideCodeActions(document: vscode.TextDocument, 
