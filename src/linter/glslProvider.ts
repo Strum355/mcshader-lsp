@@ -123,6 +123,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     if(!fs.existsSync(linkname)) {
       console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating.`)
       shell.ln('-s', document.uri.fsPath, linkname)
+      if (shell.error()) {
+        vscode.window.showErrorMessage('[MC-GLSL] Error creating symlink')
+      }
     }
 
     let res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
