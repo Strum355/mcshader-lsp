@@ -91,7 +91,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
       )
     } else {
       // Do we want this here? ¯\_(ツ)_/¯
-      vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
+      //vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
     }
   }
 
@@ -108,10 +108,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   // This doesnt work yet >:( note: use .test instead of .match
   private matchesFilters(s: string): boolean {
     return filters.some((reg: RegExp, i: number, array: RegExp[]) => {
-      let m = s.match(reg)
-      console.log(s)
-      console.log(m)
-      return (m && m.length > 1)!
+      return reg.test(s)
     })
   }
 
@@ -132,9 +129,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     let lines = res.split(/(?:\n)/g)
       .filter((s: string) => { return s != '' })
       .slice(1, -1)
-      //.filter((s: string) => { return !this.matchesFilters(s)} )
+      .filter((s: string) => { return this.matchesFilters(s)} )
 
-    if (lines.length < 1) {
+      if (lines.length < 1) {
       // If there were no errors, we need to set the list empty so that the editor reflects that
       this.diagnosticCollection.set(document.uri, [])
       return
@@ -143,7 +140,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     let diags: vscode.Diagnostic[] = []
 
     lines.forEach((line: string) => {
-      let matches = line.match(/WARNING:|ERROR:\s\d+:(\d+): (\W.*)/)
+      let matches = line.match(/(?:WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/)
       if (!matches || (matches && matches.length < 3)) {
         return
       }
