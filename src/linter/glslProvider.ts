@@ -12,6 +12,7 @@ import * as path from 'path'
 interface Config {
   glslangPath: string
   tmpdir: string
+  isWin: boolean
 }
 
 // These are used for symlinking as glslangValidator only accepts files in these formats
@@ -25,7 +26,7 @@ const extensions: { [id: string] : string } = {
 // These will be used to filter out error messages that are irrelevant/incorrect for us
 // Lot of testing needed to find all the ones that we need to match
 const filters: RegExp[] = [
-  /(required extension not requested: GL_GOOGLE_include_directive)/,
+  ///(required extension not requested: GL_GOOGLE_include_directive)/,
   /('#include' : must be followed by a header name)/,
   /(No code generated)/,
   /(compilation terminated)/
@@ -70,7 +71,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     return {
       glslangPath: c.get('glslangValidatorPath') as string,
-      tmpdir: path.join(os.tmpdir(), vscode.workspace.name!, 'shaders')
+      tmpdir: path.join(os.tmpdir(), vscode.workspace.name!, 'shaders'),
+      isWin: require('os').platform() === 'win32'
     }
   }
 
@@ -168,13 +170,18 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   private createSymlinks(linkname: string, document: vscode.TextDocument) {
     if(!fs.existsSync(linkname)) {
-      console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating.`)
-      shell.ln('-s', document.uri.fsPath, linkname)
-      if (shell.error()) {
+      console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating`, this.config.isWin ? 'hard link.' : 'soft link.')
+      if (this.config.isWin) {
+        shell.ln(document.uri.fsPath, linkname)
+      } else {
+        shell.ln('-s', document.uri.fsPath, linkname)
+      }
+
+      if(shell.error()) {
+        console.error(shell.error())
         vscode.window.showErrorMessage('[MC-GLSL] Error creating symlink')
       }
     }
-
   }
 
   public provideCodeActions(document: vscode.TextDocument, 
