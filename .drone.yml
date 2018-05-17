@@ -1,0 +1,13 @@
+pipeline:
+  lint:
+    image: node:${NODE_VERSION}
+    commands:
+      - npm i
+      - npm run lint
+
+matrix:
+  NODE_VERSION:
+    - "10-alpine"
+    - "9-alpine"
+    - "8.11-alpine"
+    - "alpine"
