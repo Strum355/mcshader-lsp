@@ -1,6 +1,6 @@
 # vscode-mc-shader
 
-![badge](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)
+[![badge](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)
 
 This is an extension for [Visual Studio Code](https://code.visualstudio.com/) for developing Minecraft GLSL Shaders for [Optifine](http://optifine.net). It currently provides linting and syntax highlighting (by stef-levesque/vscode-shader dependency).
 
