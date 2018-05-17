@@ -5,6 +5,11 @@ pipeline:
       - npm i
       - npm run lint
       - npm run test
+  test:
+    image: node:${NODE_VERSION}
+    commands:
+      - npm i
+      - npm run test
 
 matrix:
   NODE_VERSION:
