@@ -4,6 +4,7 @@ pipeline:
     commands:
       - npm i
       - npm run lint
+      - npm run test
 
 matrix:
   NODE_VERSION:

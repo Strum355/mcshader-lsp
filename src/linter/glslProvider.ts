@@ -36,11 +36,20 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
   private config: Config
 
-  constructor(subs: vscode.Disposable[]) {
+  public static readonly binaryFound: string = '[MC-GLSL] glslangValidator found!'
+  public static readonly binaryNotFound: string = '[MC-GLSL] glslangValidator not found. Please check that you\'ve given the right path. ' +
+                                                  'Use the config option "mcglsl.glslangValidatorPath" to point to its location'
+
+  constructor(subs: vscode.Disposable[], config?: Config) {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection()
 
     subs.push(this)
-    this.config = this.initConfig()
+    if (config !== null) {
+      this.config = this.initConfig()
+    } else {
+      this.config = config
+    }
+
     this.checkBinary()
 
     try {
@@ -86,18 +95,18 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   }
 
   // Check if glslangValidator binary can be found
-  private checkBinary() {
+  public checkBinary(): string {
     const ret = shell.which(this.config.glslangPath)
 
     if(ret == null) {
-      vscode.window.showErrorMessage(
-        '[MC-GLSL] glslangValidator not found. Please check that you\'ve given the right path.' +
-        ' Use the config option "mcglsl.glslangValidatorPath" to point to its location'
-      )
-    } else {
-      // Do we want this here? ¯\_(ツ)_/¯
-      // vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
+      console.log(GLSLProvider.binaryNotFound)
+      vscode.window.showErrorMessage(GLSLProvider.binaryNotFound)
+      return GLSLProvider.binaryNotFound
     }
+
+    // Do we want this here? ¯\_(ツ)_/¯
+    // vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
+    return GLSLProvider.binaryFound
   }
 
   public dispose() {
@@ -111,7 +120,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   }
 
   // Returns true if the string matches any of the regex
-  private matchesFilters(s: string): boolean {
+  public matchesFilters(s: string): boolean {
     return filters.some((reg: RegExp, i: number, array: RegExp[]) => {
       return reg.test(s)
     })
@@ -123,7 +132,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     const res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
     return res.split(/(?:\n)/g)
       .filter((s: string) => s !== '')
-      .slice(1, -2) // why did this work as -1 before and now it needs -2???
+      .slice(1, -1) // TODO not this
       .filter((s: string) => !this.matchesFilters(s))
   }
 
@@ -174,7 +183,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
       if (this.config.isWin) {
         shell.ln(document.uri.fsPath, linkname)
       } else {
-        shell.ln('-s', document.uri.fsPath, linkname)
+        shell.ln('-sf', document.uri.fsPath, linkname)
       }
 
       if(shell.error()) {
