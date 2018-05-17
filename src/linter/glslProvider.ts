@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 import * as vscode from 'vscode'
 import * as os from 'os'
@@ -16,20 +16,20 @@ interface Config {
 }
 
 // These are used for symlinking as glslangValidator only accepts files in these formats
-const extensions: { [id: string] : string } = {
+const extensions: { [id: string]: string } = {
   '.fsh':  '.frag',
   '.vsh':  '.vert',
   '.gsh':  '.geom',
-  '.glsl': '.frag'
+  '.glsl': '.frag',
 }
 
 // These will be used to filter out error messages that are irrelevant/incorrect for us
 // Lot of testing needed to find all the ones that we need to match
 const filters: RegExp[] = [
-  ///(required extension not requested: GL_GOOGLE_include_directive)/,
+  /(required extension not requested: GL_GOOGLE_include_directive)/,
   /('#include' : must be followed by a header name)/,
   /(No code generated)/,
-  /(compilation terminated)/
+  /(compilation terminated)/,
 ]
 
 export default class GLSLProvider implements vscode.CodeActionProvider {
@@ -38,7 +38,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   constructor(subs: vscode.Disposable[]) {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection()
-    
+
     subs.push(this)
     this.config = this.initConfig()
     this.checkBinary()
@@ -53,7 +53,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     vscode.workspace.onDidOpenTextDocument(this.lint, this)
     vscode.workspace.onDidSaveTextDocument(this.lint, this)
-    
+
     vscode.workspace.onDidChangeTextDocument(this.docChange, this)
 
     vscode.workspace.onDidChangeConfiguration(this.configChange, this)
@@ -72,13 +72,13 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     return {
       glslangPath: c.get('glslangValidatorPath') as string,
       tmpdir: path.join(os.tmpdir(), vscode.workspace.name!, 'shaders'),
-      isWin: require('os').platform() === 'win32'
+      isWin: require('os').platform() === 'win32',
     }
   }
 
   // Called when the config files are changed
   private configChange(e: vscode.ConfigurationChangeEvent) {
-    if (e.affectsConfiguration('mcglsl')) {
+    if(e.affectsConfiguration('mcglsl')) {
       console.log('[MC-GLSL] config changed')
       this.config = this.initConfig()
       this.checkBinary()
@@ -87,16 +87,16 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   // Check if glslangValidator binary can be found
   private checkBinary() {
-    let ret = shell.which(this.config.glslangPath)
+    const ret = shell.which(this.config.glslangPath)
 
-    if (ret == null) {
+    if(ret == null) {
       vscode.window.showErrorMessage(
         '[MC-GLSL] glslangValidator not found. Please check that you\'ve given the right path.' +
         ' Use the config option "mcglsl.glslangValidatorPath" to point to its location'
       )
     } else {
       // Do we want this here? ¯\_(ツ)_/¯
-      //vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
+      // vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
     }
   }
 
@@ -120,11 +120,11 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   // Split output by line, remove empty lines, remove the first and 2 trailing lines,
   // and then remove all lines that match any of the regex
   private parseOutput(linkname: string): string[] {
-    let res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
+    const res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
     return res.split(/(?:\n)/g)
-      .filter((s: string) => { return s != '' })
+      .filter((s: string) => s !== '')
       .slice(1, -2) // why did this work as -1 before and now it needs -2???
-      .filter((s: string) => { return !this.matchesFilters(s)} )
+      .filter((s: string) => !this.matchesFilters(s))
   }
 
   // The big boi that does all the shtuff
@@ -133,36 +133,36 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
       return
     }
 
-    let linkname = path.join(this.config.tmpdir, `${path.basename(document.fileName, path.extname(document.fileName))}${extensions[path.extname(document.fileName)]}`)
+    const linkname = path.join(this.config.tmpdir, `${path.basename(document.fileName, path.extname(document.fileName))}${extensions[path.extname(document.fileName)]}`)
 
     this.createSymlinks(linkname, document)
 
-    let lines = this.parseOutput(linkname)
-    
-    if (lines.length < 1) {
+    const lines = this.parseOutput(linkname)
+
+    if(lines.length < 1) {
       // If there were no errors, we need to set the list empty so that the editor reflects that
       this.diagnosticCollection.set(document.uri, [])
       return
     }
 
-    let diags: vscode.Diagnostic[] = []
+    const diags: vscode.Diagnostic[] = []
 
     lines.forEach((line: string) => {
-      let matches = line.match(/(?:WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/)
-      if (!matches || (matches && matches.length < 3)) {
+      const matches = line.match(/(?:WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/)
+      if(!matches || (matches && matches.length < 3)) {
         return
       }
-      
-      let [lineNum, message] = matches.slice(1,3)
-      
+
+      const [lineNum, message] = matches.slice(1,3)
+
       // Default to error
       let severity: vscode.DiagnosticSeverity = vscode.DiagnosticSeverity.Error
       if(!line.startsWith('ERROR:')) {
         // for now assume theres either errors or warnings. Maybe thats even the case!
         severity = vscode.DiagnosticSeverity.Warning
       }
-      
-      let range = new vscode.Range(parseInt(lineNum) -1, 0, parseInt(lineNum) - 1, 0)
+
+      const range = new vscode.Range(parseInt(lineNum) - 1, 0, parseInt(lineNum) - 1, 0)
       diags.push(new vscode.Diagnostic(range, message, severity))
     })
     this.diagnosticCollection.set(document.uri, diags)
@@ -184,9 +184,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     }
   }
 
-  public provideCodeActions(document: vscode.TextDocument, 
-                            range: vscode.Range, 
-                            context: vscode.CodeActionContext, 
+  public provideCodeActions(document: vscode.TextDocument,
+                            range: vscode.Range,
+                            context: vscode.CodeActionContext,
                             token: vscode.CancellationToken): vscode.ProviderResult<vscode.Command[]> {
     throw new Error('Method not implemented.');
   }
