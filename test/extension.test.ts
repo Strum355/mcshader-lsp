@@ -1,5 +1,4 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode'
 import * as provider from '../src/linter/glslProvider'
 import * as fs from 'fs'
 import * as shell from 'shelljs'
