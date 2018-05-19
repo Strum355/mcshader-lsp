@@ -16,7 +16,10 @@
         "Programming Languages"
     ],
     "activationEvents": [
-        "onLanguage:glsl"
+        "onLanguage:glsl",
+        "workspaceContains:**/*.fsh",
+        "workspaceContains:**/*.vsh",
+        "workspaceContains:**/*.gsh"
     ],
     "extensionDependencies": [
         "slevesque.shader"

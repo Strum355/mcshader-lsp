@@ -10,9 +10,9 @@ import * as path from 'path'
 // glslangPath: Path to glslangValidator (assumed in PATH by default)
 // tmpdir: the directory into which the symlinks are stored, should be the OS's temp dir
 interface Config {
-  glslangPath: string
-  tmpdir: string
-  isWin: boolean
+  readonly glslangPath: string
+  readonly tmpdir: string
+  readonly isWin: boolean
 }
 
 // These are used for symlinking as glslangValidator only accepts files in these formats
@@ -44,6 +44,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection()
 
     subs.push(this)
+
+    // For if i ever get testing to work
     if (config !== null) {
       this.config = this.initConfig()
     } else {
@@ -67,9 +69,11 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     vscode.workspace.onDidChangeConfiguration(this.configChange, this)
 
-    vscode.workspace.textDocuments.forEach((doc: vscode.TextDocument) => {
-      this.lint(doc)
-    })
+    vscode.workspace.textDocuments.forEach((doc: vscode.TextDocument) => this.lint(doc))
+  }
+
+  public getConfig(): Config {
+    return this.config
   }
 
   private initConfig(): Config {
@@ -130,9 +134,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   // and then remove all lines that match any of the regex
   private parseOutput(linkname: string): string[] {
     const res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
-    return res.split(/(?:\n)/g)
-      .filter((s: string) => s !== '')
-      .slice(1, -1) // TODO not this
+    return res.split('\n')
+      .filter((s: string) => s.length > 1)
+      .slice(1)
       .filter((s: string) => !this.matchesFilters(s))
   }
 
@@ -147,12 +151,6 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     this.createSymlinks(linkname, document)
 
     const lines = this.parseOutput(linkname)
-
-    if(lines.length < 1) {
-      // If there were no errors, we need to set the list empty so that the editor reflects that
-      this.diagnosticCollection.set(document.uri, [])
-      return
-    }
 
     const diags: vscode.Diagnostic[] = []
 

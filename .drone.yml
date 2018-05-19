@@ -4,12 +4,6 @@ pipeline:
     commands:
       - npm i
       - npm run lint
-  test:
-    image: node:${NODE_VERSION}
-    commands:
-      - npm i
-      - npm i -g vscode
-      - npm run test
 
 matrix:
   NODE_VERSION:
