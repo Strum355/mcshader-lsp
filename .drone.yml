@@ -8,7 +8,7 @@ pipeline:
     image: node:${NODE_VERSION}
     commands:
       - npm i
-      - npm i vscode
+      - npm i -g vscode
       - npm run test
 
 matrix:
