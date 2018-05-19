@@ -10,11 +10,13 @@ Development requirements (did I miss any? Submit a PR!):
 
 Fork the repo (you are using [SSH keys](https://help.github.com/articles/connecting-to-github-with-ssh/), right?):
 
-`git@github.com:Strum355/vscode-mc-shader.git`
+`git clone git@github.com:Strum355/vscode-mc-shader.git`
 
 Install dependencies:
 
 `cd vscode-mc-shader && npm i`
+
+Follow [this](https://code.visualstudio.com/docs/extensions/overview) link to learn your way around making extensions.
 
 ## Submitting a Pull Request
 

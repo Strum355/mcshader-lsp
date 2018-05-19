@@ -160,7 +160,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
         return
       }
 
-      const [lineNum, message] = matches.slice(1,3)
+      const [lineString, message] = matches.slice(1,3)
+      const lineNum = parseInt(lineString)
 
       // Default to error
       let severity: vscode.DiagnosticSeverity = vscode.DiagnosticSeverity.Error
@@ -169,7 +170,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
         severity = vscode.DiagnosticSeverity.Warning
       }
 
-      const range = new vscode.Range(parseInt(lineNum) - 1, 0, parseInt(lineNum) - 1, 0)
+      const eol = document.lineAt(lineNum - 1).text.length
+      const range = new vscode.Range(lineNum - 1, 0, lineNum - 1, eol - 1)
       diags.push(new vscode.Diagnostic(range, message, severity))
     })
     this.diagnosticCollection.set(document.uri, diags)
