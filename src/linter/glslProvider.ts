@@ -6,11 +6,13 @@ import * as cp from 'child_process'
 import * as fs from 'fs'
 import * as shell from 'shelljs'
 import * as path from 'path'
+import '../global'
 
 // glslangPath: Path to glslangValidator (assumed in PATH by default)
 // tmpdir: the directory into which the symlinks are stored, should be the OS's temp dir
 interface Config {
   readonly glslangPath: string
+  readonly workDir: string
   readonly tmpdir: string
   readonly isWin: boolean
 }
@@ -31,6 +33,8 @@ const filters: RegExp[] = [
   /(No code generated)/,
   /(compilation terminated)/,
 ]
+
+const syntaxError = /(syntax error)/
 
 export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
@@ -84,6 +88,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     return {
       glslangPath: c.get('glslangValidatorPath') as string,
+      workDir: vscode.workspace.rootPath!,
       tmpdir: path.join(os.tmpdir(), vscode.workspace.name!, 'shaders'),
       isWin: require('os').platform() === 'win32',
     }
@@ -150,31 +155,42 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     this.createSymlinks(linkname, document)
 
-    const lines = this.parseOutput(linkname)
+    const problems = this.parseOutput(linkname)
 
     const diags: vscode.Diagnostic[] = []
 
-    lines.forEach((line: string) => {
-      const matches = line.match(/(?:WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/)
-      if(!matches || (matches && matches.length < 3)) {
+    problems.forEach((problem: string) => {
+      const matches = problem.match(/(WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/)
+      if(!matches || (matches && matches.length < 4)) {
         return
       }
 
-      const [lineString, message] = matches.slice(1,3)
+      const [type, lineString, message] = matches.slice(1,4)
       const lineNum = parseInt(lineString)
 
       // Default to error
       let severity: vscode.DiagnosticSeverity = vscode.DiagnosticSeverity.Error
-      if(!line.startsWith('ERROR:')) {
+      if(type !== 'ERROR:') {
         // for now assume theres either errors or warnings. Maybe thats even the case!
         severity = vscode.DiagnosticSeverity.Warning
       }
 
-      const eol = document.lineAt(lineNum - 1).text.length
-      const range = new vscode.Range(lineNum - 1, 0, lineNum - 1, eol - 1)
+      const range = this.calcRange(document, lineNum)
+
+      if (diags.length > 0 && range.isEqual(diags[diags.length - 1].range) && syntaxError.test(message)) {
+        return
+      }
+
       diags.push(new vscode.Diagnostic(range, message, severity))
     })
+
     this.diagnosticCollection.set(document.uri, diags)
+  }
+
+  private calcRange(document: vscode.TextDocument, lineNum: number): vscode.Range {
+    const line = document.lineAt(lineNum - 1).text
+    const trimmed = line.toString().leftTrim()
+    return new vscode.Range(lineNum - 1, line.length - trimmed.length, lineNum - 1, line.length - 1)
   }
 
   private createSymlinks(linkname: string, document: vscode.TextDocument) {
