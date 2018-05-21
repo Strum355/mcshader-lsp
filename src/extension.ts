@@ -15,7 +15,7 @@ export function deactivate() {
     try {
         console.log('[MC-GLSL] disposing')
         shell.rm('-rf', glslProv.getConfig().tmpdir)
-      } catch(e) {
+      } catch (e) {
         console.log(e)
       }
 }

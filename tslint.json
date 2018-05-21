@@ -1,9 +1,6 @@
 {
     "defaultSeverity": "error",
-    "extends": [
-        "tslint:recommended"
-    ],
-    "jsRules": {},
+    "extends": ["tslint:recommended"],
     "rules": {
         "quotemark": [true, "single"],
         "semicolon": false,
@@ -16,8 +13,16 @@
         "eofline": false,
         "member-ordering": false,
         "trailing-comma": false,
-        "max-line-length": [true, 170],
+        "max-line-length": {
+            "severity": "warning",
+            "options": [170]
+        },
         "radix": false,
+        "no-empty": false,
+        "prefer-const": {
+            "severity": "warning"
+        },
+        "curly": [true, "ignore-same-line"],
         "whitespace": [
             true,
             "check-decl",
@@ -27,8 +32,8 @@
             "check-type",
             "check-typecast",
             "check-type-operator",
-            "check-preblock"
+            "check-preblock",
+            "check-branch"
         ]
     },
-    "rulesDirectory": []
 }
