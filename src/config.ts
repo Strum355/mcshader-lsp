@@ -7,10 +7,10 @@ import * as os from 'os'
 // tmpdir: the directory into which the symlinks are stored, should be the OS's temp dir
 // isWin: are we on Windows?
 export class Config {
-  readonly glslangPath: string
-  readonly workDir: string
-  readonly tmpdir: string
-  readonly isWin: boolean
+  public readonly glslangPath: string
+  public readonly workDir: string
+  public readonly tmpdir: string
+  public readonly isWin: boolean
 
   constructor() {
     const c = vscode.workspace.getConfiguration('mcglsl')
@@ -19,8 +19,8 @@ export class Config {
     console.log('[MC-GLSL] temp directory root set to', path.join(os.tmpdir(), vscode.workspace.name!, 'shaders'))
 
     this.glslangPath = c.get('glslangValidatorPath') as string
-    this.workDir = path.basename(vscode.workspace.rootPath!) === 'shaders' ? 
-                    vscode.workspace.rootPath! : 
+    this.workDir = path.basename(vscode.workspace.rootPath!) === 'shaders' ?
+                    vscode.workspace.rootPath! :
                     path.join(vscode.workspace.rootPath!, 'shaders')
     this.tmpdir = path.join(os.tmpdir(), vscode.workspace.name!, 'shaders')
     this.isWin = os.platform() === 'win32'

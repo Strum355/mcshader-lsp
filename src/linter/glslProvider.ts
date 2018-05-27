@@ -66,9 +66,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     vscode.workspace.onDidOpenTextDocument(this.lint, this)
     vscode.workspace.onDidSaveTextDocument(this.lint, this)
 
-    vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => { 
+    vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
       this.config.onChange(e)
-      this.checkBinary() 
+      this.checkBinary()
     }, this)
 
     vscode.workspace.textDocuments.forEach(doc => this.lint(doc))
@@ -102,7 +102,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   private filterPerLine(matches: RegExpMatchArray[], document: vscode.TextDocument) {
     return matches.filter(match => {
-      let line = document.lineAt(parseInt(match![2]))
+      const line = document.lineAt(parseInt(match![2]))
       return !(regSyntaxError.test(match[0]) && line.text.leftTrim().startsWith('#include'))
     })
   }
@@ -110,13 +110,13 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   // The big boi that does all the shtuff
   private lint(document: vscode.TextDocument) {
     if (document.languageId !== 'glsl') return
-    
+
     const linkname = path.join(this.config.tmpdir, `${path.basename(document.fileName, path.extname(document.fileName))}${extensions[path.extname(document.fileName)]}`)
-    
+
     this.createSymlinks(linkname, document)
 
     const res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
-    let messageMatches = this.filterPerLine(this.filterMessages(res) as RegExpMatchArray[], document)
+    const messageMatches = this.filterPerLine(this.filterMessages(res) as RegExpMatchArray[], document)
 
     const diags: vscode.Diagnostic[] = []
 
@@ -134,10 +134,11 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     })
 
     this.findIncludes(document).forEach(include => {
-      //path.join(this.config.workDir, match![1])
+      // path.join(this.config.workDir, match![1])
       if (include.text.includes('../')) {
         const trimmed = include.text.leftTrim()
-        const range = new vscode.Range(include.lineNumber, include.text.length - trimmed.length, include.lineNumber, (include.text.length - trimmed.length) + trimmed.length)
+        const offset = include.text.length - trimmed.length
+        const range = new vscode.Range(include.lineNumber, offset, include.lineNumber, offset + trimmed.length)
         diags.push(new vscode.Diagnostic(range, '[mc-glsl] includes with .. directory movement will fail in zipped shaders.', vscode.DiagnosticSeverity.Warning))
       }
     })
@@ -169,7 +170,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     if (await fs.exists(linkname)) {
       return
     }
-   
+
     console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating`, this.config.isWin ? 'hard link.' : 'soft link.')
 
     if (this.config.isWin) shell.ln(document.uri.fsPath, linkname)

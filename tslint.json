@@ -8,6 +8,7 @@
         "object-literal-sort-keys": false,
         "interface-name": false,
         "indent": [true, "spaces", 2],
+        "arrow-parens": false,
         "max-classes-per-file": false,
         "no-console": false,
         "eofline": false,
@@ -35,5 +36,5 @@
             "check-preblock",
             "check-branch"
         ]
-    },
+    }
 }
