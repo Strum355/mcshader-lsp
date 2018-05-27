@@ -38,7 +38,7 @@ const filters: RegExp[] = [
 
 const syntaxError = /(syntax error)/
 const outputMatch = /(WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/
-const include = /^(?: |\t)*(?:#include) "((?:\/[\w_-]+)+\.(?:glsl))"$/
+const include = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
 
 export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
@@ -72,7 +72,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     vscode.workspace.onDidChangeConfiguration(this.configChange, this)
 
-    vscode.workspace.textDocuments.forEach((doc: vscode.TextDocument) => this.lint(doc))
+    vscode.workspace.textDocuments.forEach(doc => this.lint(doc))
   }
 
   private initConfig(): Config {
@@ -84,8 +84,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     if (c.get('lintOnSave') as boolean) {
       this.onTypeDisposable = vscode.workspace.onDidChangeTextDocument(this.docChange, this)
       console.log('[MC-GLSL] linting on save')
-    } else {
-      if (this.onTypeDisposable) this.onTypeDisposable.dispose()
+    } else if (this.onTypeDisposable) {
+      this.onTypeDisposable.dispose()
       console.log('[MC-GLSL] not linting on save')
     }
 
@@ -114,12 +114,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
       const msg = '[MC-GLSL] glslangValidator not found. Please check that you\'ve given the right path.'
       console.log(msg)
       vscode.window.showErrorMessage(msg)
-      return
     }
-
-    // Do we want this here? ¯\_(ツ)_/¯
-    // vscode.window.showInformationMessage('[MC-GLSL] glslangValidator found!')
-    return
   }
 
   public getConfig = () => this.config
@@ -130,18 +125,18 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private docChange = (e: vscode.TextDocumentChangeEvent) => this.lint(e.document)
 
   // Returns true if the string matches any of the regex
-  public matchesFilters = (s: string) => filters.some((reg: RegExp) => reg.test(s))
+  public matchesFilters = (s: string) => filters.some(reg => reg.test(s))
 
   // Split output by line, remove empty lines, remove the first and 2 trailing lines,
   // and then remove all lines that match any of the regex
   private filterMessages = (res: string) => res
       .split('\n')
-      .filter((s: string) => s.length > 1 && !this.matchesFilters(s))
-      .map((s: string) => s.match(outputMatch))
+      .filter(s => s.length > 1 && !this.matchesFilters(s))
+      .map(s => s.match(outputMatch))
       .filter(match => match && match.length > 3)
 
   private filterPerLine(matches: RegExpMatchArray[], document: vscode.TextDocument) {
-    return matches.filter((match) => {
+    return matches.filter(match => {
       let line = document.lineAt(parseInt(match![2]))
       return !(syntaxError.test(match[0]) && line.text.leftTrim().startsWith('#include'))
     })
@@ -160,18 +155,25 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
     const diags: vscode.Diagnostic[] = []
 
-    messageMatches.forEach((match) => {
+    messageMatches.forEach(match => {
       const [type, lineString, message] = match!.slice(1)
       const lineNum = parseInt(lineString)
 
-      // Default to error
       const severity: vscode.DiagnosticSeverity = type !== 'ERROR:' ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error
 
       const range = this.calcRange(document, lineNum)
 
       if (diags.length > 0 && range.isEqual(diags[diags.length - 1].range) && syntaxError.test(message)) return
 
-      diags.push(new vscode.Diagnostic(range, message, severity))
+      diags.push(new vscode.Diagnostic(range, '[mc-glsl] ' + message, severity))
+    })
+
+    this.findIncludes(document).forEach(include => {
+      if (include.text.includes('../')) {
+        const trimmed = include.text.leftTrim()
+        const range = new vscode.Range(include.lineNumber, include.text.length - trimmed.length, include.lineNumber, (include.text.length - trimmed.length) + trimmed.length)
+        diags.push(new vscode.Diagnostic(range, '[mc-glsl] includes with .. directory movement will fail in zipped shaders.', vscode.DiagnosticSeverity.Warning))
+      }
     })
 
     this.diagnosticCollection.set(document.uri, diags)
@@ -181,9 +183,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     const includes = this.findIncludes(document)
   }
 
-  private findIncludes = (document: vscode.TextDocument) => this
-      .filter(document, (line: vscode.TextLine) => include.test(line.text))
-      .map((line: vscode.TextLine) => line.text.match(include) || [])
+  private findIncludes = (document: vscode.TextDocument) => this.filter(document, line => include.test(line.text))
 
   private filter(document: vscode.TextDocument, f: (s: vscode.TextLine) => boolean): vscode.TextLine[] {
     const out: vscode.TextLine[] = []
@@ -195,21 +195,23 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   private calcRange(document: vscode.TextDocument, lineNum: number): vscode.Range {
     const line = document.lineAt(lineNum - 1).text
-    const trimmed = line.toString().leftTrim()
+    const trimmed = line.leftTrim()
     return new vscode.Range(lineNum - 1, line.length - trimmed.length, lineNum - 1, line.length - 1)
   }
 
   private createSymlinks(linkname: string, document: vscode.TextDocument) {
-    if (!fs.existsSync(linkname)) {
-      console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating`, this.config.isWin ? 'hard link.' : 'soft link.')
+    if (fs.existsSync(linkname)) {
+      return
+    }
+   
+    console.log(`[MC-GLSL] ${linkname} does not exist yet. Creating`, this.config.isWin ? 'hard link.' : 'soft link.')
 
-      if (this.config.isWin) shell.ln(document.uri.fsPath, linkname)
-      else shell.ln('-sf', document.uri.fsPath, linkname)
+    if (this.config.isWin) shell.ln(document.uri.fsPath, linkname)
+    else shell.ln('-sf', document.uri.fsPath, linkname)
 
-      if (shell.error()) {
-        console.error(`[MC-GLSL] ${shell.error()}`)
-        vscode.window.showErrorMessage('[MC-GLSL] Error creating symlink')
-      }
+    if (shell.error()) {
+      console.error(`[MC-GLSL] ${shell.error()}`)
+      vscode.window.showErrorMessage('[MC-GLSL] Error creating symlink')
     }
   }
 
