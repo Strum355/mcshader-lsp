@@ -134,9 +134,18 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   // Split output by line, remove empty lines, remove the first and 2 trailing lines,
   // and then remove all lines that match any of the regex
-  private parseOutput = (res: string) => res
+  private filterMessages = (res: string) => res
       .split('\n')
-      .filter((s: string) => s.length > 1 || !this.matchesFilters(s))
+      .filter((s: string) => s.length > 1 && !this.matchesFilters(s))
+      .map((s: string) => s.match(outputMatch))
+      .filter(match => match && match.length > 3)
+
+  private filterPerLine(matches: RegExpMatchArray[], document: vscode.TextDocument) {
+    return matches.filter((match) => {
+      let line = document.lineAt(parseInt(match![2]))
+      return !(syntaxError.test(match[0]) && line.text.leftTrim().startsWith('#include'))
+    })
+  }
 
   // The big boi that does all the shtuff
   private lint(document: vscode.TextDocument) {
@@ -147,15 +156,12 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     this.createSymlinks(linkname, document)
 
     const res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
-    const problems = this.parseOutput(res)
+    let messageMatches = this.filterPerLine(this.filterMessages(res) as RegExpMatchArray[], document)
 
     const diags: vscode.Diagnostic[] = []
 
-    problems.forEach((problem: string) => {
-      const matches = problem.match(outputMatch)
-      if (!matches || (matches && matches.length < 4)) return
-
-      const [type, lineString, message] = matches.slice(1,4)
+    messageMatches.forEach((match) => {
+      const [type, lineString, message] = match!.slice(1)
       const lineNum = parseInt(lineString)
 
       // Default to error
