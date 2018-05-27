@@ -28,7 +28,10 @@ Got a feature request? Chuck it into an Issue!
 
 ## Extension Settings
 
-- `mcglsl.glslangValidatorPath` : The path to the glslangValidator executable. If not provided, it assumes its in your `PATH`.
+| Option Name | Data Type | Description | Default Value |
+| ----------- | --------- | ----------- | ------------- |
+| `mcglsl.glslangValidatorPath` | string |  The path to the glslangValidator executable. | In your `PATH`.|
+|`mcglsl.lintOnType` | bool | Whether or not to lint while typing. Can decrease performance. | `false` |
 
 ## Contributing
 

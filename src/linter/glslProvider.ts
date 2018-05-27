@@ -1,21 +1,12 @@
 'use strict'
 
 import * as vscode from 'vscode'
-import * as os from 'os'
 import * as cp from 'child_process'
 import * as fs from 'fs'
 import * as shell from 'shelljs'
 import * as path from 'path'
 import '../global'
-
-// glslangPath: Path to glslangValidator (assumed in PATH by default)
-// tmpdir: the directory into which the symlinks are stored, should be the OS's temp dir
-interface Config {
-  readonly glslangPath: string
-  readonly workDir: string
-  readonly tmpdir: string
-  readonly isWin: boolean
-}
+import { Config } from '../config'
 
 // These are used for symlinking as glslangValidator only accepts files in these formats
 const extensions: { [id: string]: string } = {
@@ -31,30 +22,35 @@ const filters: RegExp[] = [
   /(required extension not requested: GL_GOOGLE_include_directive)/,
   /('#include' : must be followed by a header name)/,
   /('#include' : unexpected include directive)/,
+  /('#include' : must be followed by a file designation)/,
   /(No code generated)/,
   /(compilation terminated)/,
   /\/\w*.(vert|frag)$/
 ]
 
-const syntaxError = /(syntax error)/
-const outputMatch = /(WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/
-const include = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
+const regSyntaxError = /(syntax error)/
+const regOutputMatch = /(WARNING:|ERROR:)\s\d+:(\d+): (\W.*)/
+const regInclude = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
 
 export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
   private config: Config
   private onTypeDisposable?: vscode.Disposable
 
-  constructor(subs: vscode.Disposable[], config?: Config) {
+  constructor(subs: vscode.Disposable[]) {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection()
 
     subs.push(this)
 
-    // For if i ever get testing to work
-    if (config !== null) {
-      this.config = this.initConfig()
+    this.config = new Config()
+
+    const c = vscode.workspace.getConfiguration('mcglsl')
+    if (c.get('lintOnType') as boolean) {
+      this.onTypeDisposable = vscode.workspace.onDidChangeTextDocument(this.docChange, this)
+      console.log('[MC-GLSL] linting while typing.')
     } else {
-      this.config = config
+      if (this.onTypeDisposable) this.onTypeDisposable.dispose()
+      console.log('[MC-GLSL] not linting while typing.')
     }
 
     this.checkBinary()
@@ -70,47 +66,17 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     vscode.workspace.onDidOpenTextDocument(this.lint, this)
     vscode.workspace.onDidSaveTextDocument(this.lint, this)
 
-    vscode.workspace.onDidChangeConfiguration(this.configChange, this)
+    vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => { 
+      this.config.onChange(e)
+      this.checkBinary() 
+    }, this)
 
     vscode.workspace.textDocuments.forEach(doc => this.lint(doc))
   }
 
-  private initConfig(): Config {
-    const c = vscode.workspace.getConfiguration('mcglsl')
-
-    console.log('[MC-GLSL] glslangValidatorPath set to', c.get('glslangValidatorPath'))
-    console.log('[MC-GLSL] temp directory root set to', path.join(os.tmpdir(), vscode.workspace.name!, 'shaders'))
-
-    if (c.get('lintOnSave') as boolean) {
-      this.onTypeDisposable = vscode.workspace.onDidChangeTextDocument(this.docChange, this)
-      console.log('[MC-GLSL] linting on save')
-    } else if (this.onTypeDisposable) {
-      this.onTypeDisposable.dispose()
-      console.log('[MC-GLSL] not linting on save')
-    }
-
-    return {
-      glslangPath: c.get('glslangValidatorPath') as string,
-      workDir: vscode.workspace.rootPath!,
-      tmpdir: path.join(os.tmpdir(), vscode.workspace.name!, 'shaders'),
-      isWin: require('os').platform() === 'win32',
-    }
-  }
-
-  // Called when the config files are changed
-  private configChange(e: vscode.ConfigurationChangeEvent) {
-    if (e.affectsConfiguration('mcglsl')) {
-      console.log('[MC-GLSL] config changed')
-      this.config = this.initConfig()
-      this.checkBinary()
-    }
-  }
-
   // Check if glslangValidator binary can be found
   public checkBinary() {
-    const ret = shell.which(this.config.glslangPath)
-
-    if (ret == null) {
+    if (shell.which(this.config.glslangPath) == null) {
       const msg = '[MC-GLSL] glslangValidator not found. Please check that you\'ve given the right path.'
       console.log(msg)
       vscode.window.showErrorMessage(msg)
@@ -127,18 +93,17 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   // Returns true if the string matches any of the regex
   public matchesFilters = (s: string) => filters.some(reg => reg.test(s))
 
-  // Split output by line, remove empty lines, remove the first and 2 trailing lines,
-  // and then remove all lines that match any of the regex
+  // Split output by line, remove empty lines and then remove all lines that match any of the regex
   private filterMessages = (res: string) => res
       .split('\n')
       .filter(s => s.length > 1 && !this.matchesFilters(s))
-      .map(s => s.match(outputMatch))
+      .map(s => s.match(regOutputMatch))
       .filter(match => match && match.length > 3)
 
   private filterPerLine(matches: RegExpMatchArray[], document: vscode.TextDocument) {
     return matches.filter(match => {
       let line = document.lineAt(parseInt(match![2]))
-      return !(syntaxError.test(match[0]) && line.text.leftTrim().startsWith('#include'))
+      return !(regSyntaxError.test(match[0]) && line.text.leftTrim().startsWith('#include'))
     })
   }
 
@@ -163,12 +128,13 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
       const range = this.calcRange(document, lineNum)
 
-      if (diags.length > 0 && range.isEqual(diags[diags.length - 1].range) && syntaxError.test(message)) return
+      if (diags.length > 0 && range.isEqual(diags[diags.length - 1].range) && regSyntaxError.test(message)) return
 
       diags.push(new vscode.Diagnostic(range, '[mc-glsl] ' + message, severity))
     })
 
     this.findIncludes(document).forEach(include => {
+      //path.join(this.config.workDir, match![1])
       if (include.text.includes('../')) {
         const trimmed = include.text.leftTrim()
         const range = new vscode.Range(include.lineNumber, include.text.length - trimmed.length, include.lineNumber, (include.text.length - trimmed.length) + trimmed.length)
@@ -183,7 +149,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     const includes = this.findIncludes(document)
   }
 
-  private findIncludes = (document: vscode.TextDocument) => this.filter(document, line => include.test(line.text))
+  private findIncludes = (document: vscode.TextDocument) => this.filter(document, line => regInclude.test(line.text))
 
   private filter(document: vscode.TextDocument, f: (s: vscode.TextLine) => boolean): vscode.TextLine[] {
     const out: vscode.TextLine[] = []
@@ -199,8 +165,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     return new vscode.Range(lineNum - 1, line.length - trimmed.length, lineNum - 1, line.length - 1)
   }
 
-  private createSymlinks(linkname: string, document: vscode.TextDocument) {
-    if (fs.existsSync(linkname)) {
+  private async createSymlinks(linkname: string, document: vscode.TextDocument) {
+    if (await fs.exists(linkname)) {
       return
     }
    
