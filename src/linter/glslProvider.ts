@@ -1,5 +1,3 @@
-'use strict'
-
 import * as vscode from 'vscode'
 import * as cp from 'child_process'
 import * as fs from 'fs'
@@ -7,6 +5,8 @@ import * as shell from 'shelljs'
 import * as path from 'path'
 import '../global'
 import { Config } from '../config'
+import { glslProv } from '../extension'
+import { IncludeHolder, IncludeManager } from './includeManager'
 
 // These are used for symlinking as glslangValidator only accepts files in these formats
 const extensions: { [id: string]: string } = {
@@ -36,6 +36,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
   private config: Config
   private onTypeDisposable?: vscode.Disposable
+  private includesHolder: IncludeHolder
 
   constructor(subs: vscode.Disposable[]) {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection()
@@ -43,6 +44,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     subs.push(this)
 
     this.config = new Config()
+    this.includesHolder = new IncludeHolder()
 
     const c = vscode.workspace.getConfiguration('mcglsl')
     if (c.get('lintOnType') as boolean) {
@@ -85,6 +87,8 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
 
   public getConfig = () => this.config
 
+  public static getTempFilePath = (s: string) => path.join(glslProv.getConfig().tmpdir, `${path.basename(s, path.extname(s))}${extensions[path.extname(s)]}`)
+
   public dispose = () => this.diagnosticCollection.dispose()
 
   // Maybe only lint when files are saved...hmmm
@@ -110,6 +114,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   // The big boi that does all the shtuff
   private lint(document: vscode.TextDocument) {
     if (document.languageId !== 'glsl') return
+
+    this.includesHolder.add(document.uri)
+    this.includesHolder.get(document.uri).push()
 
     const linkname = path.join(this.config.tmpdir, `${path.basename(document.fileName, path.extname(document.fileName))}${extensions[path.extname(document.fileName)]}`)
 
