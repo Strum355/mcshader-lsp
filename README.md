@@ -1,9 +1,9 @@
 # vscode-mc-shader
 
-[![badge](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)
-[![badge](https://img.shields.io/codeclimate/maintainability/Strum355/vscode-mc-shader.svg)](https://codeclimate.com/github/Strum355/vscode-mc-shader)
-[![badge](https://img.shields.io/github/issues-raw/strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader/issues)
-[![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/Strum355/vscode-mc-shader)
+[![CI](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)
+[![Issues](https://img.shields.io/github/issues-raw/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader/issues)
+[![license](https://img.shields.io/github/license/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader)
+[![Maintainability](https://api.codeclimate.com/v1/badges/c2c813cb0a42a8aad483/maintainability)](https://codeclimate.com/github/Strum355/vscode-mc-shader/maintainability)
 
 This is an extension for [Visual Studio Code](https://code.visualstudio.com/) for developing Minecraft GLSL Shaders for [Optifine](http://optifine.net). It currently provides linting and syntax highlighting (by stef-levesque/vscode-shader dependency).
 
