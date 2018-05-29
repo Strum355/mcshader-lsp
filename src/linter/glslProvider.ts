@@ -6,14 +6,13 @@ import * as path from 'path'
 import '../global'
 import { Config } from '../config'
 import { glslProv } from '../extension'
-import { IncludeHolder, IncludeManager } from './includeManager'
 
 // These are used for symlinking as glslangValidator only accepts files in these formats
 const extensions: { [id: string]: string } = {
-  '.fsh':  '.frag',
-  '.vsh':  '.vert',
-  '.gsh':  '.geom',
-  '.glsl': '.frag',
+  '.fsh':  'frag',
+  '.vsh':  'vert',
+  '.gsh':  'geom',
+  '.glsl': 'frag',
 }
 
 // These will be used to filter out error messages that are irrelevant/incorrect for us
@@ -36,7 +35,6 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
   private config: Config
   private onTypeDisposable?: vscode.Disposable
-  private includesHolder: IncludeHolder
 
   constructor(subs: vscode.Disposable[]) {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection()
@@ -44,7 +42,6 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     subs.push(this)
 
     this.config = new Config()
-    this.includesHolder = new IncludeHolder()
 
     const c = vscode.workspace.getConfiguration('mcglsl')
     if (c.get('lintOnType') as boolean) {
@@ -115,14 +112,9 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private lint(document: vscode.TextDocument) {
     if (document.languageId !== 'glsl') return
 
-    this.includesHolder.add(document.uri)
-    this.includesHolder.get(document.uri).push()
+    const ext = extensions[path.extname(document.fileName)]
 
-    const linkname = path.join(this.config.tmpdir, `${path.basename(document.fileName, path.extname(document.fileName))}${extensions[path.extname(document.fileName)]}`)
-
-    this.createSymlinks(linkname, document)
-
-    const res = cp.spawnSync(this.config.glslangPath, [linkname]).output[1].toString()
+    const res = cp.spawnSync(this.config.glslangPath, ['-S', ext, document.uri.path]).output[1].toString()
     const messageMatches = this.filterPerLine(this.filterMessages(res) as RegExpMatchArray[], document)
 
     const diags: vscode.Diagnostic[] = []
@@ -157,6 +149,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     const includes = this.findIncludes(document)
   }
 
+  // Finds all lines that contain #include
   private findIncludes = (document: vscode.TextDocument) => this.filter(document, line => regInclude.test(line.text))
 
   private filter(document: vscode.TextDocument, f: (s: vscode.TextLine) => boolean): vscode.TextLine[] {
@@ -167,6 +160,7 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
     return out
   }
 
+  // Calculates the start and end character positions to underline
   private calcRange(document: vscode.TextDocument, lineNum: number): vscode.Range {
     const line = document.lineAt(lineNum - 1).text
     const trimmed = line.leftTrim()

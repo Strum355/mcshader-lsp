@@ -3,6 +3,7 @@
     "extends": ["tslint:recommended"],
     "rules": {
         "quotemark": [true, "single"],
+        "comment-format": false,
         "semicolon": false,
         "ordered-imports": false,
         "object-literal-sort-keys": false,
