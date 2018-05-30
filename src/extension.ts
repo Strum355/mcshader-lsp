@@ -1,19 +1,8 @@
 import * as vscode from 'vscode'
 import GLSLProvider from './linter/glslProvider'
-import * as shell from 'shelljs'
-
-export let glslProv: GLSLProvider;
 
 export function activate(context: vscode.ExtensionContext) {
-  glslProv = new GLSLProvider(context.subscriptions)
-  vscode.languages.registerCodeActionsProvider('glsl', glslProv)
+  vscode.languages.registerCodeActionsProvider('glsl', new GLSLProvider(context.subscriptions))
 }
 
-export function deactivate() {
-  try {
-    console.log('[MC-GLSL] disposing')
-    shell.rm('-rf', glslProv.getConfig().tmpdir)
-  } catch (e) {
-    console.log(e)
-  }
-}
+export function deactivate() {}
