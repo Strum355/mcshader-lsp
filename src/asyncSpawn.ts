@@ -1,7 +1,8 @@
 import { spawn } from 'child_process'
 
-export function runLinter(...args: any[]) {
-  const child = spawn(args[0], ...(args.slice(1)))
+//
+export function runLinter(command: string, ...args: any[]) {
+  const child = spawn(command, ...args)
   let stderr = ''
 
   child.stderr.on('data', data => {
