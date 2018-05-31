@@ -1,0 +1,26 @@
+import { spawn } from 'child_process'
+
+export function runLinter(...args: any[]) {
+  const child = spawn(args[0], ...(args.slice(1)))
+  let stderr = ''
+
+  child.stderr.on('data', data => {
+    stderr += data
+  })
+
+  const promise = new Promise<string>((resolve, reject) => {
+    child.on('error', () => reject(new Error('fatal error ${stderr}')))
+
+    child.on('exit', (code, signal) => {
+      switch (code) {
+        case 0:
+        case 2:
+          resolve(stderr)
+        default:
+          reject(new Error('standard error ${signal} ${stderr}'))
+      }
+    })
+  })
+
+  return promise
+}
