@@ -15,6 +15,7 @@
         "eofline": false,
         "member-ordering": false,
         "trailing-comma": false,
+        "no-var-requires": false,
         "max-line-length": {
             "severity": "warning",
             "options": [170]

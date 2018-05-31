@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
-import * as cp from 'child_process'
 import * as shell from 'shelljs'
 import * as path from 'path'
+import { runLinter } from '../asyncSpawn'
 import '../global'
 import { Config } from '../config'
 
@@ -21,9 +21,8 @@ const filters: RegExp[] = [
   /\/\w*.(vert|frag)$/
 ]
 
-const regSyntaxError = /(syntax error)/
-const regOutputMatch = /^(WARNING|ERROR): ([.\/\\\w]+):(\d+): ((?:'[\w\W]*'){1} :[\w ]+)/
 const regInclude = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
+export const regLinuxOutput = /^(WARNING|ERROR): ((?:\/[^/\n]*)+\/*):(\d+): ((?:'[\w\W]*'){1} :[\w ]+)/
 
 export default class GLSLProvider implements vscode.CodeActionProvider {
   private diagnosticCollection: vscode.DiagnosticCollection // where errors/warnings/hints are pushed to be displayed
@@ -80,24 +79,26 @@ export default class GLSLProvider implements vscode.CodeActionProvider {
   private filterMessages = (res: string) => res
       .split('\n')
       .filter(s => s.length > 1 && !this.matchesFilters(s))
-      .map(s => s.match(regOutputMatch))
+      .map(s => s.match(this.config.outputMatch))
       .filter(match => match && match.length > 3)
 
-  private filterPerLine(matches: RegExpMatchArray[], document: vscode.TextDocument) {
-    return matches.filter(match => {
-      const line = document.lineAt(parseInt(match![2]))
-      return !(regSyntaxError.test(match[0]) && line.text.leftTrim().startsWith('#include'))
-    })
-  }
-
   // The big boi that does all the shtuff
-  private lint(document: vscode.TextDocument) {
+  private async lint(document: vscode.TextDocument) {
     if (document.languageId !== 'glsl') return
 
     const ext = extensions[path.extname(document.fileName)]
+    const root = '-I'
+    let res = ''
 
-    const res = cp.spawnSync(this.config.glslangPath, ['-S', ext, document.uri.path]).output[1].toString()
+    try {
+      res = await runLinter(this.config.glslangPath, ['-E', '-S', ext, document.uri.path])
+    } catch (e) {
+      console.error(e)
+      return
+    }
+    console.log(res)
     const messageMatches = this.filterMessages(res) as RegExpMatchArray[]
+    console.log(messageMatches)
 
     const diags: vscode.Diagnostic[] = []
 
