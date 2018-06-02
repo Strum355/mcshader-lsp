@@ -22,7 +22,6 @@
 	"scripts": {
 		"installServer": "installServerIntoExtension ../client ./package.json ./tsconfig.json",
 		"compile": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -p .",
-        "watch": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -w -p .",
-        "lint": "tslint -c tslint.json 'src/**/*.ts'"
+		"watch": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -w -p ."
 	}
 }
