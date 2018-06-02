@@ -3,8 +3,6 @@ pipeline:
     image: node:${NODE_VERSION}
     commands:
       - npm i
-      - ls
-      - pwd
       - npm run lint
 
 matrix:
