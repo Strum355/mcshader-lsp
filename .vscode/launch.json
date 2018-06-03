@@ -1,6 +1,5 @@
 {
 	"version": "0.2.0",
-	// List of configurations. Add new configurations or edit existing ones.
 	"configurations": [
 		{
 			"name": "Launch Client",
@@ -10,8 +9,6 @@
 			"args": [
 				"--extensionDevelopmentPath=${workspaceRoot}/client"
 			],
-			"stopOnEntry": false,
-			"sourceMaps": true,
 			"outFiles": [
 				"${workspaceRoot}/client/out/**/*.js"
 			],
