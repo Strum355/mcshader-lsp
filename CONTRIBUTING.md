@@ -14,9 +14,11 @@ Fork the repo (you are using [SSH keys](https://help.github.com/articles/connect
 
 Install dependencies:
 
-`cd vscode-mc-shader && npm i`
+`cd vscode-mc-shader/server && npm i && cd ../client && npm i`
 
-Follow [this](https://code.visualstudio.com/docs/extensions/overview) link to learn your way around making extensions.
+Follow [this](https://code.visualstudio.com/docs/extensions/overview) link to learn your way around making extensions as well as [here](https://code.visualstudio.com/docs/extensions/example-language-server) to learn a bit about the Language Server Protocol.
+
+To test out your changes, simply choose `Launch Client` in the debug menu.
 
 ## Submitting a Pull Request
 

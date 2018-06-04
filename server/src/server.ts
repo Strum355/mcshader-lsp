@@ -1,6 +1,7 @@
 import * as vsclang from 'vscode-languageserver'
 import { Config } from './config'
 import { completions } from './completionProvider';
+import { preprocess } from './linter';
 
 const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process));
 
@@ -22,35 +23,13 @@ connection.onInitialize((params): vsclang.InitializeResult => {
 });
 
 documents.onDidChangeContent((change) => {
-  validateTextDocument(change.document);
+  preprocess(change.document);
 });
 
 connection.onDidChangeConfiguration((change) => {
   conf.onChange(change.settings as Config)
-  documents.all().forEach(validateTextDocument);
+  documents.all().forEach(preprocess);
 });
-
-function validateTextDocument(textDocument: vsclang.TextDocument): void {
-  const diagnostics: vsclang.Diagnostic[] = [];
-  const lines = textDocument.getText().split(/\r?\n/g);
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const index = line.indexOf('typescript');
-    if (index >= 0) {
-      diagnostics.push({
-        severity: vsclang.DiagnosticSeverity.Warning,
-        range: {
-          start: { line: i, character: index },
-          end: { line: i, character: index + 10 }
-        },
-        message: `bananas`,
-        source: 'mcglsl'
-      });
-    }
-  }
-  // Send the computed diagnostics to VS Code.
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
-}
 
 connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams): vsclang.CompletionItem[] => {
   return completions
