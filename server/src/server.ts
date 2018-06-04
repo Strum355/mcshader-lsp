@@ -1,5 +1,6 @@
 import * as vsclang from 'vscode-languageserver'
 import { Config } from './config'
+import { completions } from './completionProvider';
 
 const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process));
 
@@ -12,7 +13,7 @@ const conf = new Config('', '')
 connection.onInitialize((params): vsclang.InitializeResult => {
   return {
     capabilities: {
-      textDocumentSync: vsclang.TextDocumentSyncKind.Incremental,
+      textDocumentSync: documents.syncKind,
       completionProvider: {
         resolveProvider: true
       },
@@ -29,19 +30,7 @@ connection.onDidChangeConfiguration((change) => {
   documents.all().forEach(validateTextDocument);
 });
 
-connection.onDidChangeTextDocument((param) => {
-  console.log(param.contentChanges)
-})
-
-connection.onDidOpenTextDocument((param) => {
-  console.log(param)
-})
-
-connection.onDidCloseTextDocument((param) => {
-  console.log(param)
-})
-
-function validateTextDocument(textDocument: vsclang.TextDocument) {
+function validateTextDocument(textDocument: vsclang.TextDocument): void {
   const diagnostics: vsclang.Diagnostic[] = [];
   const lines = textDocument.getText().split(/\r?\n/g);
   for (let i = 0; i < lines.length; i++) {
@@ -54,7 +43,7 @@ function validateTextDocument(textDocument: vsclang.TextDocument) {
           start: { line: i, character: index },
           end: { line: i, character: index + 10 }
         },
-        message: `blah blah Todd Howard`,
+        message: `bananas`,
         source: 'mcglsl'
       });
     }
@@ -64,27 +53,11 @@ function validateTextDocument(textDocument: vsclang.TextDocument) {
 }
 
 connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams): vsclang.CompletionItem[] => {
-  return [
-    {
-      label: 'heldItemId',
-      kind: vsclang.CompletionItemKind.Variable,
-      data: 0,
-    },{
-      label: 'hot',
-      kind: vsclang.CompletionItemKind.Property,
-      data: 1
-    }];
+  return completions
 });
 
 connection.onCompletionResolve((item: vsclang.CompletionItem): vsclang.CompletionItem => {
-  if (item.data === 0) {
-    item.documentation = 'blyat man'
-    item.detail = 'Held item ID (main hand)'
-  } else if (item.data === 1) {
-    item.documentation = 'random'
-    item.detail = 'something'
-  }
-  return item
+  return completions[item.data - 1]
 });
 
 connection.listen();
