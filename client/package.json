@@ -1,0 +1,83 @@
+{
+    "name": "vscode-mc-shader-client",
+    "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
+    "version": "0.0.1",
+    "publisher": "Noah Santschi-Cooney (Strum355)",
+    "author": "Noah Santschi-Cooney (Strum355)",
+    "license": "MIT",
+    "repository": {
+        "url": "https://github.com/Strum355/vscode-mc-shader"
+    },
+    "engines": {
+        "vscode": "^1.23.0"
+    },
+    "categories": [
+        "Linters",
+        "Programming Languages"
+    ],
+    "activationEvents": [
+        "onLanguage:glsl",
+        "workspaceContains:**/*.fsh",
+        "workspaceContains:**/*.vsh",
+        "workspaceContains:**/*.gsh",
+        "workspaceContains:**/*.glsl"
+    ],
+    "extensionDependencies": [
+        "slevesque.shader"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "languages": [
+            {
+                "id": "glsl",
+                "aliases": [
+                    "OpenGL Shading Language"
+                ],
+                "extensions": [
+                    ".fsh",
+                    ".vsh",
+                    ".gsh",
+                    ".glsl"
+                ]
+            }
+        ],
+        "configuration": {
+            "title": "Minecraft GLSL configurations",
+            "properties": {
+                "mcglsl.glslangValidatorPath": {
+                    "type": "string",
+                    "default": "glslangValidator",
+                    "description": "The path to the glslangValidator executable. Default value assumes its in your PATH."
+                },
+                "mcglsl.lintOnType": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether or not to lint while typing. Can decrease performance."
+                },
+                "mcglsl.minecraftPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Absolute path to your Minecraft installation folder. The shaderpacks folder will be derived from this."
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "npm run compile && node ./node_modules/vscode/bin/test",
+        "lint": "tslint -c tslint.json 'src/**/*.ts'"
+    },
+    "devDependencies": {
+        "@types/mocha": "^2.2.42",
+        "@types/node": "^7.0.43",
+        "tslint": "^5.8.0",
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.18"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^4.1.4"
+    }
+}
