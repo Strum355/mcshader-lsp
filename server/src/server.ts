@@ -9,7 +9,7 @@ const documents = new vsclang.TextDocuments();
 
 documents.listen(connection);
 
-const conf = new Config('', '')
+export const conf = new Config('', '')
 
 connection.onInitialize((params): vsclang.InitializeResult => {
   return {
@@ -27,7 +27,7 @@ documents.onDidChangeContent((change) => {
 });
 
 connection.onDidChangeConfiguration((change) => {
-  conf.onChange(change.settings as Config)
+  conf.onChange(change.settings.mcglsl as Config)
   documents.all().forEach(preprocess);
 });
 

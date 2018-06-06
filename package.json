@@ -20,7 +20,6 @@
         "lint": "cd server && npm run lint && cd ../client && npm run lint"
     },
     "devDependencies": {
-        "@types/mocha": "^2.2.42",
         "@types/node": "^7.0.43",
         "concurrently": "^3.5.1",
         "tslint": "^5.8.0",
