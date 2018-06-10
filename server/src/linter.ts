@@ -10,6 +10,33 @@ const filters = [
   /(compilation terminated)/,
 ]
 
+const tokens: {[key: string]: string} = {
+  'SEMICOLON': ';',
+  'COMMA': ',',
+  'COLON': ':',
+  'EQUAL': '=',
+  'LEFT_PAREN': '(',
+  'RIGHT_PAREN': ')',
+  'DOT': '.',
+  'BANG': '!',
+  'DASH': '-',
+  'TILDE': '~',
+  'PLUS': '+',
+  'STAR': '*',
+  'SLASH': '/',
+  'PERCENT': '%',
+  'LEFT_ANGEL': '<',
+  'RIGHT_ANGEL': '>',
+  'VERICAL_BAR': '|',
+  'CARET': '^',
+  'AMPERSAND': '&',
+  'QUESTION': '?',
+  'LEFT_BRACKET': '[',
+  'RIGHT_BRACKET': ']',
+  'LEFT_BRACE': '{',
+  'RIGHT_BRACE': '}'
+}
+
 const matchesFilters = (s: string) => filters.some(reg => reg.test(s))
 
 const filterMatches = (output: string) => output
@@ -17,6 +44,15 @@ const filterMatches = (output: string) => output
   .filter(s => s.length > 1 && !matchesFilters(s))
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 4)
+
+const replaceWord = (msg: string) => {
+  for (const token of Object.keys(tokens)) {
+    if (msg.includes(token)) {
+      msg = msg.replace(token, tokens[token])
+    }
+  }
+  return msg
+}
 
 export function preprocess(document: TextDocument) {
   if (conf.minecraftPath === 'shaderpacks') return
@@ -34,7 +70,7 @@ function lint(text: string, uri: string) {
       diagnostics.push({
         severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
         range: calcRange(parseInt(line), uri),
-        message: msg,
+        message: replaceWord(msg),
         source: 'mc-glsl'
       })
     })

@@ -12,6 +12,7 @@
         "arrow-parens": false,
         "max-classes-per-file": false,
         "no-console": false,
+        "object-literal-key-quotes": false,
         "eofline": false,
         "member-ordering": false,
         "trailing-comma": false,
