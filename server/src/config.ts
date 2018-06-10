@@ -6,10 +6,6 @@ export class Config {
 
   constructor(mcPath: string, glslangPath: string) {
     this.minecraftPath = join(mcPath, 'shaderpacks')
-    this.glslangPath = glslangPath
-  }
-
-  public onChange(c: Config) {
-    Object.assign(this, c)
+    this.glslangPath = glslangPath || 'glslangValidator'
   }
 }

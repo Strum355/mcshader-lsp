@@ -17,7 +17,8 @@
         "compile:server": "cd server && npm run installServer && cd .. && tsc -p server/tsconfig.json",
         "watch:client": "tsc -w -p client/tsconfig.json",
         "watch:server": "cd server && npm run installServer && cd .. && tsc -w -p server/tsconfig.json",
-        "lint": "cd server && npm run lint && cd ../client && npm run lint"
+        "lint": "cd server && npm run lint && cd ../client && npm run lint",
+        "fix": "tslint -c server/tslint.json --fix server/src/**/*.ts && tslint -c client/tslint.json --fix client/src/**/*.ts"
     },
     "devDependencies": {
         "@types/node": "^7.0.43",

@@ -3,13 +3,13 @@ import { Config } from './config'
 import { completions } from './completionProvider';
 import { preprocess } from './linter';
 
-const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process));
+export const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process));
 
-const documents = new vsclang.TextDocuments();
+export const documents = new vsclang.TextDocuments();
 
 documents.listen(connection);
 
-export const conf = new Config('', '')
+export let conf = new Config('', '')
 
 connection.onInitialize((params): vsclang.InitializeResult => {
   return {
@@ -27,7 +27,8 @@ documents.onDidChangeContent((change) => {
 });
 
 connection.onDidChangeConfiguration((change) => {
-  conf.onChange(change.settings.mcglsl as Config)
+  const temp = change.settings.mcglsl as Config
+  conf = new Config(temp.minecraftPath, temp.glslangPath)
   documents.all().forEach(preprocess);
 });
 
