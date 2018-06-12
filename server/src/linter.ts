@@ -82,7 +82,7 @@ function lint(text: string, uri: string) {
 
 function calcRange(lineNum: number, uri: string): Range {
   const line = documents.get(uri).getText().split('\n')[lineNum - 1]
-  return Range.create(lineNum - 1, line.length - line.leftTrim().length, lineNum - 1, prepareLine(line).length)
+  return Range.create(lineNum - 1, line.length - line.leftTrim().length, lineNum - 1, prepareLine(line).length + 1)
 }
 
 function prepareLine(line: string): string {
