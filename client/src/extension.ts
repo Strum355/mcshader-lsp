@@ -3,9 +3,9 @@ import * as vscodeLang from 'vscode-languageclient'
 import * as path from 'path'
 
 export function activate(context: vscode.ExtensionContext) {
-  const serverModule = context.asAbsolutePath(path.join('server', 'server.js'))
+  const serverModule = context.asAbsolutePath(path.join('server', 'out', 'server.js'))
 
-  const debugOpts = { execArgv: ['--nolazy', '--debug=6009']}
+  const debugOpts = { execArgv: ['--nolazy', '--inspect=6009']}
 
   const serverOpts: vscodeLang.ServerOptions = {
     run: {

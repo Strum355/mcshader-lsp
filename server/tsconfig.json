@@ -1,18 +1,17 @@
 {
-    "compilerOptions": {
-        "module": "commonjs",
-        "target": "esnext",
-        "outDir": "../client/server",
-        "lib": [
-            "es6"
-        ],
-        "sourceMap": true,
-        "rootDir": "src",
-        "strict": true
-    },
-    "exclude": [
-        "node_modules",
-        ".vscode-test",
-        "test"
-    ]
+	"compilerOptions": {
+		"target": "es6",
+		"module": "commonjs",
+		"moduleResolution": "node",
+		"sourceMap": true,
+		"outDir": "out",
+		"rootDir": "src",
+		"lib": [ "es6" ]
+	},
+	"include": [
+		"src"
+	],
+	"exclude": [
+		"node_modules"
+	]
 }
