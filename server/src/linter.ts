@@ -37,11 +37,9 @@ const tokens: {[key: string]: string} = {
   'RIGHT_BRACE': '}'
 }
 
-const matchesFilters = (s: string) => filters.some(reg => reg.test(s))
-
 const filterMatches = (output: string) => output
   .split('\n')
-  .filter(s => s.length > 1 && !matchesFilters(s))
+  .filter(s => s.length > 1 && !filters.some(reg => reg.test(s)))
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 4)
 
@@ -55,8 +53,6 @@ const replaceWord = (msg: string) => {
 }
 
 export function preprocess(document: TextDocument) {
-  if (conf.minecraftPath === 'shaderpacks') return
-
   //const root = document.uri.replace(/^file:\/\//, '').replace(conf.minecraftPath, '').replace(path.basename(document.uri), '')
   lint(document.getText(), document.uri)
 }
