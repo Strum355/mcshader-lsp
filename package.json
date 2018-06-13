@@ -68,15 +68,16 @@
         "postinstall": "cd server && npm install && cd ../client && npm install && cd ..",
         "compile": "npm run compile:client && npm run compile:server",
         "compile:client": "tsc -p ./client/tsconfig.json",
-		"compile:server": "tsc -p ./server/tsconfig.json",
-		"watch:client": "tsc -w -p ./client/tsconfig.json",
-		"watch:server": "tsc -w -p ./server/tsconfig.json",
+        "compile:server": "tsc -p ./server/tsconfig.json",
+        "watch:client": "tsc -w -p ./client/tsconfig.json",
+        "watch:server": "tsc -w -p ./server/tsconfig.json",
         "lint": "cd server && npm run lint && cd ../client && npm run lint",
         "fix": "tslint -c server/tslint.json --fix server/src/**/*.ts && tslint -c client/tslint.json --fix client/src/**/*.ts"
     },
     "devDependencies": {
         "@types/node": "^8.0.0",
-        "typescript": "2.8.3",
-        "concurrently": "^3.5.1"
+        "concurrently": "^3.5.1",
+        "tslint": "^5.10.0",
+        "typescript": "2.8.3"
     }
 }
