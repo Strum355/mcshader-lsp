@@ -22,10 +22,18 @@ connection.onInitialize((params): vsclang.InitializeResult => {
   };
 });
 
-documents.onDidChangeContent((change) => {
+documents.onDidOpen((event) => {
+  preprocess(event.document)
+})
+
+documents.onDidSave((event) => {
+  preprocess(event.document)
+})
+
+/* documents.onDidChangeContent((change) => {
   preprocess(change.document);
 });
-
+ */
 connection.onDidChangeConfiguration((change) => {
   const temp = change.settings.mcglsl as Config
   conf = new Config(temp.minecraftPath, temp.glslangPath)

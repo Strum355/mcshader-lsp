@@ -4,6 +4,8 @@ import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-lang
 import { exec } from 'child_process'
 
 const reDiag = /(ERROR|WARNING): (?:\d):(\d+): '(?:.*)' : (.+)/
+const reVersion = /#version [\d]{3}/
+const include = '#extension GL_GOOGLE_include_directive : require'
 
 const filters = [
   /(No code generated)/,
@@ -53,8 +55,23 @@ const replaceWord = (msg: string) => {
 }
 
 export function preprocess(document: TextDocument) {
+  const lines = document.getText().split('\n')
+  let inComment = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.includes('/*')) inComment = true
+    if (line.includes('*/')) inComment = false
+    if (line.trim().startsWith('//')) break
+    if (!inComment && reVersion.test(line)) {
+      lines.splice(i + 1, 0, include)
+      break
+    }
+    if (i === lines.length - 1) lines.splice(0, 0, include)
+  }
+  console.log(lines.join('\n'))
+
   //const root = document.uri.replace(/^file:\/\//, '').replace(conf.minecraftPath, '').replace(path.basename(document.uri), '')
-  lint(document.getText(), document.uri)
+  lint(lines.join('\n'), document.uri)
 }
 
 function lint(text: string, uri: string) {
@@ -65,7 +82,7 @@ function lint(text: string, uri: string) {
       const [type, line, msg] = match.slice(1)
       diagnostics.push({
         severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-        range: calcRange(parseInt(line), uri),
+        range: calcRange(parseInt(line) - 1, uri),
         message: replaceWord(msg),
         source: 'mc-glsl'
       })
