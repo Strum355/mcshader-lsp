@@ -2,7 +2,7 @@ import * as vsclang from 'vscode-languageserver'
 import { Config } from './config'
 import { completions } from './completionProvider';
 import { preprocess } from './linter';
-import { stat } from 'fs';
+import { exec } from 'child_process';
 
 export const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process));
 
@@ -32,17 +32,18 @@ documents.onDidSave((event) => {
 
 /* documents.onDidChangeContent((change) => {
   preprocess(change.document);
-});
- */
+});*/
+
 connection.onDidChangeConfiguration((change) => {
   const temp = change.settings.mcglsl as Config
-  conf = new Config(temp.minecraftPath, temp.glslangPath)
-  stat(conf.glslangPath, (error) => {
-    if (error) {
-      connection.window.showErrorMessage('glslangValidator not found')
+  conf = new Config(temp.minecraftPath, temp.glslangValidatorPath)
+  exec(conf.glslangValidatorPath, (error) => {
+    if (error['code'] !== 1) {
+      connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangValidatorPath}`)
+      return
     }
+    documents.all().forEach(preprocess);
   })
-  documents.all().forEach(preprocess);
 });
 
 connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams): vsclang.CompletionItem[] => {
