@@ -75,7 +75,7 @@ export function preprocess(document: TextDocument) {
 }
 
 function lint(text: string, uri: string) {
-  const child = exec(`${conf.glslangValidatorPath} --stdin -S frag`, (error, out, err) => {
+  const child = exec(`${conf.glslangPath} --stdin -S frag`, (error, out, err) => {
     const diagnostics: Diagnostic[] = []
     const matches = filterMatches(out) as RegExpMatchArray[]
     matches.forEach((match) => {

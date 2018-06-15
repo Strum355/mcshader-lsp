@@ -1,11 +1,11 @@
 import { join } from 'path'
 
 export class Config {
-  public minecraftPath: string
-  public glslangValidatorPath: string
+  public readonly minecraftPath: string
+  public readonly glslangPath: string
 
   constructor(mcPath: string, glslangPath: string) {
     this.minecraftPath = join(mcPath, 'shaderpacks')
-    this.glslangValidatorPath = glslangPath || 'glslangValidator'
+    this.glslangPath = glslangPath || 'glslangValidator'
   }
 }
