@@ -4,10 +4,10 @@
 	"version": "0.0.1",
 	"author": "Noah Santschi-Cooney (Strum355)",
 	"license": "MIT",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/Strum355/vscode-mc-shader"
-    },
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Strum355/vscode-mc-shader"
+	},
 	"engines": {
 		"node": "*"
 	},

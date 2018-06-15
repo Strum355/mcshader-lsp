@@ -68,7 +68,7 @@ export function preprocess(document: TextDocument) {
     }
     if (i === lines.length - 1) lines.splice(0, 0, include)
   }
-  console.log(lines.join('\n'))
+  //console.log(lines.join('\n'))
 
   //const root = document.uri.replace(/^file:\/\//, '').replace(conf.minecraftPath, '').replace(path.basename(document.uri), '')
   lint(lines.join('\n'), document.uri)
@@ -76,6 +76,7 @@ export function preprocess(document: TextDocument) {
 
 function lint(text: string, uri: string) {
   const child = exec(`${conf.glslangPath} --stdin -S frag`, (error, out, err) => {
+    if (error) return
     const diagnostics: Diagnostic[] = []
     const matches = filterMatches(out) as RegExpMatchArray[]
     matches.forEach((match) => {
