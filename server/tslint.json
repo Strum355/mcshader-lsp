@@ -8,6 +8,7 @@
         "ordered-imports": false,
         "object-literal-sort-keys": false,
         "no-string-literal": false,
+        "array-type": false,
         "interface-name": false,
         "indent": [true, "spaces", 2],
         "arrow-parens": false,

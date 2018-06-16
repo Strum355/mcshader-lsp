@@ -2,15 +2,24 @@ import { conf, connection, documents } from './server'
 import './global'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver';
 import { exec } from 'child_process'
+import * as path from 'path'
 
 const reDiag = /(ERROR|WARNING): (?:\d):(\d+): '(?:.*)' : (.+)/
 const reVersion = /#version [\d]{3}/
+const reInclude = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
 const include = '#extension GL_GOOGLE_include_directive : require'
 
 const filters = [
   /(No code generated)/,
   /(compilation terminated)/,
 ]
+
+const ext = {
+  '.fsh': 'frag',
+  '.gsh': 'geom',
+  '.vsh': 'vert',
+  '.glsl': 'frag'
+}
 
 const tokens: {[key: string]: string} = {
   'SEMICOLON': ';',
@@ -55,7 +64,8 @@ const replaceWord = (msg: string) => {
 }
 
 export function preprocess(document: TextDocument) {
-  const lines = document.getText().split('\n')
+  const lines = document.getText().split('\n').map(s => s.replace(/^\s+|\s+$/g, ''))
+  const includes = getIncludes(lines)
   let inComment = false
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -69,12 +79,12 @@ export function preprocess(document: TextDocument) {
     if (i === lines.length - 1) lines.splice(0, 0, include)
   }
 
-  //const root = document.uri.replace(/^file:\/\//, '').replace(conf.minecraftPath, '').replace(path.basename(document.uri), '')
-  lint(lines.join('\n'), document.uri)
+  const root = document.uri.replace(/^file:\/\//, '').replace(path.basename(document.uri), '')
+  lint(path.extname(document.uri.replace(/^file:\/\//, '')), lines.join('\n'), document.uri)
 }
 
-function lint(text: string, uri: string) {
-  const child = exec(`${conf.glslangPath} --stdin -S frag`, (error, out, err) => {
+function lint(extension: string, text: string, uri: string) {
+  const child = exec(`${conf.glslangPath} --stdin -S ${ext[extension]}`, (error, out) => {
     const diagnostics: Diagnostic[] = []
     const matches = filterMatches(out) as RegExpMatchArray[]
     matches.forEach((match) => {
@@ -99,4 +109,8 @@ function calcRange(lineNum: number, uri: string): Range {
 
 function prepareLine(line: string): string {
   return line.slice(0, line.indexOf('//')).rightTrim()
+}
+
+function getIncludes(lines: string[]): {lineNum: number, match: RegExpMatchArray}[] {
+  return lines.map((line, i) => ({num: i, line})).filter((obj) => reInclude.test(obj.line)).map((obj) => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
 }
