@@ -61,14 +61,13 @@ export function preprocess(document: TextDocument) {
     const line = lines[i]
     if (line.includes('/*')) inComment = true
     if (line.includes('*/')) inComment = false
-    if (line.trim().startsWith('//')) break
+    if (line.trim().startsWith('//')) continue
     if (!inComment && reVersion.test(line)) {
       lines.splice(i + 1, 0, include)
       break
     }
     if (i === lines.length - 1) lines.splice(0, 0, include)
   }
-  //console.log(lines.join('\n'))
 
   //const root = document.uri.replace(/^file:\/\//, '').replace(conf.minecraftPath, '').replace(path.basename(document.uri), '')
   lint(lines.join('\n'), document.uri)
