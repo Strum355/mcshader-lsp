@@ -4,7 +4,7 @@ import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-lang
 import { exec } from 'child_process'
 import * as path from 'path'
 
-const reDiag = /(ERROR|WARNING): (?:\d):(\d+): '(?:.*)' : (.+)/
+const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
 const reInclude = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
 const include = '#extension GL_GOOGLE_include_directive : require'

@@ -22,6 +22,10 @@ connection.onInitialize((params): vsclang.InitializeResult => {
   };
 });
 
+connection.onExit(() => {
+
+})
+
 documents.onDidOpen((event) => {
   preprocess(event.document)
 })
