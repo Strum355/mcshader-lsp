@@ -1,8 +1,9 @@
 import { conf, connection, documents } from './server'
 import './global'
-import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver';
+import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { exec } from 'child_process'
 import * as path from 'path'
+import { open } from 'fs';
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
@@ -14,11 +15,13 @@ const filters = [
   /(compilation terminated)/,
 ]
 
+const files: {[uri: string]: number} = {}
+
 const ext = {
   '.fsh': 'frag',
   '.gsh': 'geom',
   '.vsh': 'vert',
-  '.glsl': 'frag'
+  //'.glsl': 'frag' //excluding non standard files, need to be treated differently
 }
 
 const tokens: {[key: string]: string} = {
@@ -63,24 +66,29 @@ const replaceWord = (msg: string) => {
   return msg
 }
 
-export function preprocess(document: TextDocument) {
+export function preprocess(document: TextDocument, topLevel: boolean, incStack: string[]) {
   const lines = document.getText().split('\n').map(s => s.replace(/^\s+|\s+$/g, ''))
-  const includes = getIncludes(lines)
-  let inComment = false
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.includes('/*')) inComment = true
-    if (line.includes('*/')) inComment = false
-    if (line.trim().startsWith('//')) continue
-    if (!inComment && reVersion.test(line)) {
-      lines.splice(i + 1, 0, include)
-      break
+  shaderpackRoot(document.uri)
+  if (topLevel) {
+    let inComment = false
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.includes('/*')) inComment = true
+      if (line.includes('*/')) inComment = false
+      if (line.trim().startsWith('//')) continue
+      if (!inComment && reVersion.test(line)) {
+        lines.splice(i + 1, 0, include)
+        break
+      }
+      if (i === lines.length - 1) lines.splice(0, 0, include)
     }
-    if (i === lines.length - 1) lines.splice(0, 0, include)
   }
 
+  const includes = getIncludes(lines)
+  if (includes.length > 0) {}
+
   const root = document.uri.replace(/^file:\/\//, '').replace(path.basename(document.uri), '')
-  lint(path.extname(document.uri.replace(/^file:\/\//, '')), lines.join('\n'), document.uri)
+  //lint(path.extname(document.uri.replace(/^file:\/\//, '')), lines.join('\n'), document.uri)
 }
 
 function lint(extension: string, text: string, uri: string) {
@@ -112,5 +120,16 @@ function prepareLine(line: string): string {
 }
 
 function getIncludes(lines: string[]): {lineNum: number, match: RegExpMatchArray}[] {
-  return lines.map((line, i) => ({num: i, line})).filter((obj) => reInclude.test(obj.line)).map((obj) => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
+  return lines
+    .map((line, i) => ({num: i, line}))
+    .filter((obj) => reInclude.test(obj.line))
+    .map((obj) => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
+}
+
+function shaderpackRoot(uri: string) {
+  uri = uri.replace(/^file:\/\//, '')
+  console.log(uri, conf.minecraftPath, !uri.startsWith(conf.minecraftPath))
+  if (!uri.startsWith(conf.minecraftPath)) {
+    connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in ${uri} but the path is set to ${conf.minecraftPath}`)
+  }
 }

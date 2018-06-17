@@ -55,10 +55,10 @@
                     "default": false,
                     "description": "Whether or not to lint while typing. Can decrease performance."
                 },
-                "mcglsl.minecraftPath": {
+                "mcglsl.shaderpacksPath": {
                     "type": "string",
                     "default": "",
-                    "description": "Absolute path to your Minecraft installation folder. The shaderpacks folder will be derived from this."
+                    "description": "Absolute path to your Minecraft's shaderpacks folder."
                 }
             }
         }

@@ -27,11 +27,11 @@ connection.onExit(() => {
 })
 
 documents.onDidOpen((event) => {
-  preprocess(event.document)
+  preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
 })
 
 documents.onDidSave((event) => {
-  preprocess(event.document)
+  preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
 })
 
 /* documents.onDidChangeContent((change) => {
@@ -46,7 +46,7 @@ connection.onDidChangeConfiguration((change) => {
       connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangPath}`)
       return
     }
-    documents.all().forEach(preprocess);
+    documents.all().forEach((document) => preprocess(document, true, [document.uri.replace(/^file:\/\//, '')]));
   })
 });
 
