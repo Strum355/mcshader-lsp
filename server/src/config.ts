@@ -1,9 +1,9 @@
 export class Config {
-  public readonly minecraftPath: string
+  public readonly shaderpacksPath: string
   public readonly glslangPath: string
 
-  constructor(mcPath: string, glslangPath: string) {
-    this.minecraftPath = mcPath
+  constructor(shaderpacksPath: string, glslangPath: string) {
+    this.shaderpacksPath = shaderpacksPath
     this.glslangPath = glslangPath || 'glslangValidator'
   }
 }

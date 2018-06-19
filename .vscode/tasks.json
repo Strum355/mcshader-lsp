@@ -28,6 +28,12 @@
             "type": "npm",
             "script": "watch:client",
             "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
             "problemMatcher": [
                 "$tsc-watch"
             ]
@@ -37,8 +43,10 @@
             "script": "watch:server",
             "isBackground": true,
             "presentation": {
-                "reveal": "never",
-                "panel": "dedicated"
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
             },
             "problemMatcher": [
                 "$tsc-watch"
@@ -47,6 +55,12 @@
         {
             "label": "watch",
             "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
             "dependsOn": [
                 "npm: watch:server",
                 "npm: watch:client"

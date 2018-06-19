@@ -40,7 +40,7 @@ documents.onDidSave((event) => {
 
 connection.onDidChangeConfiguration((change) => {
   const temp = change.settings.mcglsl as Config
-  conf = new Config(temp['minecraftPath'], temp['glslangValidatorPath'])
+  conf = new Config(temp['shaderpacksPath'], temp['glslangValidatorPath'])
   exec(conf.glslangPath, (error) => {
     if (error['code'] !== 1) {
       connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangPath}`)

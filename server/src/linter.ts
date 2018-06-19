@@ -7,7 +7,7 @@ import { open } from 'fs';
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
-const reInclude = /^(?: |\t)*(?:#include) "((?:\/[\S]+)+\.(?:glsl))"$/
+const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"$/
 const include = '#extension GL_GOOGLE_include_directive : require'
 
 const filters = [
@@ -68,7 +68,6 @@ const replaceWord = (msg: string) => {
 
 export function preprocess(document: TextDocument, topLevel: boolean, incStack: string[]) {
   const lines = document.getText().split('\n').map(s => s.replace(/^\s+|\s+$/g, ''))
-  shaderpackRoot(document.uri)
   if (topLevel) {
     let inComment = false
     for (let i = 0; i < lines.length; i++) {
@@ -85,7 +84,9 @@ export function preprocess(document: TextDocument, topLevel: boolean, incStack: 
   }
 
   const includes = getIncludes(lines)
-  if (includes.length > 0) {}
+  includes.forEach((inc) => {
+    console.log(absPath(document.uri, inc.match[1]))
+  })
 
   const root = document.uri.replace(/^file:\/\//, '').replace(path.basename(document.uri), '')
   //lint(path.extname(document.uri.replace(/^file:\/\//, '')), lines.join('\n'), document.uri)
@@ -126,10 +127,19 @@ function getIncludes(lines: string[]): {lineNum: number, match: RegExpMatchArray
     .map((obj) => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
 }
 
-function shaderpackRoot(uri: string) {
-  uri = uri.replace(/^file:\/\//, '')
-  console.log(uri, conf.minecraftPath, !uri.startsWith(conf.minecraftPath))
-  if (!uri.startsWith(conf.minecraftPath)) {
-    connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in ${uri} but the path is set to ${conf.minecraftPath}`)
+function absPath(currFile: string, includeFile: string): string {
+  currFile = currFile.replace(/^file:\/\//, '')
+  if (!currFile.startsWith(conf.shaderpacksPath)) {
+    connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in ${currFile} but the path is set to ${conf.shaderpacksPath}`)
+    return
+  }
+
+  if (includeFile.charAt(0) === '/') {
+    console.log('no')
+    const shaderPath = currFile.replace(conf.shaderpacksPath, '').split('/').slice(0, 3).join('/')
+    return path.join(conf.shaderpacksPath, shaderPath, includeFile)
+  } else {
+    console.log('hi')
+    return path.join(currFile, includeFile)
   }
 }
