@@ -15,7 +15,7 @@
     "scripts": {
         "update-vscode": "node ./node_modules/vscode/bin/install",
         "postinstall": "node ./node_modules/vscode/bin/install",
-        "lint": "tslint -c tslint.json 'src/**/*.ts'",
+        "lint": "tslint -c ../tslint.json 'src/**/*.ts'",
         "compile": "tsc -p ./"
     },
     "dependencies": {

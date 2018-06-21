@@ -71,7 +71,7 @@
         "compile:server": "tsc -p ./server/tsconfig.json",
         "watch:client": "tsc -w -p ./client/tsconfig.json",
         "watch:server": "tsc -w -p ./server/tsconfig.json",
-        "lint": "cd server && npm run lint && cd ../client && npm run lint",
+        "lint": "tslint -c tslint.json 'server/src/**/*.ts' && tslint -c tslint.json 'client/src/**/*.ts'",
         "fix": "tslint -c server/tslint.json --fix server/src/**/*.ts && tslint -c client/tslint.json --fix client/src/**/*.ts"
     },
     "devDependencies": {
