@@ -8,5 +8,5 @@ pipeline:
 matrix:
   NODE_VERSION:
     - "10"
-    - "9e"
+    - "9"
     - "8.11"
