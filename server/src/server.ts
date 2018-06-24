@@ -1,4 +1,5 @@
 import * as vsclang from 'vscode-languageserver'
+import { TextDocumentChangeEvent } from 'vscode-languageserver-protocol';
 import { Config } from './config'
 import { completions } from './completionProvider';
 import { preprocess } from './linter';
@@ -27,16 +28,20 @@ connection.onExit(() => {
 })
 
 documents.onDidOpen((event) => {
-  preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
+  //onEvent(event)
 })
 
 documents.onDidSave((event) => {
-  preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
+  onEvent(event)
 })
 
-/* documents.onDidChangeContent((change) => {
-  preprocess(change.document);
-});*/
+documents.onDidChangeContent((event) => {
+  //onEvent(event)
+})
+
+function onEvent(event: TextDocumentChangeEvent) {
+  preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
+}
 
 connection.onDidChangeConfiguration((change) => {
   const temp = change.settings.mcglsl as Config

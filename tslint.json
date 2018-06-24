@@ -11,6 +11,7 @@
         "array-type": false,
         "interface-name": false,
         "indent": [true, "spaces", 2],
+        "triple-equals": false,
         "arrow-parens": false,
         "max-classes-per-file": false,
         "no-console": false,

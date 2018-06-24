@@ -3,7 +3,7 @@ import './global'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { exec } from 'child_process'
 import * as path from 'path'
-import { open } from 'fs';
+import { readFileSync } from 'fs';
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
@@ -13,6 +13,7 @@ const include = '#extension GL_GOOGLE_include_directive : require'
 const filters = [
   /(No code generated)/,
   /(compilation terminated)/,
+  /Could not process include directive for header name:/
 ]
 
 const files: {[uri: string]: number} = {}
@@ -51,23 +52,9 @@ const tokens: {[key: string]: string} = {
   'RIGHT_BRACE': '}'
 }
 
-const filterMatches = (output: string) => output
-  .split('\n')
-  .filter(s => s.length > 1 && !filters.some(reg => reg.test(s)))
-  .map(s => s.match(reDiag))
-  .filter(match => match && match.length === 4)
-
-const replaceWord = (msg: string) => {
-  for (const token of Object.keys(tokens)) {
-    if (msg.includes(token)) {
-      msg = msg.replace(token, tokens[token])
-    }
-  }
-  return msg
-}
-
 export function preprocess(document: TextDocument, topLevel: boolean, incStack: string[]) {
-  const lines = document.getText().split('\n').map(s => s.replace(/^\s+|\s+$/g, ''))
+  const lines = document.getText().split('\n')
+  const docURI = formatURI(document.uri)
   if (topLevel) {
     let inComment = false
     for (let i = 0; i < lines.length; i++) {
@@ -84,62 +71,93 @@ export function preprocess(document: TextDocument, topLevel: boolean, incStack: 
   }
 
   const includes = getIncludes(lines)
-  includes.forEach((inc) => {
-    console.log(absPath(document.uri, inc.match[1]))
-  })
-
-  const root = document.uri.replace(/^file:\/\//, '').replace(path.basename(document.uri), '')
-  //lint(path.extname(document.uri.replace(/^file:\/\//, '')), lines.join('\n'), document.uri)
-}
-
-function lint(extension: string, text: string, uri: string) {
-  const child = exec(`${conf.glslangPath} --stdin -S ${ext[extension]}`, (error, out) => {
-    const diagnostics: Diagnostic[] = []
-    const matches = filterMatches(out) as RegExpMatchArray[]
-    matches.forEach((match) => {
-      const [type, line, msg] = match.slice(1)
-      diagnostics.push({
-        severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-        range: calcRange(parseInt(line) - 1, uri),
-        message: replaceWord(msg),
-        source: 'mc-glsl'
-      })
+  if (includes.length > 0) {
+    includes.forEach((inc) => {
+      const incPath = absPath(docURI, inc.match[1])
+      const data = readFileSync(incPath)
+      lines[inc.lineNum] = `#line 0 "${incPath}"`
+      lines.splice(inc.lineNum + 1, 0, `#line ${inc.lineNum} "${docURI}"`)
+      const dataLines = data.toString().split('\n')
+      lines.splice(inc.lineNum + 1, 0, ...dataLines)
+      //console.log(lines.join('\n'))
     })
-    connection.sendDiagnostics({uri, diagnostics})
-  })
-  child.stdin.write(text)
-  child.stdin.end()
+  }
+
+  lint(docURI, lines.join('\n'), includes)
 }
 
-function calcRange(lineNum: number, uri: string): Range {
-  const line = documents.get(uri).getText().split('\n')[lineNum - 1]
-  return Range.create(lineNum - 1, line.length - line.leftTrim().length, lineNum - 1, prepareLine(line).length + 1)
-}
+const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
-function prepareLine(line: string): string {
-  return line.slice(0, line.indexOf('//')).rightTrim()
-}
-
-function getIncludes(lines: string[]): {lineNum: number, match: RegExpMatchArray}[] {
-  return lines
+const getIncludes = (lines: string[])  => lines
     .map((line, i) => ({num: i, line}))
     .filter((obj) => reInclude.test(obj.line))
     .map((obj) => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
-}
 
 function absPath(currFile: string, includeFile: string): string {
-  currFile = currFile.replace(/^file:\/\//, '')
   if (!currFile.startsWith(conf.shaderpacksPath)) {
     connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in ${currFile} but the path is set to ${conf.shaderpacksPath}`)
     return
   }
 
   if (includeFile.charAt(0) === '/') {
-    console.log('no')
     const shaderPath = currFile.replace(conf.shaderpacksPath, '').split('/').slice(0, 3).join('/')
     return path.join(conf.shaderpacksPath, shaderPath, includeFile)
   } else {
-    console.log('hi')
-    return path.join(currFile, includeFile)
+    const shaderPath = path.dirname(currFile)
+    return path.join(shaderPath, includeFile)
   }
+}
+
+function lint(uri: string, text: string, includes: {lineNum: number, match: RegExpMatchArray}[]) {
+  const child = exec(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, (error, out) => {
+    const diagnostics: {[uri: string]: Diagnostic[]} = {}
+    diagnostics[uri] = []
+    includes.forEach(obj => {
+      diagnostics[absPath(uri, obj.match[1])] = []
+    })
+    const matches = filterMatches(out) as RegExpMatchArray[]
+    matches.forEach((match) => {
+      const [type, file, line, msg] = match.slice(1)
+      const diag = {
+        severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+        range: calcRange(parseInt(line) - 1, uri),
+        message: replaceWord(msg),
+        source: 'mc-glsl'
+      }
+      diagnostics[file].push(diag)
+    })
+    console.log(JSON.stringify(daigsArray(diagnostics), null, 2))
+    daigsArray(diagnostics).forEach((d) => {
+      console.log(d.uri, d.diag.length)
+      connection.sendDiagnostics({uri: 'file://' + d.uri, diagnostics: d.diag})
+    })
+  })
+  child.stdin.write(text)
+  child.stdin.end()
+}
+
+const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri, diag: diags[uri]}))
+
+const filterMatches = (output: string) => output
+  .split('\n')
+  .filter(s => s.length > 1 && !filters.some(reg => reg.test(s)))
+  .map(s => s.match(reDiag))
+  .filter(match => match && match.length === 5)
+
+const replaceWord = (msg: string) => {
+  for (const token of Object.keys(tokens)) {
+    if (msg.includes(token)) {
+      msg = msg.replace(token, tokens[token])
+    }
+  }
+  return msg
+}
+
+function calcRange(lineNum: number, uri: string): Range {
+  //TODO lineNum needs to be subtracted based off includes
+  const lines = documents.get('file://' + uri).getText().split('\n')
+  const line = lines[lineNum]
+  const startOfLine = line.length - line.leftTrim().length
+  const endOfLine = line.slice(0, line.indexOf('//')).rightTrim().length + 1
+  return Range.create(lineNum, startOfLine, lineNum, endOfLine)
 }
