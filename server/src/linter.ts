@@ -3,7 +3,7 @@ import './global'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { exec } from 'child_process'
 import * as path from 'path'
-import { readFileSync } from 'fs';
+import { readFileSync } from 'fs'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
@@ -18,7 +18,7 @@ const filters = [
 
 const files: {[uri: string]: number} = {}
 
-const ext = {
+export const ext = {
   '.fsh': 'frag',
   '.gsh': 'geom',
   '.vsh': 'vert',
@@ -66,23 +66,26 @@ export function preprocess(document: TextDocument, topLevel: boolean, incStack: 
         lines.splice(i + 1, 0, include)
         break
       }
-      if (i === lines.length - 1) lines.splice(0, 0, include)
+      if (i === lines.length - 1) {
+        lines.splice(0, 0, include)
+        break
+      }
     }
   }
 
   const includes = getIncludes(lines)
+  let addedLines = 0
   if (includes.length > 0) {
-    includes.forEach((inc) => {
+    includes.forEach((inc, i) => {
       const incPath = absPath(docURI, inc.match[1])
-      const data = readFileSync(incPath)
-      lines[inc.lineNum] = `#line 0 "${incPath}"`
-      lines.splice(inc.lineNum + 1, 0, `#line ${inc.lineNum} "${docURI}"`)
-      const dataLines = data.toString().split('\n')
-      lines.splice(inc.lineNum + 1, 0, ...dataLines)
-      //console.log(lines.join('\n'))
+      const dataLines = readFileSync(incPath).toString().split('\n')
+      lines[inc.lineNum + addedLines + i] = `#line 0 "${incPath}"`
+      lines.splice(inc.lineNum + 1 + addedLines + i, 0, ...dataLines)
+      addedLines += dataLines.length
+      lines.splice(inc.lineNum + 1 + addedLines + i, 0, `#line ${inc.lineNum} "${docURI}"`)
     })
   }
-
+  console.log(lines.join('\n'))
   lint(docURI, lines.join('\n'), includes)
 }
 
@@ -126,9 +129,7 @@ function lint(uri: string, text: string, includes: {lineNum: number, match: RegE
       }
       diagnostics[file].push(diag)
     })
-    console.log(JSON.stringify(daigsArray(diagnostics), null, 2))
     daigsArray(diagnostics).forEach((d) => {
-      console.log(d.uri, d.diag.length)
       connection.sendDiagnostics({uri: 'file://' + d.uri, diagnostics: d.diag})
     })
   })

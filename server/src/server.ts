@@ -1,14 +1,15 @@
 import * as vsclang from 'vscode-languageserver'
-import { TextDocumentChangeEvent } from 'vscode-languageserver-protocol';
+import { TextDocumentChangeEvent } from 'vscode-languageserver-protocol'
 import { Config } from './config'
-import { completions } from './completionProvider';
-import { preprocess } from './linter';
-import { exec } from 'child_process';
+import { completions } from './completionProvider'
+import { preprocess, ext } from './linter'
+import { exec } from 'child_process'
+import { extname } from 'path'
 
-export const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process));
+export const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
 
-export const documents = new vsclang.TextDocuments();
-documents.listen(connection);
+export const documents = new vsclang.TextDocuments()
+documents.listen(connection)
 
 export let conf = new Config('', '')
 
@@ -20,24 +21,18 @@ connection.onInitialize((params): vsclang.InitializeResult => {
         resolveProvider: true
       },
     }
-  };
-});
+  }
+})
 
 connection.onExit(() => {
 
 })
 
-documents.onDidOpen((event) => {
-  //onEvent(event)
-})
+documents.onDidOpen(onEvent)
 
-documents.onDidSave((event) => {
-  onEvent(event)
-})
+documents.onDidSave(onEvent)
 
-documents.onDidChangeContent((event) => {
-  //onEvent(event)
-})
+//documents.onDidChangeContent(onEvent)
 
 function onEvent(event: TextDocumentChangeEvent) {
   preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
@@ -51,16 +46,12 @@ connection.onDidChangeConfiguration((change) => {
       connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangPath}`)
       return
     }
-    documents.all().forEach((document) => preprocess(document, true, [document.uri.replace(/^file:\/\//, '')]));
+    documents.all().forEach((document) => preprocess(document, true, [document.uri.replace(/^file:\/\//, '')]))
   })
-});
+})
 
-connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams): vsclang.CompletionItem[] => {
-  return completions
-});
+connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams) => completions)
 
-connection.onCompletionResolve((item: vsclang.CompletionItem): vsclang.CompletionItem => {
-  return completions[item.data - 1]
-});
+connection.onCompletionResolve((item: vsclang.CompletionItem): vsclang.CompletionItem => completions[item.data - 1])
 
-connection.listen();
+connection.listen()

@@ -4,7 +4,7 @@
     "rules": {
         "quotemark": [true, "single"],
         "comment-format": false,
-        "semicolon": false,
+        "semicolon": [true, "never"],
         "ordered-imports": false,
         "object-literal-sort-keys": false,
         "no-string-literal": false,
