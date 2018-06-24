@@ -59,6 +59,7 @@ export function preprocess(document: TextDocument, topLevel: boolean, incStack: 
     let inComment = false
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
+      //TODO something better than this
       if (line.includes('/*')) inComment = true
       if (line.includes('*/')) inComment = false
       if (line.trim().startsWith('//')) continue
@@ -86,11 +87,12 @@ export function preprocess(document: TextDocument, topLevel: boolean, incStack: 
     })
   }
   console.log(lines.join('\n'))
-  lint(docURI, lines.join('\n'), includes)
+  lint(docURI, lines, includes)
 }
 
 const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
+//TODO not include in comments
 const getIncludes = (lines: string[])  => lines
     .map((line, i) => ({num: i, line}))
     .filter((obj) => reInclude.test(obj.line))
@@ -111,16 +113,17 @@ function absPath(currFile: string, includeFile: string): string {
   }
 }
 
-function lint(uri: string, text: string, includes: {lineNum: number, match: RegExpMatchArray}[]) {
+function lint(uri: string, lines: string[], includes: {lineNum: number, match: RegExpMatchArray}[]) {
   const child = exec(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, (error, out) => {
     const diagnostics: {[uri: string]: Diagnostic[]} = {}
     diagnostics[uri] = []
     includes.forEach(obj => {
       diagnostics[absPath(uri, obj.match[1])] = []
     })
+
     const matches = filterMatches(out) as RegExpMatchArray[]
     matches.forEach((match) => {
-      const [type, file, line, msg] = match.slice(1)
+      const [whole, type, file, line, msg] = match
       const diag = {
         severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
         range: calcRange(parseInt(line) - 1, uri),
@@ -129,11 +132,12 @@ function lint(uri: string, text: string, includes: {lineNum: number, match: RegE
       }
       diagnostics[file].push(diag)
     })
+
     daigsArray(diagnostics).forEach((d) => {
       connection.sendDiagnostics({uri: 'file://' + d.uri, diagnostics: d.diag})
     })
   })
-  child.stdin.write(text)
+  lines.forEach(line => child.stdin.write(line))
   child.stdin.end()
 }
 
@@ -145,7 +149,7 @@ const filterMatches = (output: string) => output
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 5)
 
-const replaceWord = (msg: string) => {
+function replaceWord(msg: string) {
   for (const token of Object.keys(tokens)) {
     if (msg.includes(token)) {
       msg = msg.replace(token, tokens[token])
@@ -155,7 +159,6 @@ const replaceWord = (msg: string) => {
 }
 
 function calcRange(lineNum: number, uri: string): Range {
-  //TODO lineNum needs to be subtracted based off includes
   const lines = documents.get('file://' + uri).getText().split('\n')
   const line = lines[lineNum]
   const startOfLine = line.length - line.leftTrim().length
