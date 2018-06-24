@@ -2,7 +2,7 @@ pipeline:
   lint:
     image: node:${NODE_VERSION}
     commands:
-      - npm i
+      - npm ci
       - npm run lint
 
 matrix:
