@@ -24,9 +24,7 @@ connection.onInitialize((params): vsclang.InitializeResult => {
   }
 })
 
-connection.onExit(() => {
-
-})
+connection.onExit(() => {})
 
 documents.onDidOpen(onEvent)
 
@@ -38,16 +36,23 @@ function onEvent(event: TextDocumentChangeEvent) {
   preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
 }
 
+export function checkBinary(ok: () => void, fail?: () => any) {
+  exec(conf.glslangPath, (error) => {
+    if (error['code'] !== 1) {
+      if (fail) fail()
+      return
+    }
+    ok()
+  })
+}
+
 connection.onDidChangeConfiguration((change) => {
   const temp = change.settings.mcglsl as Config
   conf = new Config(temp['shaderpacksPath'], temp['glslangValidatorPath'])
-  exec(conf.glslangPath, (error) => {
-    if (error['code'] !== 1) {
-      connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangPath}`)
-      return
-    }
-    documents.all().forEach((document) => preprocess(document, true, [document.uri.replace(/^file:\/\//, '')]))
-  })
+  checkBinary(
+    () => {documents.all().forEach(document => preprocess(document, true, [document.uri.replace(/^file:\/\//, '')]))},
+    () => {connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangPath}`)}
+  )
 })
 
 connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams) => completions)

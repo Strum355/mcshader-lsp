@@ -1,4 +1,4 @@
-import { conf, connection, documents } from './server'
+import { conf, connection, documents, checkBinary } from './server'
 import './global'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { exec } from 'child_process'
@@ -95,8 +95,8 @@ const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 //TODO not include in comments
 const getIncludes = (lines: string[])  => lines
     .map((line, i) => ({num: i, line}))
-    .filter((obj) => reInclude.test(obj.line))
-    .map((obj) => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
+    .filter(obj => reInclude.test(obj.line))
+    .map(obj => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
 
 function absPath(currFile: string, includeFile: string): string {
   if (!currFile.startsWith(conf.shaderpacksPath)) {
@@ -114,31 +114,35 @@ function absPath(currFile: string, includeFile: string): string {
 }
 
 function lint(uri: string, lines: string[], includes: {lineNum: number, match: RegExpMatchArray}[]) {
-  const child = exec(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, (error, out) => {
-    const diagnostics: {[uri: string]: Diagnostic[]} = {}
-    diagnostics[uri] = []
-    includes.forEach(obj => {
-      diagnostics[absPath(uri, obj.match[1])] = []
-    })
+  checkBinary(
+    () => {
+      const child = exec(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, (error, out) => {
+        const diagnostics: {[uri: string]: Diagnostic[]} = {}
+        diagnostics[uri] = []
+        includes.forEach(obj => {
+          diagnostics[absPath(uri, obj.match[1])] = []
+        })
 
-    const matches = filterMatches(out) as RegExpMatchArray[]
-    matches.forEach((match) => {
-      const [whole, type, file, line, msg] = match
-      const diag = {
-        severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-        range: calcRange(parseInt(line) - 1, uri),
-        message: replaceWord(msg),
-        source: 'mc-glsl'
-      }
-      diagnostics[file].push(diag)
-    })
+        const matches = filterMatches(out) as RegExpMatchArray[]
+        matches.forEach((match) => {
+          const [whole, type, file, line, msg] = match
+          const diag = {
+            severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+            range: calcRange(parseInt(line) - 1, uri),
+            message: replaceWord(msg),
+            source: 'mc-glsl'
+          }
+          diagnostics[file].push(diag)
+        })
 
-    daigsArray(diagnostics).forEach((d) => {
-      connection.sendDiagnostics({uri: 'file://' + d.uri, diagnostics: d.diag})
-    })
-  })
-  lines.forEach(line => child.stdin.write(line))
-  child.stdin.end()
+        daigsArray(diagnostics).forEach(d => {
+          connection.sendDiagnostics({uri: 'file://' + d.uri, diagnostics: d.diag})
+        })
+      })
+      lines.forEach(line => child.stdin.write(line))
+      child.stdin.end()
+    }
+  )
 }
 
 const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri, diag: diags[uri]}))

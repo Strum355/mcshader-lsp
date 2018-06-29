@@ -72,7 +72,7 @@
         "watch:client": "tsc -w -p ./client/tsconfig.json",
         "watch:server": "tsc -w -p ./server/tsconfig.json",
         "lint": "tslint -c tslint.json 'server/src/**/*.ts' && tslint -c tslint.json 'client/src/**/*.ts'",
-        "fix": "tslint -c server/tslint.json --fix server/src/**/*.ts && tslint -c client/tslint.json --fix client/src/**/*.ts"
+        "fix": "tslint -c tslint.json --fix server/src/**/*.ts && tslint -c tslint.json --fix client/src/**/*.ts"
     },
     "devDependencies": {
         "@types/node": "^8.0.0",
