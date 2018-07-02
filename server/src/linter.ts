@@ -1,7 +1,7 @@
-import { conf, connection, documents, checkBinary } from './server'
+import { conf, connection, documents } from './server'
 import './global'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
-import { exec } from 'child_process'
+import { execSync } from 'child_process'
 import * as path from 'path'
 import { readFileSync } from 'fs'
 
@@ -52,9 +52,8 @@ const tokens: {[key: string]: string} = {
   'RIGHT_BRACE': '}'
 }
 
-export function preprocess(document: TextDocument, topLevel: boolean, incStack: string[]) {
-  const lines = document.getText().split('\n')
-  const docURI = formatURI(document.uri)
+// TODO exclude exts not in ext
+export function preprocess(lines: string[], docURI: string, topLevel: boolean, incStack: string[]) {
   if (topLevel) {
     let inComment = false
     for (let i = 0; i < lines.length; i++) {
@@ -84,13 +83,20 @@ export function preprocess(document: TextDocument, topLevel: boolean, incStack: 
       lines.splice(inc.lineNum + 1 + addedLines + i, 0, ...dataLines)
       addedLines += dataLines.length
       lines.splice(inc.lineNum + 1 + addedLines + i, 0, `#line ${inc.lineNum} "${docURI}"`)
+      preprocess(lines, incPath, false, incStack)
     })
   }
-  console.log(lines.join('\n'))
-  lint(docURI, lines, includes)
+
+  if (!topLevel) return
+
+  //console.log(lines.join('\n'))
+  try {
+    lint(docURI, lines, includes)
+  } catch (e) {
+  }
 }
 
-const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
+export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 //TODO not include in comments
 const getIncludes = (lines: string[])  => lines
@@ -107,45 +113,43 @@ function absPath(currFile: string, includeFile: string): string {
   if (includeFile.charAt(0) === '/') {
     const shaderPath = currFile.replace(conf.shaderpacksPath, '').split('/').slice(0, 3).join('/')
     return path.join(conf.shaderpacksPath, shaderPath, includeFile)
-  } else {
-    const shaderPath = path.dirname(currFile)
-    return path.join(shaderPath, includeFile)
   }
+  return path.join(path.dirname(currFile), includeFile)
 }
 
 function lint(uri: string, lines: string[], includes: {lineNum: number, match: RegExpMatchArray}[]) {
-  checkBinary(
-    () => {
-      const child = exec(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, (error, out) => {
-        const diagnostics: {[uri: string]: Diagnostic[]} = {}
-        diagnostics[uri] = []
-        includes.forEach(obj => {
-          diagnostics[absPath(uri, obj.match[1])] = []
-        })
+  console.log(lines.join('\n'))
+  let out: string = ''
+  try {
+    execSync(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, {input: lines.join('\n')})
+  } catch (e) {
+    out = e.stdout.toString()
+  }
 
-        const matches = filterMatches(out) as RegExpMatchArray[]
-        matches.forEach((match) => {
-          const [whole, type, file, line, msg] = match
-          const diag = {
-            severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-            range: calcRange(parseInt(line) - 1, uri),
-            message: replaceWord(msg),
-            source: 'mc-glsl'
-          }
-          diagnostics[file].push(diag)
-        })
+  const diagnostics: {[uri: string]: Diagnostic[]} = {}
+  diagnostics[uri] = []
+  includes.forEach(obj => {
+    diagnostics[absPath(uri, obj.match[1])] = []
+  })
 
-        daigsArray(diagnostics).forEach(d => {
-          connection.sendDiagnostics({uri: 'file://' + d.uri, diagnostics: d.diag})
-        })
-      })
-      lines.forEach(line => child.stdin.write(line))
-      child.stdin.end()
+  const matches = filterMatches(out)
+  matches.forEach((match) => {
+    const [whole, type, file, line, msg] = match
+    const diag = {
+      severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+      range: calcRange(parseInt(line) - 1, uri),
+      message: replaceWord(msg),
+      source: 'mc-glsl'
     }
-  )
+    diagnostics[file ? uri : file].push(diag)
+  })
+
+  daigsArray(diagnostics).forEach(d => {
+    connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
+  })
 }
 
-const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri, diag: diags[uri]}))
+const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri: 'file://' + uri, diag: diags[uri]}))
 
 const filterMatches = (output: string) => output
   .split('\n')

@@ -1,9 +1,9 @@
 import * as vsclang from 'vscode-languageserver'
-import { TextDocumentChangeEvent } from 'vscode-languageserver-protocol'
+import { TextDocumentChangeEvent, TextDocument } from 'vscode-languageserver-protocol'
 import { Config } from './config'
 import { completions } from './completionProvider'
-import { preprocess, ext } from './linter'
-import { exec } from 'child_process'
+import { preprocess, ext, formatURI } from './linter'
+import { exec, execSync } from 'child_process'
 import { extname } from 'path'
 
 export const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
@@ -26,33 +26,27 @@ connection.onInitialize((params): vsclang.InitializeResult => {
 
 connection.onExit(() => {})
 
-documents.onDidOpen(onEvent)
+documents.onDidOpen((event) => onEvent(event.document))
 
-documents.onDidSave(onEvent)
+documents.onDidSave((event) => onEvent(event.document))
 
 //documents.onDidChangeContent(onEvent)
 
-function onEvent(event: TextDocumentChangeEvent) {
-  preprocess(event.document, true, [event.document.uri.replace(/^file:\/\//, '')])
-}
-
-export function checkBinary(ok: () => void, fail?: () => any) {
-  exec(conf.glslangPath, (error) => {
-    if (error['code'] !== 1) {
-      if (fail) fail()
-      return
-    }
-    ok()
-  })
+function onEvent(document: TextDocument) {
+  preprocess(document.getText().split('\n'), formatURI(document.uri), true, [document.uri.replace(/^file:\/\//, '')])
 }
 
 connection.onDidChangeConfiguration((change) => {
   const temp = change.settings.mcglsl as Config
   conf = new Config(temp['shaderpacksPath'], temp['glslangValidatorPath'])
-  checkBinary(
-    () => {documents.all().forEach(document => preprocess(document, true, [document.uri.replace(/^file:\/\//, '')]))},
-    () => {connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: ${conf.glslangPath}`)}
-  )
+  try {
+    execSync(conf.glslangPath)
+    documents.all().forEach(document => onEvent(document))
+  } catch (e) {
+    if (e.status !== 1) {
+      connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: '${conf.glslangPath}' or returned non-0 code`)
+    }
+  }
 })
 
 connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams) => completions)
