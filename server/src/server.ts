@@ -33,6 +33,7 @@ documents.onDidSave((event) => onEvent(event.document))
 //documents.onDidChangeContent(onEvent)
 
 function onEvent(document: TextDocument) {
+  if (!ext.has(extname(document.uri))) return
   preprocess(document.getText().split('\n'), formatURI(document.uri), true, [document.uri.replace(/^file:\/\//, '')])
 }
 

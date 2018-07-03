@@ -15,41 +15,40 @@ const filters = [
   /Could not process include directive for header name:/
 ]
 
-const files: {[uri: string]: number} = {}
+const files = new Map<string, number>()
 
-export const ext = {
-  '.fsh': 'frag',
-  '.gsh': 'geom',
-  '.vsh': 'vert',
-  //'.glsl': 'frag' //excluding non standard files, need to be treated differently
-}
+export const ext = new Map([
+  ['.fsh', 'frag'],
+  ['.gsh', 'geom'],
+  ['.vsh', 'vert'],
+])
 
-const tokens: {[key: string]: string} = {
-  'SEMICOLON': ';',
-  'COMMA': ',',
-  'COLON': ':',
-  'EQUAL': '=',
-  'LEFT_PAREN': '(',
-  'RIGHT_PAREN': ')',
-  'DOT': '.',
-  'BANG': '!',
-  'DASH': '-',
-  'TILDE': '~',
-  'PLUS': '+',
-  'STAR': '*',
-  'SLASH': '/',
-  'PERCENT': '%',
-  'LEFT_ANGEL': '<',
-  'RIGHT_ANGEL': '>',
-  'VERICAL_BAR': '|',
-  'CARET': '^',
-  'AMPERSAND': '&',
-  'QUESTION': '?',
-  'LEFT_BRACKET': '[',
-  'RIGHT_BRACKET': ']',
-  'LEFT_BRACE': '{',
-  'RIGHT_BRACE': '}'
-}
+const tokens = new Map([
+  ['SEMICOLON', ';'],
+  ['COMMA', ','],
+  ['COLON', ':'],
+  ['EQUAL', '='],
+  ['LEFT_PAREN', '('],
+  ['RIGHT_PAREN', ')'],
+  ['DOT', '.'],
+  ['BANG', '!'],
+  ['DASH', '-'],
+  ['TILDE', '~'],
+  ['PLUS', '+'],
+  ['STAR', '*'],
+  ['SLASH', '/'],
+  ['PERCENT', '%'],
+  ['LEFT_ANGEL', '<'],
+  ['RIGHT_ANGEL', '>'],
+  ['VERICAL_BAR', '|'],
+  ['CARET', '^'],
+  ['AMPERSAND', '&'],
+  ['QUESTION', '?'],
+  ['[LEFT_BRACKET', '['],
+  ['RIGHT_BRACKET', ']'],
+  ['LEFT_BRACE', '{'],
+  ['RIGHT_BRACE', '}'],
+])
 
 // TODO exclude exts not in ext
 export function preprocess(lines: string[], docURI: string, topLevel: boolean, incStack: string[]) {
@@ -88,7 +87,6 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
 
   if (!topLevel) return
 
-  //console.log(lines.join('\n'))
   try {
     lint(docURI, lines, includes)
   } catch (e) {
@@ -139,11 +137,13 @@ function lint(uri: string, lines: string[], includes: {lineNum: number, match: R
       message: replaceWord(msg),
       source: 'mc-glsl'
     }
-    //diagnostics[file ? uri : file].push(diag)
+    diagnostics[file ? uri : file].push(diag)
   })
 
   daigsArray(diagnostics).forEach(d => connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag}))
 }
+
+const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri: 'file://' + uri, diag: diags[uri]}))
 
@@ -152,8 +152,6 @@ const filterMatches = (output: string) => output
   .filter(s => s.length > 1 && !filters.some(reg => reg.test(s)))
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 5)
-
-const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 function calcRange(lineNum: number, uri: string): Range {
   const lines = documents.get('file://' + uri).getText().split('\n')
