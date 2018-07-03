@@ -71,16 +71,16 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
     }
   }
 
-  const includes = getIncludes(lines)
+  const includes = getIncludes(incStack[0], lines)
   let addedLines = 0
   if (includes.length > 0) {
     includes.forEach((inc, i) => {
       const incPath = absPath(docURI, inc.match[1])
       const dataLines = readFileSync(incPath).toString().split('\n')
       lines[inc.lineNum + addedLines + i] = `#line 0 "${incPath}"`
-      lines.splice(inc.lineNum + 1 + addedLines + i, 0, ...dataLines)
+      lines.splice(inc.lineNum + addedLines + i, 0, ...dataLines)
       addedLines += dataLines.length
-      lines.splice(inc.lineNum + 1 + addedLines + i, 0, `#line ${inc.lineNum} "${docURI}"`)
+      lines.splice(inc.lineNum + addedLines + i, 0, `#line ${inc.lineNum} "${docURI}"`)
       preprocess(lines, incPath, false, incStack)
     })
   }
@@ -96,10 +96,24 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 //TODO not include in comments
-const getIncludes = (lines: string[])  => lines
+/* const getIncludes = (lines: string[])  => lines
     .map((line, i) => ({num: i, line}))
     .filter(obj => reInclude.test(obj.line))
-    .map(obj => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
+    .map(obj => ({lineNum: obj.num, match: obj.line.match(reInclude)})) */
+
+function getIncludes(uri: string, lines: string[]) {
+  const out: {lineNum: number, parent: string, match: RegExpMatchArray}[] = []
+  let count = [1] // for each file we need to track the line number
+  let parStack = [uri] // for each include we need to track its parent
+  lines.forEach(line => {
+    count[count.length - 1]++
+    const match = line.match(reInclude)
+    if (line.startsWith('#line')) {
+      parStack.push(line.slice(line.indexOf('"') + 1, line.lastIndexOf('"')))
+    } else if (match.length === 0) return
+  })
+  return out
+}
 
 function absPath(currFile: string, includeFile: string): string {
   if (!currFile.startsWith(conf.shaderpacksPath)) {
@@ -107,6 +121,7 @@ function absPath(currFile: string, includeFile: string): string {
     return
   }
 
+  // TODO add explanation comment
   if (includeFile.charAt(0) === '/') {
     const shaderPath = currFile.replace(conf.shaderpacksPath, '').split('/').slice(0, 3).join('/')
     return path.join(conf.shaderpacksPath, shaderPath, includeFile)

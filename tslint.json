@@ -5,6 +5,7 @@
         "quotemark": [true, "single"],
         "comment-format": false,
         "semicolon": [true, "never"],
+        "no-conditional-assignment": false,
         "ordered-imports": false,
         "object-literal-sort-keys": false,
         "no-string-literal": false,
