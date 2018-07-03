@@ -1,5 +1,4 @@
 import { conf, connection, documents } from './server'
-import './global'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { execSync } from 'child_process'
 import * as path from 'path'
@@ -126,8 +125,7 @@ function lint(uri: string, lines: string[], includes: {lineNum: number, match: R
     out = e.stdout.toString()
   }
 
-  const diagnostics: {[uri: string]: Diagnostic[]} = {}
-  diagnostics[uri] = []
+  const diagnostics: {[uri: string]: Diagnostic[]} = {uri: []}
   includes.forEach(obj => {
     diagnostics[absPath(uri, obj.match[1])] = []
   })
@@ -141,12 +139,10 @@ function lint(uri: string, lines: string[], includes: {lineNum: number, match: R
       message: replaceWord(msg),
       source: 'mc-glsl'
     }
-    diagnostics[file ? uri : file].push(diag)
+    //diagnostics[file ? uri : file].push(diag)
   })
 
-  daigsArray(diagnostics).forEach(d => {
-    connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
-  })
+  daigsArray(diagnostics).forEach(d => connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag}))
 }
 
 const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri: 'file://' + uri, diag: diags[uri]}))
@@ -157,19 +153,12 @@ const filterMatches = (output: string) => output
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 5)
 
-function replaceWord(msg: string) {
-  for (const token of Object.keys(tokens)) {
-    if (msg.includes(token)) {
-      msg = msg.replace(token, tokens[token])
-    }
-  }
-  return msg
-}
+const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 function calcRange(lineNum: number, uri: string): Range {
   const lines = documents.get('file://' + uri).getText().split('\n')
   const line = lines[lineNum]
-  const startOfLine = line.length - line.leftTrim().length
-  const endOfLine = line.slice(0, line.indexOf('//')).rightTrim().length + 1
+  const startOfLine = line.length - line.trimLeft().length
+  const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 1
   return Range.create(lineNum, startOfLine, lineNum, endOfLine)
 }
