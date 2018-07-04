@@ -7,7 +7,7 @@
 
 VSCode-MC-Shader is a [Visual Studio Code](https://code.visualstudio.com/) extension for developing Minecraft GLSL Shaders for [Optifine](http://optifine.net). It currently provides linting and syntax highlighting (by stef-levesque/vscode-shader dependency).
 
-![logo](logo.png)
+<img src="https://github.com/Strum355/vscode-mc-shader/raw/master/logo.png" width="20%" height="20%">
 
 ## Features
 
