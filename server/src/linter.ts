@@ -51,7 +51,7 @@ const tokens = new Map([
 ])
 
 // TODO exclude exts not in ext
-export function preprocess(lines: string[], docURI: string, topLevel: boolean, incStack: string[]) {
+export function preprocess(lines: string[], docURI: string, topLevel: boolean, incStack: string[], num: number) {
   if (topLevel) {
     let inComment = false
     for (let i = 0; i < lines.length; i++) {
@@ -72,23 +72,30 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
   }
 
   const includes = getIncludes(incStack[0], lines)
-  let addedLines = 0
   if (includes.length > 0) {
-    includes.forEach((inc, i) => {
-      const incPath = absPath(docURI, inc.match[1])
+    // TODO only parse from the start of the merged section to the end of it
+    // problem: end of it changes if theres more merges
+    //console.log(JSON.stringify(includes, null, 2))
+    includes.reverse().forEach(inc => {
+      const incPath = absPath(inc.parent, inc.match[1])
       const dataLines = readFileSync(incPath).toString().split('\n')
-      lines[inc.lineNum + addedLines + i] = `#line 0 "${incPath}"`
-      lines.splice(inc.lineNum + addedLines + i, 0, ...dataLines)
-      addedLines += dataLines.length
-      lines.splice(inc.lineNum + addedLines + i, 0, `#line ${inc.lineNum} "${docURI}"`)
-      preprocess(lines, incPath, false, incStack)
+      lines[inc.lineNumParent] = `#line 0 "${incPath}"`
+      lines.splice(inc.lineNumParent + 1, 0, ...dataLines)
+      lines.splice(inc.lineNumParent + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${docURI}"`)
+
     })
+    //if (!topLevel) return
+    console.log(lines.join('\n') + '------------------------------------------------------')
+    console.log(num)
+    if (num === 4) return
+    num++
+    preprocess(lines, docURI, false, incStack, num)
   }
 
   if (!topLevel) return
 
   try {
-    lint(docURI, lines, includes)
+    //lint(docURI, lines, includes)
   } catch (e) {
   }
 }
@@ -99,18 +106,36 @@ export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 /* const getIncludes = (lines: string[])  => lines
     .map((line, i) => ({num: i, line}))
     .filter(obj => reInclude.test(obj.line))
-    .map(obj => ({lineNum: obj.num, match: obj.line.match(reInclude)})) */
-
+    .map(obj => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
+ */
 function getIncludes(uri: string, lines: string[]) {
-  const out: {lineNum: number, parent: string, match: RegExpMatchArray}[] = []
-  let count = [1] // for each file we need to track the line number
-  let parStack = [uri] // for each include we need to track its parent
+  const out: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}[] = []
+  const count = [0] // for each file we need to track the line number
+  let total = 0
+  const parStack = [uri] // for each include we need to track its parent
   lines.forEach(line => {
-    count[count.length - 1]++
     const match = line.match(reInclude)
     if (line.startsWith('#line')) {
-      parStack.push(line.slice(line.indexOf('"') + 1, line.lastIndexOf('"')))
-    } else if (match.length === 0) return
+      const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
+      //console.log(`${parStack[parStack.length - 1]}\n\t${count[count.length - 1]} | ${inc}`)
+      console.log(inc)
+      if (inc === parStack[parStack.length - 2]) {
+        count.pop()
+        parStack.pop()
+      } else {
+        parStack.push(inc)
+        count.push(0)
+      }
+    } else if (match) {
+      out.push({
+        lineNum: count[count.length - 1],
+        lineNumParent: total,
+        parent: parStack[parStack.length - 1],
+        match
+      })
+    }
+    count[count.length - 1]++
+    total++
   })
   return out
 }
