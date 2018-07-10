@@ -42,7 +42,7 @@ connection.onDidChangeConfiguration((change) => {
   conf = new Config(temp['shaderpacksPath'], temp['glslangValidatorPath'])
   try {
     execSync(conf.glslangPath)
-    documents.all().forEach(document => onEvent(document))
+    documents.all().forEach(document => onEvent)
   } catch (e) {
     if (e.status !== 1) {
       connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: '${conf.glslangPath}' or returned non-0 code`)

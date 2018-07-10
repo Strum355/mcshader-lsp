@@ -73,41 +73,30 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
 
   const includes = getIncludes(incStack[0], lines)
   if (includes.length > 0) {
-    // TODO only parse from the start of the merged section to the end of it
-    // problem: end of it changes if theres more merges
-    //console.log(JSON.stringify(includes, null, 2))
     includes.reverse().forEach(inc => {
       const incPath = absPath(inc.parent, inc.match[1])
+      incStack.push(incPath)
       const dataLines = readFileSync(incPath).toString().split('\n')
       lines[inc.lineNumParent] = `#line 0 "${incPath}"`
       lines.splice(inc.lineNumParent + 1, 0, ...dataLines)
-      lines.splice(inc.lineNumParent + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${docURI}"`)
+      lines.splice(inc.lineNumParent + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
 
     })
-    //if (!topLevel) return
-    console.log(lines.join('\n') + '------------------------------------------------------')
-    console.log(num)
-    if (num === 4) return
-    num++
     preprocess(lines, docURI, false, incStack, num)
   }
 
   if (!topLevel) return
 
   try {
-    //lint(docURI, lines, includes)
+    lint(docURI, lines, incStack)
   } catch (e) {
+    console.log(e)
   }
 }
 
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
-//TODO not include in comments
-/* const getIncludes = (lines: string[])  => lines
-    .map((line, i) => ({num: i, line}))
-    .filter(obj => reInclude.test(obj.line))
-    .map(obj => ({lineNum: obj.num, match: obj.line.match(reInclude)}))
- */
+// TODO no
 function getIncludes(uri: string, lines: string[]) {
   const out: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}[] = []
   const count = [0] // for each file we need to track the line number
@@ -117,8 +106,6 @@ function getIncludes(uri: string, lines: string[]) {
     const match = line.match(reInclude)
     if (line.startsWith('#line')) {
       const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
-      //console.log(`${parStack[parStack.length - 1]}\n\t${count[count.length - 1]} | ${inc}`)
-      console.log(inc)
       if (inc === parStack[parStack.length - 2]) {
         count.pop()
         parStack.pop()
@@ -154,38 +141,39 @@ function absPath(currFile: string, includeFile: string): string {
   return path.join(path.dirname(currFile), includeFile)
 }
 
-function lint(uri: string, lines: string[], includes: {lineNum: number, match: RegExpMatchArray}[]) {
-  console.log(lines.join('\n'))
+function lint(uri: string, lines: string[], includes: string[]) {
   let out: string = ''
   try {
-    execSync(`${conf.glslangPath} --stdin -S ${ext[path.extname(uri)]}`, {input: lines.join('\n')})
+    execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(uri))}`, {input: lines.join('\n')})
   } catch (e) {
     out = e.stdout.toString()
   }
 
-  const diagnostics: {[uri: string]: Diagnostic[]} = {uri: []}
+  const diagnostics = new Map([[uri, Array<Diagnostic>()]])
   includes.forEach(obj => {
-    diagnostics[absPath(uri, obj.match[1])] = []
+    diagnostics.set(obj, [])
   })
 
   const matches = filterMatches(out)
   matches.forEach((match) => {
     const [whole, type, file, line, msg] = match
-    const diag = {
+    const diag: Diagnostic = {
       severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-      range: calcRange(parseInt(line) - 1, uri),
+      range: calcRange(parseInt(line) - 1, file.length - 1 ? file : uri),
       message: replaceWord(msg),
       source: 'mc-glsl'
     }
-    diagnostics[file ? uri : file].push(diag)
+    diagnostics.get(file.length - 1 ? file : uri).push(diag)
   })
 
-  daigsArray(diagnostics).forEach(d => connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag}))
+  daigsArray(diagnostics).forEach(d => {
+    connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
+  })
 }
 
 const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
-const daigsArray = (diags: {[uri: string]: Diagnostic[]}) => Object.keys(diags).map(uri => ({uri: 'file://' + uri, diag: diags[uri]}))
+const daigsArray = (diags: Map<string, Diagnostic[]>) => Array.from(diags).map(kv => ({uri: 'file://' + kv[0], diag: kv[1]}))
 
 const filterMatches = (output: string) => output
   .split('\n')
@@ -194,7 +182,13 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
-  const lines = documents.get('file://' + uri).getText().split('\n')
+  let lines = []
+  // TODO better error handling maybe?
+  if (documents.keys().includes('file://' + uri)) {
+    lines = documents.get('file://' + uri).getText().split('\n')
+  } else {
+    lines = readFileSync(uri).toString().split('\n')
+  }
   const line = lines[lineNum]
   const startOfLine = line.length - line.trimLeft().length
   const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 1
