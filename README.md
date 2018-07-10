@@ -27,9 +27,8 @@ Got a feature request? Chuck it into an Issue!
 
 - Visual Studio Code (v1.17.0 or higher - minimum requirement untested)
 - The [Shader languages support for VS Code](https://marketplace.visualstudio.com/items?itemName=slevesque.shader) extension. This should automatically install when you install this extension.
-- That the shader you're editing is in the `shaderpacks` folder in `.minecraft`.
+- That the shader(s) you're editing are in the `shaderpacks` folder in `.minecraft`.
 - The [OpenGL / OpenGL ES Reference Compiler](https://cvs.khronos.org/svn/repos/ogl/trunk/ecosystem/public/sdk/tools/glslang/Install/) (for convenience, put it in your PATH, this is the assumed location if not specified). If, for some reason, you're using MacOS, there are no pre-compiled binaries of this.
-- [Windows] An up to date version of Windows with Developer mode enabled for symlink support. (May not always work, I've gotten inconsistent results).
 - [MacOS] Not MacOS. Not that you're making MC Shaders on/for MacOS anyways...right?
 
 ## Extension Settings

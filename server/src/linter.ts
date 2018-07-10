@@ -50,6 +50,12 @@ const tokens = new Map([
   ['RIGHT_BRACE', '}'],
 ])
 
+enum Comment {
+  No = 0,
+  Single,
+  Multi
+}
+
 // TODO exclude exts not in ext
 export function preprocess(lines: string[], docURI: string, topLevel: boolean, incStack: string[], num: number) {
   if (topLevel) {
@@ -102,29 +108,41 @@ function getIncludes(uri: string, lines: string[]) {
   const count = [0] // for each file we need to track the line number
   let total = 0
   const parStack = [uri] // for each include we need to track its parent
+  let comment = Comment.No
   lines.forEach(line => {
-    const match = line.match(reInclude)
-    if (line.startsWith('#line')) {
-      const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
-      if (inc === parStack[parStack.length - 2]) {
-        count.pop()
-        parStack.pop()
-      } else {
-        parStack.push(inc)
-        count.push(0)
+    comment = isInComment(line, comment)
+    if (!comment) {
+      const match = line.match(reInclude)
+      if (line.startsWith('#line')) {
+        const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
+        if (inc === parStack[parStack.length - 2]) {
+          count.pop()
+          parStack.pop()
+        } else {
+          count.push(0)
+          parStack.push(inc)
+        }
+      } else if (match) {
+        out.push({
+          lineNum: count[count.length - 1],
+          lineNumParent: total,
+          parent: parStack[parStack.length - 1],
+          match
+        })
       }
-    } else if (match) {
-      out.push({
-        lineNum: count[count.length - 1],
-        lineNumParent: total,
-        parent: parStack[parStack.length - 1],
-        match
-      })
     }
     count[count.length - 1]++
     total++
   })
   return out
+}
+
+function isInComment(line: string, state: Comment): Comment {
+  const indexOf = line.indexOf('#include')
+  if (indexOf > -1 && line.indexOf('//') < indexOf) {
+    return Comment.No
+  }
+  return Comment.No
 }
 
 function absPath(currFile: string, includeFile: string): string {
@@ -142,6 +160,8 @@ function absPath(currFile: string, includeFile: string): string {
 }
 
 function lint(uri: string, lines: string[], includes: string[]) {
+  //console.log(lines.join('\n'))
+  //return
   let out: string = ''
   try {
     execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(uri))}`, {input: lines.join('\n')})
@@ -150,9 +170,7 @@ function lint(uri: string, lines: string[], includes: string[]) {
   }
 
   const diagnostics = new Map([[uri, Array<Diagnostic>()]])
-  includes.forEach(obj => {
-    diagnostics.set(obj, [])
-  })
+  includes.forEach(obj => diagnostics.set(obj, []))
 
   const matches = filterMatches(out)
   matches.forEach((match) => {
