@@ -103,7 +103,7 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 // TODO no
-function getIncludes(uri: string, lines: string[]) {
+export function getIncludes(uri: string, lines: string[]) {
   const out: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}[] = []
   const count = [0] // for each file we need to track the line number
   let total = 0
@@ -137,7 +137,7 @@ function getIncludes(uri: string, lines: string[]) {
   return out
 }
 
-function isInComment(line: string, state: Comment): Comment {
+export function isInComment(line: string, state: Comment): Comment {
   const indexOf = line.indexOf('#include')
   if (indexOf > -1 && line.indexOf('//') < indexOf) {
     return Comment.No
@@ -145,7 +145,7 @@ function isInComment(line: string, state: Comment): Comment {
   return Comment.No
 }
 
-function absPath(currFile: string, includeFile: string): string {
+export function absPath(currFile: string, includeFile: string): string {
   if (!currFile.startsWith(conf.shaderpacksPath)) {
     connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in ${currFile} but the path is set to ${conf.shaderpacksPath}`)
     return
@@ -189,7 +189,7 @@ function lint(uri: string, lines: string[], includes: string[]) {
   })
 }
 
-const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
+export const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 const daigsArray = (diags: Map<string, Diagnostic[]>) => Array.from(diags).map(kv => ({uri: 'file://' + kv[0], diag: kv[1]}))
 

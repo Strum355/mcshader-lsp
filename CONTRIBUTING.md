@@ -6,11 +6,11 @@ Want to contribute? I sure want you to! Heres how you can help:
 
 Development requirements (did I miss any? Submit a PR!):
 
-`git`, `npm`, `nodejs`, `VSCode`, (optional) `python3`
+`git`, `npm`, `nodejs`, `VSCode`, `python3` (optional)
 
-Fork the repo (you are using [SSH keys](https://help.github.com/articles/connecting-to-github-with-ssh/), right?):
+Fork the repo and clone it (you are using [SSH keys](https://help.github.com/articles/connecting-to-github-with-ssh/), right?):
 
-`git clone git@github.com:Strum355/vscode-mc-shader.git`
+`git clone git@github.com:<your-username>/vscode-mc-shader.git`
 
 Install dependencies:
 
