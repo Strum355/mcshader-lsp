@@ -56,42 +56,26 @@ enum Comment {
   Multi
 }
 
-// TODO exclude exts not in ext
-export function preprocess(lines: string[], docURI: string, topLevel: boolean, incStack: string[], num: number) {
-  if (topLevel) {
-    let inComment = false
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      //TODO something better than this
-      if (line.includes('/*')) inComment = true
-      if (line.includes('*/')) inComment = false
-      if (line.trim().startsWith('//')) continue
-      if (!inComment && reVersion.test(line)) {
-        lines.splice(i + 1, 0, include)
-        break
-      }
-      if (i === lines.length - 1) {
-        lines.splice(0, 0, include)
-        break
-      }
+export function preprocess(lines: string[], docURI: string) {
+  let inComment = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    //TODO something better than this
+    if (line.includes('/*')) inComment = true
+    if (line.includes('*/')) inComment = false
+    if (line.trim().startsWith('//')) continue
+    if (!inComment && reVersion.test(line)) {
+      lines.splice(i + 1, 0, include)
+      break
+    }
+    if (i === lines.length - 1) {
+      lines.splice(0, 0, include)
+      break
     }
   }
 
-  const includes = getIncludes(incStack[0], lines)
-  if (includes.length > 0) {
-    includes.reverse().forEach(inc => {
-      const incPath = absPath(inc.parent, inc.match[1])
-      incStack.push(incPath)
-      const dataLines = readFileSync(incPath).toString().split('\n')
-      lines[inc.lineNumParent] = `#line 0 "${incPath}"`
-      lines.splice(inc.lineNumParent + 1, 0, ...dataLines)
-      lines.splice(inc.lineNumParent + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
-
-    })
-    preprocess(lines, docURI, false, incStack, num)
-  }
-
-  if (!topLevel) return
+  const incStack = [docURI]
+  processIncludes(lines, incStack)
 
   try {
     lint(docURI, lines, incStack)
@@ -100,21 +84,50 @@ export function preprocess(lines: string[], docURI: string, topLevel: boolean, i
   }
 }
 
+function processIncludes(lines: string[], incStack: string[]) {
+  const includes = getIncludes(incStack[0], lines)
+  if (includes.length > 0) {
+    includes.reverse().forEach(inc => {
+      mergeInclude(inc, lines, incStack)
+    })
+    // recursively check for more includes to be merged
+    processIncludes(lines, incStack)
+  }
+}
+
+function mergeInclude(inc: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}, lines: string[], incStack: string[]) {
+  const incPath = absPath(inc.parent, inc.match[1])
+  const dataLines = readFileSync(incPath).toString().split('\n')
+  incStack.push(incPath)
+
+  // add #line indicating we are entering a new include block
+  lines[inc.lineNumParent] = `#line 0 "${incPath}"`
+  // merge the lines of the file into the current document
+  lines.splice(inc.lineNumParent + 1, 0, ...dataLines)
+  // add the closing #line indicating we're re-entering a block a level up
+  lines.splice(inc.lineNumParent + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
+}
+
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 // TODO no
 export function getIncludes(uri: string, lines: string[]) {
   const out: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}[] = []
+
   const count = [0] // for each file we need to track the line number
-  let total = 0
   const parStack = [uri] // for each include we need to track its parent
+
+  let total = 0 // current line number overall
   let comment = Comment.No
+
   lines.forEach(line => {
     comment = isInComment(line, comment)
     if (!comment) {
       const match = line.match(reInclude)
+
       if (line.startsWith('#line')) {
         const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
+
         if (inc === parStack[parStack.length - 2]) {
           count.pop()
           parStack.pop()
@@ -131,6 +144,7 @@ export function getIncludes(uri: string, lines: string[]) {
         })
       }
     }
+
     count[count.length - 1]++
     total++
   })
@@ -175,12 +189,14 @@ function lint(uri: string, lines: string[], includes: string[]) {
   const matches = filterMatches(out)
   matches.forEach((match) => {
     const [whole, type, file, line, msg] = match
+
     const diag: Diagnostic = {
       severity: type === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
       range: calcRange(parseInt(line) - 1, file.length - 1 ? file : uri),
       message: replaceWord(msg),
       source: 'mc-glsl'
     }
+
     diagnostics.get(file.length - 1 ? file : uri).push(diag)
   })
 
@@ -201,12 +217,14 @@ const filterMatches = (output: string) => output
 
 function calcRange(lineNum: number, uri: string): Range {
   let lines = []
+
   // TODO better error handling maybe?
   if (documents.keys().includes('file://' + uri)) {
     lines = documents.get('file://' + uri).getText().split('\n')
   } else {
     lines = readFileSync(uri).toString().split('\n')
   }
+
   const line = lines[lineNum]
   const startOfLine = line.length - line.trimLeft().length
   const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 1
