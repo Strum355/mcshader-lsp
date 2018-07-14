@@ -17,6 +17,13 @@ const filters = [
 
 const files = new Map<string, number>()
 
+type IncludeObj = {
+  lineNum: number,
+  lineNumParent: number,
+  parent: string,
+  match: RegExpMatchArray
+}
+
 export const ext = new Map([
   ['.fsh', 'frag'],
   ['.gsh', 'geom'],
@@ -95,7 +102,7 @@ function processIncludes(lines: string[], incStack: string[]) {
   }
 }
 
-function mergeInclude(inc: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}, lines: string[], incStack: string[]) {
+function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
   const incPath = absPath(inc.parent, inc.match[1])
   const dataLines = readFileSync(incPath).toString().split('\n')
   incStack.push(incPath)
@@ -112,7 +119,7 @@ export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 // TODO no
 export function getIncludes(uri: string, lines: string[]) {
-  const out: {lineNum: number, lineNumParent: number, parent: string, match: RegExpMatchArray}[] = []
+  const out: IncludeObj[] = []
 
   const count = [0] // for each file we need to track the line number
   const parStack = [uri] // for each include we need to track its parent
@@ -186,8 +193,7 @@ function lint(uri: string, lines: string[], includes: string[]) {
   const diagnostics = new Map([[uri, Array<Diagnostic>()]])
   includes.forEach(obj => diagnostics.set(obj, []))
 
-  const matches = filterMatches(out)
-  matches.forEach((match) => {
+  filterMatches(out).forEach((match) => {
     const [whole, type, file, line, msg] = match
 
     const diag: Diagnostic = {
