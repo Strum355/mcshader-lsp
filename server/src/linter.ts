@@ -1,5 +1,5 @@
-import { conf, connection, documents } from './server'
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
+import { conf, connection, documents } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
 import { readFileSync } from 'fs'
@@ -7,6 +7,7 @@ import { readFileSync } from 'fs'
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
 const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"$/
+const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
 
 const filters = [
@@ -64,20 +65,17 @@ enum Comment {
 }
 
 export function preprocess(lines: string[], docURI: string) {
-  let inComment = false
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    //TODO something better than this
-    if (line.includes('/*')) inComment = true
-    if (line.includes('*/')) inComment = false
-    if (line.trim().startsWith('//')) continue
-    if (!inComment && reVersion.test(line)) {
-      lines.splice(i + 1, 0, include)
-      break
-    }
-    if (i === lines.length - 1) {
-      lines.splice(0, 0, include)
-      break
+  if (lines.find((value: string, i: number, obj: string[]): boolean => reIncludeExt.test(value)) == undefined) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (reVersion.test(line)) {
+        lines.splice(i + 1, 0, include)
+        break
+      }
+      if (i === lines.length - 1) {
+        lines.splice(0, 0, include)
+        break
+      }
     }
   }
 
@@ -104,6 +102,7 @@ function processIncludes(lines: string[], incStack: string[]) {
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
   const incPath = absPath(inc.parent, inc.match[1])
+  if (!incPath) return false
   const dataLines = readFileSync(incPath).toString().split('\n')
   incStack.push(incPath)
 
@@ -121,39 +120,40 @@ export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 export function getIncludes(uri: string, lines: string[]) {
   const out: IncludeObj[] = []
 
-  const count = [0] // for each file we need to track the line number
+  const count = [-1] // for each file we need to track the line number
   const parStack = [uri] // for each include we need to track its parent
 
-  let total = 0 // current line number overall
+  let total = -1 // current line number overall
   let comment = Comment.No
 
   lines.forEach(line => {
     comment = isInComment(line, comment)
-    if (!comment) {
-      const match = line.match(reInclude)
-
-      if (line.startsWith('#line')) {
-        const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
-
-        if (inc === parStack[parStack.length - 2]) {
-          count.pop()
-          parStack.pop()
-        } else {
-          count.push(0)
-          parStack.push(inc)
-        }
-      } else if (match) {
-        out.push({
-          lineNum: count[count.length - 1],
-          lineNumParent: total,
-          parent: parStack[parStack.length - 1],
-          match
-        })
-      }
-    }
-
     count[count.length - 1]++
     total++
+    if (comment) return
+    if (line.startsWith('#line')) {
+      const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
+
+      if (inc === parStack[parStack.length - 2]) {
+        count.pop()
+        parStack.pop()
+      } else {
+        count.push(-1)
+        parStack.push(inc)
+      }
+      return
+    }
+
+    const match = line.match(reInclude)
+
+    if (match) {
+      out.push({
+        lineNum: count[count.length - 1],
+        lineNumParent: total,
+        parent: parStack[parStack.length - 1],
+        match
+      })
+    }
   })
   return out
 }
@@ -167,8 +167,8 @@ export function isInComment(line: string, state: Comment): Comment {
 }
 
 export function absPath(currFile: string, includeFile: string): string {
-  if (!currFile.startsWith(conf.shaderpacksPath)) {
-    connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in ${currFile} but the path is set to ${conf.shaderpacksPath}`)
+  if (!currFile.startsWith(conf.shaderpacksPath) || conf.shaderpacksPath === '') {
+    connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in '${currFile}' but the path is set to '${conf.shaderpacksPath}'`)
     return
   }
 
@@ -181,7 +181,7 @@ export function absPath(currFile: string, includeFile: string): string {
 }
 
 function lint(uri: string, lines: string[], includes: string[]) {
-  //console.log(lines.join('\n'))
+  console.log(lines.join('\n'))
   //return
   let out: string = ''
   try {
@@ -211,7 +211,7 @@ function lint(uri: string, lines: string[], includes: string[]) {
   })
 }
 
-export const replaceWord = (msg: string) => Object.entries(tokens).reduce((acc, [key, value]) => acc.replace(key, value), msg)
+export const replaceWord = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 const daigsArray = (diags: Map<string, Diagnostic[]>) => Array.from(diags).map(kv => ({uri: 'file://' + kv[0], diag: kv[1]}))
 

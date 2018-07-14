@@ -13,7 +13,7 @@ VSCode-MC-Shader is a [Visual Studio Code](https://code.visualstudio.com/) exten
 
 - Linting (unpolished)
 - Syntax highlighting (by extension dependency)
-- Support for `#includes` (WIP)
+- Support for `#includes` directives
 - Auto-complete prompts (incomplete)
 
 ## Planned

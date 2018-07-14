@@ -53,7 +53,7 @@
                 "mcglsl.lintOnType": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Whether or not to lint while typing. Can decrease performance."
+                    "description": "Whether or not to lint while typing. May decrease performance."
                 },
                 "mcglsl.shaderpacksPath": {
                     "type": "string",

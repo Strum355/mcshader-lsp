@@ -1,5 +1,5 @@
 import * as vsclang from 'vscode-languageserver'
-import { TextDocumentChangeEvent, TextDocument } from 'vscode-languageserver-protocol'
+import * as vsclangproto from 'vscode-languageserver-protocol'
 import { Config } from './config'
 import { completions } from './completionProvider'
 import { preprocess, ext, formatURI } from './linter'
@@ -32,12 +32,16 @@ documents.onDidSave((event) => onEvent(event.document))
 
 //documents.onDidChangeContent(onEvent)
 
-function onEvent(document: TextDocument) {
+function onEvent(document: vsclangproto.TextDocument) {
   if (!ext.has(extname(document.uri))) return
-  preprocess(document.getText().split('\n'), formatURI(document.uri))
+  try {
+    preprocess(document.getText().split('\n'), formatURI(document.uri))
+  } catch (e) {
+    connection.window.showErrorMessage(`[mc-glsl] ${e.message}`)
+  }
 }
 
-connection.onDidChangeConfiguration((change) => {
+connection.onDidChangeConfiguration(async (change) => {
   const temp = change.settings.mcglsl as Config
   conf = new Config(temp['shaderpacksPath'], temp['glslangValidatorPath'])
   try {
@@ -45,7 +49,12 @@ connection.onDidChangeConfiguration((change) => {
     documents.all().forEach(document => onEvent)
   } catch (e) {
     if (e.status !== 1) {
-      connection.window.showErrorMessage(`[mc-glsl] glslangValidator not found at: '${conf.glslangPath}' or returned non-0 code`)
+      const chosen = await connection.window.showErrorMessage(
+        `[mc-glsl] glslangValidator not found at: '${conf.glslangPath}' or returned non-0 code`,
+        {title: 'Download'},
+        {title: 'Cancel'}
+      )
+      console.log(chosen.title)
     }
   }
 })

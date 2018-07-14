@@ -46,8 +46,8 @@
             "script": "watch:client",
             "isBackground": true,
             "presentation": {
-                "echo": true,
-                "reveal": "always",
+                "echo": false,
+                "reveal": "never",
                 "focus": false,
                 "panel": "shared"
             },
@@ -60,8 +60,8 @@
             "script": "watch:server",
             "isBackground": true,
             "presentation": {
-                "echo": true,
-                "reveal": "always",
+                "echo": false,
+                "reveal": "never",
                 "focus": false,
                 "panel": "shared"
             },
@@ -73,8 +73,8 @@
             "label": "watch",
             "isBackground": true,
             "presentation": {
-                "echo": true,
-                "reveal": "always",
+                "echo": false,
+                "reveal": "never",
                 "focus": false,
                 "panel": "shared"
             },
