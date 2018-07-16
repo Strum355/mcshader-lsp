@@ -1,7 +1,6 @@
 import urllib.request
 import zipfile
 from io import BytesIO
-import shutil
 import os as o
 
 os = {
@@ -31,4 +30,5 @@ def main():
                 print('glslangValidator downloaded. Add this line to your VSCode settings:\n"mcglsl.glslangValidatorPath": "' + o.getcwd() + '/' + 'glslangValidator"')
                 return
     print('There was an error :(')
+
 main()

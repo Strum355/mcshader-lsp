@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import * as vscodeLang from 'vscode-languageclient'
 import * as path from 'path'
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   const serverModule = context.asAbsolutePath(path.join('server', 'out', 'server.js'))
 
   const debugOpts = { execArgv: ['--nolazy', '--inspect=6009']}
@@ -27,4 +27,10 @@ export function activate(context: vscode.ExtensionContext) {
   const langServer = new vscodeLang.LanguageClient('vscode-mc-shader', serverOpts, clientOpts)
 
   context.subscriptions.push(langServer.start())
+
+  await langServer.onReady()
+
+  langServer.onNotification('update-config', (dir: string) => {
+    vscode.workspace.getConfiguration().update('mcglsl.glslangValidatorPath', dir, vscode.ConfigurationTarget.Global)
+  })
 }

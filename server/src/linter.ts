@@ -1,8 +1,9 @@
 import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
-import { conf, connection, documents } from './server'
+import { connection, documents } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
 import { readFileSync } from 'fs'
+import { conf } from './config'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
 const reVersion = /#version [\d]{3}/
@@ -102,6 +103,7 @@ function processIncludes(lines: string[], incStack: string[]) {
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
   const incPath = absPath(inc.parent, inc.match[1])
+  console.log(incPath)
   if (!incPath) return false
   const dataLines = readFileSync(incPath).toString().split('\n')
   incStack.push(incPath)
