@@ -1,6 +1,5 @@
 import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
-import { Config } from './config'
 import { completions } from './completionProvider'
 import { preprocess, ext, formatURI } from './linter'
 import { exec, execSync } from 'child_process'
@@ -10,7 +9,10 @@ import { platform } from 'os'
 import { createWriteStream, chmodSync, createReadStream, unlinkSync } from 'fs'
 import * as unzip from 'unzip'
 
-export const connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
+export let connection: vsclang.IConnection
+connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
+
+import { Config, onConfigChange } from './config'
 
 export const documents = new vsclang.TextDocuments()
 documents.listen(connection)
@@ -32,6 +34,8 @@ documents.onDidOpen((event) => onEvent(event.document))
 
 documents.onDidSave((event) => onEvent(event.document))
 
+documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.uri, diagnostics: []}))
+
 //documents.onDidChangeContent(onEvent)
 
 export function onEvent(document: vsclangproto.TextDocument) {
@@ -42,6 +46,8 @@ export function onEvent(document: vsclangproto.TextDocument) {
     connection.window.showErrorMessage(`[mc-glsl] ${e.message}`)
   }
 }
+
+connection.onDidChangeConfiguration(onConfigChange)
 
 connection.onCompletion((textDocumentPosition: vsclang.TextDocumentPositionParams) => completions)
 

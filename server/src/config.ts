@@ -19,7 +19,7 @@ export interface Config {
 
 export let conf: Partial<Config> = {}
 
-connection.onDidChangeConfiguration(async (change) => {
+export const onConfigChange = async (change) => {
   const temp = change.settings.mcglsl as Config
   conf = {shaderpacksPath: temp['shaderpacksPath'], glslangPath: temp['glslangValidatorPath']}
   try {
@@ -68,4 +68,4 @@ connection.onDidChangeConfiguration(async (change) => {
       }
     }
   }
-})
+}
