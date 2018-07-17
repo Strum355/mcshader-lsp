@@ -2,7 +2,7 @@ import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-lang
 import { connection, documents } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import { conf } from './config'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
@@ -103,11 +103,23 @@ function processIncludes(lines: string[], incStack: string[]) {
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
   const incPath = absPath(inc.parent, inc.match[1])
-  console.log(incPath)
   if (!incPath) return false
+  if (!existsSync(incPath)) {
+    const range = calcRange(inc.lineNumParent, incStack[0])
+    // TODO this needs to be aggregated and passed to the lint function, else theyre overwritten
+    connection.sendDiagnostics({uri: 'file://' + inc.parent, diagnostics: [{
+      severity: DiagnosticSeverity.Error,
+      range,
+      message: `${incPath} is missing.`,
+      source: 'mc-glsl'
+    }]})
+    lines[inc.lineNumParent] = ''
+    return
+  }
   const dataLines = readFileSync(incPath).toString().split('\n')
   incStack.push(incPath)
 
+  // TODO deal with the fact that includes may not be the sole text on a line
   // add #line indicating we are entering a new include block
   lines[inc.lineNumParent] = `#line 0 "${incPath}"`
   // merge the lines of the file into the current document
@@ -115,8 +127,6 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
   // add the closing #line indicating we're re-entering a block a level up
   lines.splice(inc.lineNumParent + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
 }
-
-export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 // TODO no
 export function getIncludes(uri: string, lines: string[]) {
@@ -159,6 +169,8 @@ export function getIncludes(uri: string, lines: string[]) {
   })
   return out
 }
+
+export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 export function isInComment(line: string, state: Comment): Comment {
   const indexOf = line.indexOf('#include')

@@ -17,8 +17,8 @@ import { Config, onConfigChange } from './config'
 export const documents = new vsclang.TextDocuments()
 documents.listen(connection)
 
-connection.onInitialize((params): vsclang.InitializeResult => {
-  return {
+connection.onInitialize((params): vsclang.InitializeResult => (
+  {
     capabilities: {
       textDocumentSync: documents.syncKind,
       completionProvider: {
@@ -26,7 +26,7 @@ connection.onInitialize((params): vsclang.InitializeResult => {
       },
     }
   }
-})
+))
 
 connection.onExit(() => {})
 
