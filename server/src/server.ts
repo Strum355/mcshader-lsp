@@ -44,6 +44,7 @@ export function onEvent(document: vsclangproto.TextDocument) {
     preprocess(document.getText().split('\n'), formatURI(document.uri))
   } catch (e) {
     connection.window.showErrorMessage(`[mc-glsl] ${e.message}`)
+    throw(e)
   }
 }
 
