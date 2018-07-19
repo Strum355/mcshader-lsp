@@ -34,6 +34,7 @@ documents.onDidOpen((event) => onEvent(event.document))
 
 documents.onDidSave((event) => onEvent(event.document))
 
+// dont do this for include files, for non-include files, clear diags for all its includes. Cache this maybe
 documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.uri, diagnostics: []}))
 
 //documents.onDidChangeContent(onEvent)

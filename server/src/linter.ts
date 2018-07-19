@@ -91,24 +91,26 @@ export function preprocess(lines: string[], docURI: string) {
 
   const incStack = [docURI]
   const allIncludes: IncludeObj[] = []
-  processIncludes(lines, incStack, allIncludes)
+  const diagnostics = new Map<string, Diagnostic[]>()
+  processIncludes(lines, incStack, allIncludes, diagnostics)
 
+  const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
   try {
-    lint(docURI, lines, new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][]))
+    lint(docURI, lines, includeMap, diagnostics)
   } catch (e) {
     console.log(e)
   }
 }
 
-function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[]) {
+function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[], diagnostics: Map<string, Diagnostic[]>) {
   const includes = getIncludes(incStack[0], lines)
   allIncludes.push(...includes)
   if (includes.length > 0) {
     includes.reverse().forEach(inc => {
-      mergeInclude(inc, lines, incStack)
+      mergeInclude(inc, lines, incStack, diagnostics)
     })
     // recursively check for more includes to be merged
-    processIncludes(lines, incStack, allIncludes)
+    processIncludes(lines, incStack, allIncludes, diagnostics)
   }
 }
 
@@ -153,16 +155,21 @@ export function getIncludes(uri: string, lines: string[]) {
   }, [])
 }
 
-function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
+function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
   if (!existsSync(inc.path)) {
     const range = calcRange(inc.lineNumTopLevel, incStack[0])
-    // TODO this needs to be aggregated and passed to the lint function, else theyre overwritten
-    connection.sendDiagnostics({uri: 'file://' + inc.parent, diagnostics: [{
-      severity: DiagnosticSeverity.Error,
-      range,
-      message: `${inc.path} is missing.`,
-      source: 'mc-glsl'
-    }]})
+    diagnostics.set(
+      inc.parent,
+      [
+        ...(diagnostics.get(inc.parent) || []),
+        {
+          severity: DiagnosticSeverity.Error,
+          range,
+          message: `${inc.path.replace(conf.shaderpacksPath, '')} is missing.`,
+          source: 'mc-glsl'
+        }
+      ]
+    )
     lines[inc.lineNumTopLevel] = ''
     return
   }
@@ -178,7 +185,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[]) {
   lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
 }
 
-function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>) {
+function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>) {
   console.log(lines.join('\n'))
   //return
   let out: string = ''
@@ -188,8 +195,10 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>) {
     out = e.stdout.toString()
   }
 
-  const diagnostics = new Map([[uri, Array<Diagnostic>()]])
-  includes.forEach(obj => diagnostics.set(obj.path, []))
+  if (!diagnostics.has(uri)) diagnostics.set(uri, [])
+  includes.forEach(obj => {
+    if (!diagnostics.has(obj.path)) diagnostics.set(obj.path, [])
+  })
 
   filterMatches(out).forEach((match) => {
     const [whole, type, file, line, msg] = match
