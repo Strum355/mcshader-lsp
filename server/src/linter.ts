@@ -192,7 +192,7 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>) {
   includes.forEach(obj => diagnostics.set(obj.path, []))
 
   filterMatches(out).forEach((match) => {
-    let [whole, type, file, line, msg] = match
+    const [whole, type, file, line, msg] = match
 
     let diag: Diagnostic = {
       severity: errorType(type),
@@ -204,19 +204,19 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>) {
     diagnostics.get(file.length - 1 ? file : uri).push(diag)
 
     // if is an include, highlight an error in the parents line of inclusion
-    while (file !== '0' && file !== uri) {
+    let nextFile = file
+    while (nextFile !== '0' && nextFile !== uri) {
       // TODO what if we dont know the top level parent? Feel like thats a non-issue given that we have uri
-      // TODO prefix error with filename
       diag = {
         severity: errorType(type),
-        range: calcRange(includes.get(file).lineNum, includes.get(file).parent),
-        message: replaceWord(msg),
+        range: calcRange(includes.get(nextFile).lineNum, includes.get(nextFile).parent),
+        message: includes.get(file).path.replace(conf.shaderpacksPath, '') + replaceWord(msg),
         source: 'mc-glsl'
       }
 
-      diagnostics.get(includes.get(file).parent).push(diag)
+      diagnostics.get(includes.get(nextFile).parent).push(diag)
 
-      file = includes.get(file).parent
+      nextFile = includes.get(nextFile).parent
     }
   })
 
