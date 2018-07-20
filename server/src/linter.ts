@@ -1,23 +1,27 @@
-import { TextDocument, Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
+import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { connection, documents } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
 import { readFileSync, existsSync } from 'fs'
 import { conf } from './config'
+import { postError } from './utils'
+import { platform } from 'os'
 
-const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)$/
+const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)[\r\n|\n]/
 const reVersion = /#version [\d]{3}/
 const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"$/
 const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
+const win = platform() === 'win32'
 
 const filters = [
+  /stdin/,
   /(No code generated)/,
   /(compilation terminated)/,
   /Could not process include directive for header name:/
 ]
 
-const files = new Map<string, number>()
+const includeToParent = new Map<string, string[]>()
 
 type IncludeObj = {
   lineNum: number,
@@ -98,7 +102,7 @@ export function preprocess(lines: string[], docURI: string) {
   try {
     lint(docURI, lines, includeMap, diagnostics)
   } catch (e) {
-    console.log(e)
+    postError(e)
   }
 }
 
@@ -180,6 +184,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   // add #line indicating we are entering a new include block
   lines[inc.lineNumTopLevel] = `#line 0 "${inc.path}"`
   // merge the lines of the file into the current document
+  // TODO do we wanna use a DLL here?
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
   // add the closing #line indicating we're re-entering a block a level up
   lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
@@ -205,7 +210,8 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
 
     let diag: Diagnostic = {
       severity: errorType(type),
-      range: calcRange(parseInt(line) - 1, file.length - 1 ? file : uri),
+      // had to do - 2 here instead of - 1, windows only perhaps?
+      range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : uri),
       message: replaceWord(msg),
       source: 'mc-glsl'
     }

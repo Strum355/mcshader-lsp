@@ -2,17 +2,12 @@ import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
 import { preprocess, ext, formatURI } from './linter'
-import { exec, execSync } from 'child_process'
 import { extname } from 'path'
-import fetch from 'node-fetch'
-import { platform } from 'os'
-import { createWriteStream, chmodSync, createReadStream, unlinkSync } from 'fs'
-import * as unzip from 'unzip'
 
 export let connection: vsclang.IConnection
 connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
 
-import { Config, onConfigChange } from './config'
+import { onConfigChange } from './config'
 
 export const documents = new vsclang.TextDocuments()
 documents.listen(connection)
