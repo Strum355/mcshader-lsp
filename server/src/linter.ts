@@ -9,7 +9,7 @@ import { platform } from 'os'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)[\r\n|\n]/
 const reVersion = /#version [\d]{3}/
-const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"$/
+const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"[\r\n|\n]/
 const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
 const win = platform() === 'win32'
@@ -161,7 +161,7 @@ export function getIncludes(uri: string, lines: string[]) {
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
   if (!existsSync(inc.path)) {
-    const range = calcRange(inc.lineNumTopLevel, incStack[0])
+    const range = calcRange(inc.lineNumTopLevel - (win ? 1 : 0), incStack[0])
     diagnostics.set(
       inc.parent,
       [
@@ -271,9 +271,10 @@ function calcRange(lineNum: number, uri: string): Range {
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
 
 export function absPath(currFile: string, includeFile: string): string {
+  console.log(currFile)
   if (!currFile.startsWith(conf.shaderpacksPath) || conf.shaderpacksPath === '') {
     connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in '${currFile}' but the path is set to '${conf.shaderpacksPath}'`)
-    return
+    return ''
   }
 
   // TODO add explanation comment
