@@ -1,9 +1,10 @@
 import { connection, documents, onEvent } from './server'
 import fetch from 'node-fetch'
 import { platform } from 'os'
-import { createWriteStream, chmodSync, createReadStream, unlinkSync, existsSync } from 'fs'
+import { createWriteStream, chmodSync, createReadStream, unlinkSync } from 'fs'
 import * as unzip from 'unzip'
 import { postError } from './utils'
+import { execSync } from 'child_process'
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
@@ -22,7 +23,7 @@ export const onConfigChange = async (change) => {
   const temp = change.settings.mcglsl as Config
   conf = {shaderpacksPath: temp['shaderpacksPath'].replace(/\\/g, '/'), glslangPath: temp['glslangValidatorPath'].replace(/\\/g, '/')}
 
-  if (existsSync(conf.glslangPath)) {
+  if (!execSync(conf.glslangPath).toString().startsWith('Usage')) {
     documents.all().forEach(onEvent)
   } else {
     promptDownloadGlslang()

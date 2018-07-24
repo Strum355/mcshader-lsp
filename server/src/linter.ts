@@ -223,7 +223,7 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
       // TODO what if we dont know the top level parent? Feel like thats a non-issue given that we have uri
       diag = {
         severity: errorType(type),
-        range: calcRange(includes.get(nextFile).lineNum - (win ? 1 : 0),  includes.get(nextFile).parent),
+        range: calcRange(includes.get(nextFile).lineNum - 1,  includes.get(nextFile).parent),
         message: includes.get(file).path.replace(conf.shaderpacksPath, '') + replaceWords(msg),
         source: 'mc-glsl'
       }
