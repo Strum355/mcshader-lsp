@@ -4,7 +4,7 @@ import { execSync } from 'child_process'
 import * as path from 'path'
 import { readFileSync, existsSync } from 'fs'
 import { conf } from './config'
-import { postError, formatURI } from './utils'
+import { postError, formatURI, getDocumentContents } from './utils'
 import { platform } from 'os'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
@@ -21,7 +21,7 @@ const filters = [
   /Could not process include directive for header name:/
 ]
 
-const includeToParent = new Map<string, string[]>()
+export const includeToParent = new Map<string, Set<string>>()
 
 type IncludeObj = {
   lineNum: number,
@@ -79,7 +79,8 @@ export function isInComment(line: string, state: Comment): Comment {
 }
 
 export function preprocess(lines: string[], docURI: string) {
-  if (lines.find((value: string, i: number, obj: string[]): boolean => reIncludeExt.test(value)) == undefined) {
+  // wish there was an ignore keyword like Go
+  if (lines.find((value: string, _, __): boolean => reIncludeExt.test(value)) == undefined) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       if (reVersion.test(line)) {
@@ -93,17 +94,19 @@ export function preprocess(lines: string[], docURI: string) {
     }
   }
 
-  const incStack = [docURI]
   const allIncludes: IncludeObj[] = []
   const diagnostics = new Map<string, Diagnostic[]>()
-  processIncludes(lines, incStack, allIncludes, diagnostics)
+
+  processIncludes(lines, [docURI], allIncludes, diagnostics)
 
   const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
-  try {
-    lint(docURI, lines, includeMap, diagnostics)
-  } catch (e) {
-    postError(e)
-  }
+
+  lint(docURI, lines, includeMap, diagnostics)
+}
+
+function buildIncludeTree(inc: IncludeObj) {
+  if (!includeToParent.has(inc.path)) includeToParent.set(inc.path, new Set([inc.parent]))
+  else includeToParent.get(inc.path).add(inc.parent)
 }
 
 function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[], diagnostics: Map<string, Diagnostic[]>) {
@@ -111,6 +114,7 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Inclu
   allIncludes.push(...includes)
   if (includes.length > 0) {
     includes.reverse().forEach(inc => {
+      buildIncludeTree(inc)
       mergeInclude(inc, lines, incStack, diagnostics)
     })
     // recursively check for more includes to be merged
@@ -223,7 +227,8 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
       // TODO what if we dont know the top level parent? Feel like thats a non-issue given that we have uri
       diag = {
         severity: errorType(type),
-        range: calcRange(includes.get(nextFile).lineNum - 1,  includes.get(nextFile).parent),
+        // TODO put -1 back when #11 is sorted
+        range: calcRange(includes.get(nextFile).lineNum,  includes.get(nextFile).parent),
         message: includes.get(file).path.replace(conf.shaderpacksPath, '') + replaceWords(msg),
         source: 'mc-glsl'
       }
@@ -253,14 +258,10 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
-  let lines = []
-
   // TODO better error handling maybe?
-  if (documents.keys().includes('file://' + uri)) {
-    lines = documents.get('file://' + uri).getText().split('\n')
-  } else {
-    lines = readFileSync(uri).toString().split('\n')
-  }
+  const lines = getDocumentContents(uri).split('\n')
+  console.log(uri, lineNum, lines.length)
+  console.log(lines.slice(Math.max(lineNum - 3, 0), lineNum + 3).join('\n'))
 
   const line = lines[lineNum]
   const startOfLine = line.length - line.trimLeft().length

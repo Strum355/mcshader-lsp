@@ -1,14 +1,16 @@
 import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
-import { preprocess, ext } from './linter'
+import { preprocess, ext, includeToParent } from './linter'
 import { extname } from 'path'
+
+const reVersion = /#version [\d]{3}/
 
 export let connection: vsclang.IConnection
 connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
 
 import { onConfigChange } from './config'
-import { formatURI } from './utils'
+import { formatURI, postError, getDocumentContents } from './utils'
 
 export const documents = new vsclang.TextDocuments()
 documents.listen(connection)
@@ -36,15 +38,34 @@ documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.
 //documents.onDidChangeContent(onEvent)
 
 export function onEvent(document: vsclangproto.TextDocument) {
-  if (!ext.has(extname(document.uri))) return
-  try {
-    console.log(document.uri)
-    console.log(formatURI(document.uri))
-    preprocess(document.getText().split('\n'), formatURI(document.uri))
-  } catch (e) {
-    connection.window.showErrorMessage(`[mc-glsl] ${e.message}`)
-    throw(e)
+  const uri = formatURI(document.uri)
+  if (includeToParent.has(uri)) {
+    lintBubbleDown(uri, document)
+    return
   }
+
+  if (!ext.has(extname(document.uri))) return
+
+  try {
+    preprocess(document.getText().split('\n'), uri)
+  } catch (e) {
+    postError(e)
+  }
+}
+
+function lintBubbleDown(uri: string, document: vsclangproto.TextDocument) {
+  includeToParent.get(uri).forEach(parent => {
+    console.log(`${uri} has parent ${parent}`)
+    if (includeToParent.has(parent)) {
+      lintBubbleDown(parent, document)
+    } else {
+      const lines = getDocumentContents(parent).split('\n')
+      if (lines.filter(l => reVersion.test(l)).length > 0) {
+        console.log(`${parent} is at top, linting down`)
+        preprocess(lines, parent)
+      }
+    }
+  })
 }
 
 connection.onDidChangeConfiguration(onConfigChange)
