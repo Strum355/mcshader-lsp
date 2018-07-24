@@ -20,7 +20,7 @@ export let conf: Config = {shaderpacksPath: '', glslangPath: ''}
 
 export const onConfigChange = async (change) => {
   const temp = change.settings.mcglsl as Config
-  conf = {shaderpacksPath: temp['shaderpacksPath'], glslangPath: temp['glslangValidatorPath']}
+  conf = {shaderpacksPath: temp['shaderpacksPath'].replace(/\\/g, '/'), glslangPath: temp['glslangValidatorPath'].replace(/\\/g, '/')}
 
   if (existsSync(conf.glslangPath)) {
     documents.all().forEach(onEvent)

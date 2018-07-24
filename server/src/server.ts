@@ -1,13 +1,14 @@
 import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
-import { preprocess, ext, formatURI } from './linter'
+import { preprocess, ext } from './linter'
 import { extname } from 'path'
 
 export let connection: vsclang.IConnection
 connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
 
 import { onConfigChange } from './config'
+import { formatURI } from './utils'
 
 export const documents = new vsclang.TextDocuments()
 documents.listen(connection)
@@ -37,6 +38,8 @@ documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.
 export function onEvent(document: vsclangproto.TextDocument) {
   if (!ext.has(extname(document.uri))) return
   try {
+    console.log(document.uri)
+    console.log(formatURI(document.uri))
     preprocess(document.getText().split('\n'), formatURI(document.uri))
   } catch (e) {
     connection.window.showErrorMessage(`[mc-glsl] ${e.message}`)

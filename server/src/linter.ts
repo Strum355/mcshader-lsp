@@ -4,12 +4,12 @@ import { execSync } from 'child_process'
 import * as path from 'path'
 import { readFileSync, existsSync } from 'fs'
 import { conf } from './config'
-import { postError } from './utils'
+import { postError, formatURI } from './utils'
 import { platform } from 'os'
 
-const reDiag = /^(ERROR|WARNING): ([^?<>:*|"]+?):(\d+): (?:'.*?' : )?(.+)[\r\n|\n]/
+const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
 const reVersion = /#version [\d]{3}/
-const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"[\r\n|\n]/
+const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"\r?/
 const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
 const win = platform() === 'win32'
@@ -148,10 +148,10 @@ export function getIncludes(uri: string, lines: string[]) {
 
     if (match) {
       out.push({
-        path: absPath(parStack[parStack.length - 1], match[1]),
+        path: formatURI(absPath(parStack[parStack.length - 1], match[1])),
         lineNum: count[count.length - 1],
         lineNumTopLevel: total,
-        parent: parStack[parStack.length - 1],
+        parent: formatURI(parStack[parStack.length - 1]),
         match
       })
     }
@@ -182,7 +182,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
 
   // TODO deal with the fact that includes may not be the sole text on a line
   // add #line indicating we are entering a new include block
-  lines[inc.lineNumTopLevel] = `#line 0 "${inc.path}"`
+  lines[inc.lineNumTopLevel] = `#line 0 "${formatURI(inc.path)}"`
   // merge the lines of the file into the current document
   // TODO do we wanna use a DLL here?
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
@@ -207,12 +207,11 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
 
   filterMatches(out).forEach((match) => {
     const [whole, type, file, line, msg] = match
-
     let diag: Diagnostic = {
       severity: errorType(type),
       // had to do - 2 here instead of - 1, windows only perhaps?
       range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : uri),
-      message: replaceWord(msg),
+      message: replaceWords(msg),
       source: 'mc-glsl'
     }
 
@@ -224,8 +223,8 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
       // TODO what if we dont know the top level parent? Feel like thats a non-issue given that we have uri
       diag = {
         severity: errorType(type),
-        range: calcRange(includes.get(nextFile).lineNum, includes.get(nextFile).parent),
-        message: includes.get(file).path.replace(conf.shaderpacksPath, '') + replaceWord(msg),
+        range: calcRange(includes.get(nextFile).lineNum - (win ? 1 : 0),  includes.get(nextFile).parent),
+        message: includes.get(file).path.replace(conf.shaderpacksPath, '') + replaceWords(msg),
         source: 'mc-glsl'
       }
 
@@ -236,11 +235,12 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
   })
 
   daigsArray(diagnostics).forEach(d => {
+    if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
     connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
   })
 }
 
-export const replaceWord = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)
+export const replaceWords = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 const errorType = (error: string) => error === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning
 
@@ -268,10 +268,7 @@ function calcRange(lineNum: number, uri: string): Range {
   return Range.create(lineNum, startOfLine, lineNum, endOfLine)
 }
 
-export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '')
-
 export function absPath(currFile: string, includeFile: string): string {
-  console.log(currFile)
   if (!currFile.startsWith(conf.shaderpacksPath) || conf.shaderpacksPath === '') {
     connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in '${currFile}' but the path is set to '${conf.shaderpacksPath}'`)
     return ''
