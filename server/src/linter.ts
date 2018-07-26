@@ -79,8 +79,10 @@ export function isInComment(line: string, state: Comment): Comment {
 }
 
 export function preprocess(lines: string[], docURI: string) {
+  let hasDirective = true
   // wish there was an ignore keyword like Go
   if (lines.find((value: string, _, __): boolean => reIncludeExt.test(value)) == undefined) {
+    hasDirective = false
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       if (reVersion.test(line)) {
@@ -97,7 +99,7 @@ export function preprocess(lines: string[], docURI: string) {
   const allIncludes: IncludeObj[] = []
   const diagnostics = new Map<string, Diagnostic[]>()
 
-  processIncludes(lines, [docURI], allIncludes, diagnostics)
+  processIncludes(lines, [docURI], allIncludes, diagnostics, hasDirective)
 
   const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
 
@@ -109,16 +111,16 @@ function buildIncludeTree(inc: IncludeObj) {
   else includeToParent.get(inc.path).add(inc.parent)
 }
 
-function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[], diagnostics: Map<string, Diagnostic[]>) {
+function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   const includes = getIncludes(incStack[0], lines)
   allIncludes.push(...includes)
   if (includes.length > 0) {
     includes.reverse().forEach(inc => {
       buildIncludeTree(inc)
-      mergeInclude(inc, lines, incStack, diagnostics)
+      mergeInclude(inc, lines, incStack, diagnostics, hasDirective)
     })
     // recursively check for more includes to be merged
-    processIncludes(lines, incStack, allIncludes, diagnostics)
+    processIncludes(lines, incStack, allIncludes, diagnostics, hasDirective)
   }
 }
 
@@ -163,7 +165,7 @@ export function getIncludes(uri: string, lines: string[]) {
   }, [])
 }
 
-function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
+function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   if (!existsSync(inc.path)) {
     const range = calcRange(inc.lineNumTopLevel - (win ? 1 : 0), incStack[0])
     diagnostics.set(
@@ -182,6 +184,11 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
     return
   }
   const dataLines = readFileSync(inc.path).toString().split('\n')
+
+  // if the includes parent is the top level (aka where the include directive is placed)
+  // and we had to manually add the directive, - 1 the line number to account for the extra line
+  if (inc.parent === incStack[0] && !hasDirective) inc.lineNum = inc.lineNum - 1
+
   incStack.push(inc.path)
 
   // TODO deal with the fact that includes may not be the sole text on a line
@@ -196,7 +203,6 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
 
 function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>) {
   console.log(lines.join('\n'))
-  //return
   let out: string = ''
   try {
     execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(uri))}`, {input: lines.join('\n')})
@@ -215,7 +221,7 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
       severity: errorType(type),
       // had to do - 2 here instead of - 1, windows only perhaps?
       range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : uri),
-      message: replaceWords(msg),
+      message: `Line ${line} ${replaceWords(msg)}`,
       source: 'mc-glsl'
     }
 
@@ -229,7 +235,7 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
         severity: errorType(type),
         // TODO put -1 back when #11 is sorted
         range: calcRange(includes.get(nextFile).lineNum,  includes.get(nextFile).parent),
-        message: includes.get(file).path.replace(conf.shaderpacksPath, '') + replaceWords(msg),
+        message: `Line ${line} ${includes.get(file).path.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
         source: 'mc-glsl'
       }
 
@@ -258,11 +264,7 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
-  // TODO better error handling maybe?
   const lines = getDocumentContents(uri).split('\n')
-  console.log(uri, lineNum, lines.length)
-  console.log(lines.slice(Math.max(lineNum - 3, 0), lineNum + 3).join('\n'))
-
   const line = lines[lineNum]
   const startOfLine = line.length - line.trimLeft().length
   const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 1

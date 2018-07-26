@@ -55,13 +55,11 @@ export function onEvent(document: vsclangproto.TextDocument) {
 
 function lintBubbleDown(uri: string, document: vsclangproto.TextDocument) {
   includeToParent.get(uri).forEach(parent => {
-    console.log(`${uri} has parent ${parent}`)
     if (includeToParent.has(parent)) {
       lintBubbleDown(parent, document)
     } else {
       const lines = getDocumentContents(parent).split('\n')
       if (lines.filter(l => reVersion.test(l)).length > 0) {
-        console.log(`${parent} is at top, linting down`)
         preprocess(lines, parent)
       }
     }
