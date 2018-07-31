@@ -6,6 +6,7 @@ import { readFileSync, existsSync } from 'fs'
 import { conf } from './config'
 import { postError, formatURI, getDocumentContents } from './utils'
 import { platform } from 'os'
+import { Graph } from './graph'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
 const reVersion = /#version [\d]{3}/
@@ -21,7 +22,10 @@ const filters = [
   /Could not process include directive for header name:/
 ]
 
+export const includeGraph = new Graph()
+
 export const includeToParent = new Map<string, Set<string>>()
+export const allFiles = new Set<string>()
 
 type IncludeObj = {
   lineNum: number,
@@ -101,6 +105,9 @@ export function preprocess(lines: string[], docURI: string) {
 
   processIncludes(lines, [docURI], allIncludes, diagnostics, hasDirective)
 
+  allIncludes.forEach(inc => allFiles.add(inc.path))
+  console.log(JSON.stringify(allIncludes, null, 2))
+
   const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
 
   lint(docURI, lines, includeMap, diagnostics)
@@ -136,7 +143,7 @@ export function getIncludes(uri: string, lines: string[]) {
     comment = isInComment(line, comment)
     count[count.length - 1]++
     total++
-    if (comment) return out
+    //if (comment) return out
     if (line.startsWith('#line')) {
       const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
 
@@ -198,7 +205,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   // TODO do we wanna use a DLL here?
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
   // add the closing #line indicating we're re-entering a block a level up
-  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
+  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
 }
 
 function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>) {
