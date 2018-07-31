@@ -7,6 +7,7 @@ import { conf } from './config'
 import { postError, formatURI, getDocumentContents } from './utils'
 import { platform } from 'os'
 import { Graph } from './graph'
+import { Comment } from './comment'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
 const reVersion = /#version [\d]{3}/
@@ -68,20 +69,6 @@ const tokens = new Map([
   ['RIGHT_BRACE', '}'],
 ])
 
-enum Comment {
-  No = 0,
-  Single,
-  Multi
-}
-
-export function isInComment(line: string, state: Comment): Comment {
-  const indexOf = line.indexOf('#include')
-  if (indexOf > -1 && line.indexOf('//') < indexOf) {
-    return Comment.No
-  }
-  return Comment.No
-}
-
 export function preprocess(lines: string[], docURI: string) {
   let hasDirective = true
   // wish there was an ignore keyword like Go
@@ -106,7 +93,6 @@ export function preprocess(lines: string[], docURI: string) {
   processIncludes(lines, [docURI], allIncludes, diagnostics, hasDirective)
 
   allIncludes.forEach(inc => allFiles.add(inc.path))
-  console.log(JSON.stringify(allIncludes, null, 2))
 
   const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
 
@@ -137,13 +123,17 @@ export function getIncludes(uri: string, lines: string[]) {
   const parStack = [uri] // for each include we need to track its parent
 
   let total = -1 // current line number overall
-  let comment = Comment.No
+  let comment = Comment.State.No
 
-  return lines.reduce<IncludeObj[]>((out: IncludeObj[], line: string, i, l): IncludeObj[] => {
-    comment = isInComment(line, comment)
+  return lines.reduce<IncludeObj[]>((out, line, i, l): IncludeObj[] => {
+    const updated =  Comment.update(line, comment)
+    comment = updated[0]
+    line = updated[1]
+    lines[i] = line
+
     count[count.length - 1]++
     total++
-    //if (comment) return out
+    if (comment) return out
     if (line.startsWith('#line')) {
       const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
 

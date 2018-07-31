@@ -21,6 +21,7 @@
         "member-ordering": false,
         "interface-over-type-literal": false,
         "trailing-comma": false,
+        "no-namespace": false,
         "no-var-requires": false,
         "max-line-length": {
             "severity": "warning",
@@ -32,17 +33,6 @@
             "severity": "warning"
         },
         "curly": [true, "ignore-same-line"],
-        "whitespace": [
-            true,
-            "check-decl",
-            "check-operator",
-            "check-module",
-            "check-rest-spread",
-            "check-type",
-            "check-typecast",
-            "check-type-operator",
-            "check-preblock",
-            "check-branch"
-        ]
+        "whitespace": false,
     }
 }
