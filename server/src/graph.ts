@@ -23,4 +23,9 @@ export class Graph {
     }
     this.nodes.set(parent, par)
   }
+
+  public get(uri: string): Node {
+    if (!this.nodes.has(uri)) this.nodes.set(uri, {parents: new Map(), children: new Map()})
+    return this.nodes.get(uri)
+  }
 }

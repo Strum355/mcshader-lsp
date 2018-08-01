@@ -1,7 +1,7 @@
 import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
-import { preprocess, ext, includeToParent } from './linter'
+import { preprocess, ext, includeToParent, includeGraph } from './linter'
 import { extname } from 'path'
 
 const reVersion = /#version [\d]{3}/
@@ -39,7 +39,7 @@ documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.
 
 export function onEvent(document: vsclangproto.TextDocument) {
   const uri = formatURI(document.uri)
-  if (includeToParent.has(uri)) {
+  if (includeGraph.get(uri).parents.size > 0) {
     lintBubbleDown(uri, document)
     return
   }
@@ -54,13 +54,15 @@ export function onEvent(document: vsclangproto.TextDocument) {
 }
 
 function lintBubbleDown(uri: string, document: vsclangproto.TextDocument) {
-  includeToParent.get(uri).forEach(parent => {
-    if (includeToParent.has(parent)) {
-      lintBubbleDown(parent, document)
+  includeGraph.get(uri).parents.forEach((parent, parentURI) => {
+    console.log(parentURI)
+    console.log(parent.parents)
+    if (parent.parents.size > 0) {
+      lintBubbleDown(parentURI, document)
     } else {
-      const lines = getDocumentContents(parent).split('\n')
+      const lines = getDocumentContents(parentURI).split('\n')
       if (lines.filter(l => reVersion.test(l)).length > 0) {
-        preprocess(lines, parent)
+        preprocess(lines, parentURI)
       }
     }
   })

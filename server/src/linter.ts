@@ -2,7 +2,7 @@ import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
 import { connection, documents } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, statSync, Stats } from 'fs'
 import { conf } from './config'
 import { postError, formatURI, getDocumentContents } from './utils'
 import { platform } from 'os'
@@ -11,7 +11,7 @@ import { Comment } from './comment'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
 const reVersion = /#version [\d]{3}/
-const reInclude = /^(?:\s)*?(?:#include) "((?:\/?[^?<>:*|"]+?)+?\.(?:[a-zA-Z]+?))"\r?/
+const reInclude = /^(?:\s)*?(?:#include) "(.+)"\r?/
 const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
 const win = platform() === 'win32'
@@ -25,7 +25,6 @@ const filters = [
 
 export const includeGraph = new Graph()
 
-export const includeToParent = new Map<string, Set<string>>()
 export const allFiles = new Set<string>()
 
 type IncludeObj = {
@@ -99,17 +98,14 @@ export function preprocess(lines: string[], docURI: string) {
   lint(docURI, lines, includeMap, diagnostics)
 }
 
-function buildIncludeTree(inc: IncludeObj) {
-  if (!includeToParent.has(inc.path)) includeToParent.set(inc.path, new Set([inc.parent]))
-  else includeToParent.get(inc.path).add(inc.parent)
-}
+const buildIncludeGraph = (inc: IncludeObj) => includeGraph.setParent(inc.path, inc.parent)
 
 function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   const includes = getIncludes(incStack[0], lines)
   allIncludes.push(...includes)
   if (includes.length > 0) {
     includes.reverse().forEach(inc => {
-      buildIncludeTree(inc)
+      buildIncludeGraph(inc)
       mergeInclude(inc, lines, incStack, diagnostics, hasDirective)
     })
     // recursively check for more includes to be merged
@@ -162,24 +158,40 @@ export function getIncludes(uri: string, lines: string[]) {
   }, [])
 }
 
+function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
+  const range = calcRange(inc.lineNumTopLevel - (win ? 1 : 0), incStack[0])
+  diagnostics.set(
+    inc.parent,
+    [
+      ...(diagnostics.get(inc.parent) || []),
+      {
+        severity: DiagnosticSeverity.Error,
+        range,
+        message: `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`,
+        source: 'mc-glsl'
+      }
+    ]
+  )
+  lines[inc.lineNumTopLevel] = ''
+}
+
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
-  if (!existsSync(inc.path)) {
-    const range = calcRange(inc.lineNumTopLevel - (win ? 1 : 0), incStack[0])
-    diagnostics.set(
-      inc.parent,
-      [
-        ...(diagnostics.get(inc.parent) || []),
-        {
-          severity: DiagnosticSeverity.Error,
-          range,
-          message: `${inc.path.replace(conf.shaderpacksPath, '')} is missing.`,
-          source: 'mc-glsl'
-        }
-      ]
-    )
-    lines[inc.lineNumTopLevel] = ''
+  let stats: Stats
+  try {
+    stats = statSync(inc.path)
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      ifInvalidFile(inc, lines, incStack, diagnostics)
+      return
+    }
+    throw e
+  }
+
+  if (!stats.isFile()) {
+    ifInvalidFile(inc, lines, incStack, diagnostics)
     return
   }
+
   const dataLines = readFileSync(inc.path).toString().split('\n')
 
   // if the includes parent is the top level (aka where the include directive is placed)
@@ -230,7 +242,6 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
       // TODO what if we dont know the top level parent? Feel like thats a non-issue given that we have uri
       diag = {
         severity: errorType(type),
-        // TODO put -1 back when #11 is sorted
         range: calcRange(includes.get(nextFile).lineNum,  includes.get(nextFile).parent),
         message: `Line ${line} ${includes.get(file).path.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
         source: 'mc-glsl'
