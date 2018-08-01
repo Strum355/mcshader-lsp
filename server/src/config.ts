@@ -23,10 +23,18 @@ export const onConfigChange = async (change) => {
   const temp = change.settings.mcglsl as Config
   conf = {shaderpacksPath: temp['shaderpacksPath'].replace(/\\/g, '/'), glslangPath: temp['glslangValidatorPath'].replace(/\\/g, '/')}
 
-  if (!execSync(conf.glslangPath).toString().startsWith('Usage')) {
-    documents.all().forEach(onEvent)
-  } else {
-    promptDownloadGlslang()
+  try {
+    if (!execSync(conf.glslangPath).toString().startsWith('Usage')) {
+      documents.all().forEach(onEvent)
+    } else {
+      promptDownloadGlslang()
+    }
+  } catch (e) {
+    if ((e.stdout.toString() as string).startsWith('Usage')) {
+      documents.all().forEach(onEvent)
+    } else {
+      promptDownloadGlslang()
+    }
   }
 }
 

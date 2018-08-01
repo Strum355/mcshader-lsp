@@ -94,7 +94,7 @@ export function preprocess(lines: string[], docURI: string) {
   allIncludes.forEach(inc => allFiles.add(inc.path))
 
   const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
-
+  
   lint(docURI, lines, includeMap, diagnostics)
 }
 
@@ -159,7 +159,8 @@ export function getIncludes(uri: string, lines: string[]) {
 }
 
 function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
-  const range = calcRange(inc.lineNumTopLevel - (win ? 1 : 0), incStack[0])
+  const file = incStack[incStack.length - 1]
+  const range = calcRange(inc.lineNum - (win ? 1 : 0), file)
   diagnostics.set(
     inc.parent,
     [
@@ -173,6 +174,8 @@ function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], dia
     ]
   )
   lines[inc.lineNumTopLevel] = ''
+  // TODO fill in the actual data
+  propogateDiagnostic(file, 'ERROR', inc.lineNum.toString(), `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`, diagnostics, null)
 }
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
@@ -210,16 +213,16 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
 }
 
-function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>) {
+function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>) {
   console.log(lines.join('\n'))
   let out: string = ''
   try {
-    execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(uri))}`, {input: lines.join('\n')})
+    execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(docURI))}`, {input: lines.join('\n')})
   } catch (e) {
     out = e.stdout.toString()
   }
 
-  if (!diagnostics.has(uri)) diagnostics.set(uri, [])
+  if (!diagnostics.has(docURI)) diagnostics.set(docURI, [])
   includes.forEach(obj => {
     if (!diagnostics.has(obj.path)) diagnostics.set(obj.path, [])
   })
@@ -229,34 +232,38 @@ function lint(uri: string, lines: string[], includes: Map<string, IncludeObj>, d
     let diag: Diagnostic = {
       severity: errorType(type),
       // had to do - 2 here instead of - 1, windows only perhaps?
-      range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : uri),
+      range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : docURI),
       message: `Line ${line} ${replaceWords(msg)}`,
       source: 'mc-glsl'
     }
 
-    diagnostics.get(file.length - 1 ? file : uri).push(diag)
+    diagnostics.get(file.length - 1 ? file : docURI).push(diag)
 
     // if is an include, highlight an error in the parents line of inclusion
-    let nextFile = file
-    while (nextFile !== '0' && nextFile !== uri) {
-      // TODO what if we dont know the top level parent? Feel like thats a non-issue given that we have uri
-      diag = {
-        severity: errorType(type),
-        range: calcRange(includes.get(nextFile).lineNum,  includes.get(nextFile).parent),
-        message: `Line ${line} ${includes.get(file).path.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
-        source: 'mc-glsl'
-      }
-
-      diagnostics.get(includes.get(nextFile).parent).push(diag)
-
-      nextFile = includes.get(nextFile).parent
-    }
+    propogateDiagnostic(file, type, line, msg, diagnostics, includes)
   })
 
   daigsArray(diagnostics).forEach(d => {
     if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
     connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
   })
+}
+
+function propogateDiagnostic(errorFile: string, type: string, line: string, msg: string, diagnostics: Map<string, Diagnostic[]>, includes: Map<string, IncludeObj>) {
+  let nextFile = errorFile
+  while (nextFile !== '0') {
+    // TODO this doesnt deal with the fact that an include can have multiple parents :(
+    const diag = {
+      severity: errorType(type),
+      range: calcRange(includes.get(nextFile).lineNum,  includes.get(nextFile).parent),
+      message: `Line ${line} ${includes.get(errorFile).path.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
+      source: 'mc-glsl'
+    }
+
+    diagnostics.get(includes.get(nextFile).parent).push(diag)
+
+    nextFile = includes.get(nextFile).parent
+  }
 }
 
 export const replaceWords = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)

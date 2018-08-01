@@ -1,7 +1,7 @@
 import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
-import { preprocess, ext, includeToParent, includeGraph } from './linter'
+import { preprocess, ext, includeGraph } from './linter'
 import { extname } from 'path'
 
 const reVersion = /#version [\d]{3}/
