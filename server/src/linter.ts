@@ -94,7 +94,7 @@ export function preprocess(lines: string[], docURI: string) {
   allIncludes.forEach(inc => allFiles.add(inc.path))
 
   const includeMap = new Map<string, IncludeObj>(allIncludes.map(obj => [obj.path, obj]) as [string, IncludeObj][])
-  
+
   lint(docURI, lines, includeMap, diagnostics)
 }
 
@@ -160,14 +160,13 @@ export function getIncludes(uri: string, lines: string[]) {
 
 function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
   const file = incStack[incStack.length - 1]
-  const range = calcRange(inc.lineNum - (win ? 1 : 0), file)
   diagnostics.set(
     inc.parent,
     [
       ...(diagnostics.get(inc.parent) || []),
       {
         severity: DiagnosticSeverity.Error,
-        range,
+        range: calcRange(inc.lineNum - (win ? 1 : 0), file),
         message: `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`,
         source: 'mc-glsl'
       }
@@ -229,7 +228,7 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
 
   filterMatches(out).forEach((match) => {
     const [whole, type, file, line, msg] = match
-    let diag: Diagnostic = {
+    const diag: Diagnostic = {
       severity: errorType(type),
       // had to do - 2 here instead of - 1, windows only perhaps?
       range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : docURI),
