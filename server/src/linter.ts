@@ -264,7 +264,8 @@ function calcRange(lineNum: number, uri: string): Range {
   const lines = getDocumentContents(uri).split('\n')
   const line = lines[lineNum]
   const startOfLine = line.length - line.trimLeft().length
-  const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 1
+  const endOfLine = line.trimRight().length + 1
+  //const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 2
   return Range.create(lineNum, startOfLine, lineNum, endOfLine)
 }
 

@@ -9,27 +9,34 @@ export namespace Comment {
     for (let i = 0; i < line.length; i++) {
       if (state === State.No && line[i] === '/' && line[i + 1] === '*') {
         state = State.Multi
-      } else if (state === State.No && line[i] === '/' && line[i + 1] === '/') {
+        line = empty(i, line, true)
+        i++
+      } else if (state === State.No && line[i] === '/' && line[i + 1] === '/' && line[i - 1] !== '*') {
+        // TODO early out here
         state = State.Single
-      } else if (state === State.Multi && line[i] === '*' && line[i + 1] === '/' && line[i - 1] !== '/') {
+        line = empty(i, line, true)
+        i++
+      } else if (state === State.Multi && line[i] === '*' && line[i + 1] === '/') {
         state = State.No
         // inefficient, try to aggregate it
-        line = empty(i, line)
+        line = empty(i, line, true)
         i++
-        line = empty(i, line)
       }
-      // inefficient, try to aggregate it
-      if (state === State.Single || state === State.Multi) {
-        line = empty(i, line)
-        i++
-        line = empty(i, line)
+
+      if (state === State.Multi || state === State.Single) {
+        line = empty(i, line, false)
       }
     }
     if (state === State.Single) state = State.No
     return [state, line]
   }
 
-  function empty(i: number, line: string): string {
-    return line.substr(0, i) + ' ' + line.substr(i + 1)
+  function empty(i: number, line: string, twice: boolean): string {
+    line = line.substr(0, i) + ' ' + line.substr(i + 1)
+    if (twice) {
+      i++
+      line = line.substr(0, i) + ' ' + line.substr(i + 1)
+    }
+    return line
   }
 }
