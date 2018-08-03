@@ -55,9 +55,7 @@ export function onEvent(document: vsclangproto.TextDocument) {
 
 function lintBubbleDown(uri: string, document: vsclangproto.TextDocument) {
   includeGraph.get(uri).parents.forEach((parent, parentURI) => {
-    console.log(parentURI)
-    console.log(parent.parents)
-    if (parent.parents.size > 0) {
+    if (parent.second.parents.size > 0) {
       lintBubbleDown(parentURI, document)
     } else {
       const lines = getDocumentContents(parentURI).split('\n')

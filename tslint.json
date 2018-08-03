@@ -33,6 +33,9 @@
             "severity": "warning"
         },
         "curly": [true, "ignore-same-line"],
-        "whitespace": false
+        "whitespace": false,
+        "no-trailing-whitespace": {
+            "severity": "warning"
+        }
     }
 }

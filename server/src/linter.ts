@@ -98,7 +98,7 @@ export function preprocess(lines: string[], docURI: string) {
   lint(docURI, lines, includeMap, diagnostics)
 }
 
-const buildIncludeGraph = (inc: IncludeObj) => includeGraph.setParent(inc.path, inc.parent)
+const buildIncludeGraph = (inc: IncludeObj) => includeGraph.setParent(inc.path, inc.parent, inc.lineNum)
 
 function processIncludes(lines: string[], incStack: string[], allIncludes: IncludeObj[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   const includes = getIncludes(incStack[0], lines)
@@ -113,49 +113,61 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Inclu
   }
 }
 
-// TODO no
+type LinesProcessingInfo = {
+  total: number,
+  comment: Comment.State,
+  parStack: string[],
+  count: number[],
+}
+
+// TODO can surely be reworked
 export function getIncludes(uri: string, lines: string[]) {
-  const count = [-1] // for each file we need to track the line number
-  const parStack = [uri] // for each include we need to track its parent
+  // the numbers start at -1 because we increment them as soon as we enter the loop so that we
+  // dont have to put an incrememnt at each return
+  const lineInfo: LinesProcessingInfo = {
+    total: -1,
+    comment: Comment.State.No,
+    parStack: [uri],
+    count: [-1],
+  }
 
-  let total = -1 // current line number overall
-  let comment = Comment.State.No
+  return lines.reduce<IncludeObj[]>((out, line, i, l): IncludeObj[] => processLine(out, line, lines, i, lineInfo), [])
+}
 
-  return lines.reduce<IncludeObj[]>((out, line, i, l): IncludeObj[] => {
-    const updated =  Comment.update(line, comment)
-    comment = updated[0]
-    line = updated[1]
-    lines[i] = line
+function processLine(includes: IncludeObj[], line: string, lines: string[], i: number, linesInfo: LinesProcessingInfo): IncludeObj[] {
+  const updated =  Comment.update(line, linesInfo.comment)
+  linesInfo.comment = updated[0]
+  line = updated[1]
+  lines[i] = line
 
-    count[count.length - 1]++
-    total++
-    if (comment) return out
-    if (line.startsWith('#line')) {
-      const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
+  linesInfo.count[linesInfo.count.length - 1]++
+  linesInfo.total++
+  if (linesInfo.comment) return includes
+  if (line.startsWith('#line')) {
+    const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
 
-      if (inc === parStack[parStack.length - 2]) {
-        count.pop()
-        parStack.pop()
-      } else {
-        count.push(-1)
-        parStack.push(inc)
-      }
-      return out
+    if (inc === linesInfo.parStack[linesInfo.parStack.length - 2]) {
+      linesInfo.count.pop()
+      linesInfo.parStack.pop()
+    } else {
+      linesInfo.count.push(-1)
+      linesInfo.parStack.push(inc)
     }
+    return includes
+  }
 
-    const match = line.match(reInclude)
+  const match = line.match(reInclude)
 
-    if (match) {
-      out.push({
-        path: formatURI(absPath(parStack[parStack.length - 1], match[1])),
-        lineNum: count[count.length - 1],
-        lineNumTopLevel: total,
-        parent: formatURI(parStack[parStack.length - 1]),
-        match
-      })
-    }
-    return out
-  }, [])
+  if (match) {
+    includes.push({
+      path: formatURI(absPath(linesInfo.parStack[linesInfo.parStack.length - 1], match[1])),
+      lineNum: linesInfo.count[linesInfo.count.length - 1],
+      lineNumTopLevel: linesInfo.total,
+      parent: formatURI(linesInfo.parStack[linesInfo.parStack.length - 1]),
+      match
+    })
+  }
+  return includes
 }
 
 function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
@@ -202,11 +214,9 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
 
   incStack.push(inc.path)
 
-  // TODO deal with the fact that includes may not be the sole text on a line
   // add #line indicating we are entering a new include block
   lines[inc.lineNumTopLevel] = `#line 0 "${formatURI(inc.path)}"`
   // merge the lines of the file into the current document
-  // TODO do we wanna use a DLL here?
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
   // add the closing #line indicating we're re-entering a block a level up
   lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
@@ -248,21 +258,23 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
   })
 }
 
-function propogateDiagnostic(errorFile: string, type: string, line: string, msg: string, diagnostics: Map<string, Diagnostic[]>, includes: Map<string, IncludeObj>) {
-  let nextFile = errorFile
-  while (nextFile !== '0') {
-    // TODO this doesnt deal with the fact that an include can have multiple parents :(
-    const diag = {
+function propogateDiagnostic(errorFile: string, type: string, line: string, msg: string, diagnostics: Map<string, Diagnostic[]>, includes: Map<string, IncludeObj>, parentURI?: string) {
+  includeGraph.get(parentURI || errorFile).parents.forEach((pair, parURI) => {
+    console.log('parent', parURI, 'child', errorFile)
+    const diag: Diagnostic = {
       severity: errorType(type),
-      range: calcRange(includes.get(nextFile).lineNum,  includes.get(nextFile).parent),
-      message: `Line ${line} ${includes.get(errorFile).path.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
+      range: calcRange(pair.first,  parURI),
+      message: `Line ${line} ${errorFile.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
       source: 'mc-glsl'
     }
 
-    diagnostics.get(includes.get(nextFile).parent).push(diag)
+    if (!diagnostics.has(parURI)) diagnostics.set(parURI, [])
+    diagnostics.get(parURI).push(diag)
 
-    nextFile = includes.get(nextFile).parent
-  }
+    if (pair.second.parents.size > 0) {
+      propogateDiagnostic(errorFile, type, line, msg, diagnostics, includes, parURI)
+    }
+  })
 }
 
 export const replaceWords = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)
