@@ -17,6 +17,9 @@
         "max-classes-per-file": false,
         "no-console": false,
         "object-literal-key-quotes": false,
+        "object-literal-shorthand": {
+            "severity": "warning"
+        },
         "eofline": false,
         "member-ordering": false,
         "interface-over-type-literal": false,

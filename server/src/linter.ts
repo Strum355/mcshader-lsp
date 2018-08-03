@@ -35,6 +35,20 @@ type IncludeObj = {
   match: RegExpMatchArray
 }
 
+type ErrorMatch = {
+  type: DiagnosticSeverity,
+  file: string,
+  line: number,
+  msg: string,
+}
+
+type LinesProcessingInfo = {
+  total: number,
+  comment: Comment.State,
+  parStack: string[],
+  count: number[],
+}
+
 export const ext = new Map([
   ['.fsh', 'frag'],
   ['.gsh', 'geom'],
@@ -113,14 +127,6 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Inclu
   }
 }
 
-type LinesProcessingInfo = {
-  total: number,
-  comment: Comment.State,
-  parStack: string[],
-  count: number[],
-}
-
-// TODO can surely be reworked
 export function getIncludes(uri: string, lines: string[]) {
   // the numbers start at -1 because we increment them as soon as we enter the loop so that we
   // dont have to put an incrememnt at each return
@@ -131,9 +137,10 @@ export function getIncludes(uri: string, lines: string[]) {
     count: [-1],
   }
 
-  return lines.reduce<IncludeObj[]>((out, line, i, l): IncludeObj[] => processLine(out, line, lines, i, lineInfo), [])
+  return lines.reduce<IncludeObj[]>((out, line, i): IncludeObj[] => processLine(out, line, lines, i, lineInfo), [])
 }
 
+// TODO can surely be reworked
 function processLine(includes: IncludeObj[], line: string, lines: string[], i: number, linesInfo: LinesProcessingInfo): IncludeObj[] {
   const updated =  Comment.update(line, linesInfo.comment)
   linesInfo.comment = updated[0]
@@ -172,21 +179,23 @@ function processLine(includes: IncludeObj[], line: string, lines: string[], i: n
 
 function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
   const file = incStack[incStack.length - 1]
-  diagnostics.set(
-    inc.parent,
-    [
-      ...(diagnostics.get(inc.parent) || []),
-      {
-        severity: DiagnosticSeverity.Error,
-        range: calcRange(inc.lineNum - (win ? 1 : 0), file),
-        message: `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`,
-        source: 'mc-glsl'
-      }
-    ]
-  )
-  lines[inc.lineNumTopLevel] = ''
-  // TODO fill in the actual data
-  propogateDiagnostic(file, 'ERROR', inc.lineNum.toString(), `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`, diagnostics, null)
+  const diag: Diagnostic = {
+    severity: DiagnosticSeverity.Error,
+    range: calcRange(inc.lineNum - (win ? 1 : 0), file),
+    message: `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`,
+    source: 'mc-glsl'
+  }
+
+  diagnostics.set(inc.parent, [...(diagnostics.get(inc.parent) || []), diag])
+  lines[inc.lineNumTopLevel] = lines[inc.lineNumTopLevel].replace(reInclude, '')
+
+  const error: ErrorMatch = {
+    type: DiagnosticSeverity.Error,
+    line: inc.lineNum,
+    msg: `${inc.path.replace(conf.shaderpacksPath, '')} is missing or an invalid file.`,
+    file,
+  }
+  propogateDiagnostic(error, diagnostics)
 }
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
@@ -236,21 +245,7 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
     if (!diagnostics.has(obj.path)) diagnostics.set(obj.path, [])
   })
 
-  filterMatches(out).forEach((match) => {
-    const [whole, type, file, line, msg] = match
-    const diag: Diagnostic = {
-      severity: errorType(type),
-      // had to do - 2 here instead of - 1, windows only perhaps?
-      range: calcRange(parseInt(line) - (win ? 2 : 1), file.length - 1 ? file : docURI),
-      message: `Line ${line} ${replaceWords(msg)}`,
-      source: 'mc-glsl'
-    }
-
-    diagnostics.get(file.length - 1 ? file : docURI).push(diag)
-
-    // if is an include, highlight an error in the parents line of inclusion
-    propogateDiagnostic(file, type, line, msg, diagnostics, includes)
-  })
+  processErrors(out, docURI, diagnostics)
 
   daigsArray(diagnostics).forEach(d => {
     if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
@@ -258,13 +253,38 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
   })
 }
 
-function propogateDiagnostic(errorFile: string, type: string, line: string, msg: string, diagnostics: Map<string, Diagnostic[]>, includes: Map<string, IncludeObj>, parentURI?: string) {
-  includeGraph.get(parentURI || errorFile).parents.forEach((pair, parURI) => {
-    console.log('parent', parURI, 'child', errorFile)
+function processErrors(out: string, docURI: string, diagnostics: Map<string, Diagnostic[]>) {
+  filterMatches(out).forEach(match => {
+    const error: ErrorMatch = {
+      type: errorType(match[1]),
+      file: match[2],
+      line: parseInt(match[3]),
+      msg: match[4]
+    }
+
     const diag: Diagnostic = {
-      severity: errorType(type),
+      severity: error.type,
+      // had to do - 2 here instead of - 1, windows only perhaps?
+      range: calcRange(error.line - (win ? 2 : 1), error.file.length - 1 ? error.file : docURI),
+      message: `Line ${error.line} ${replaceWords(error.msg)}`,
+      source: 'mc-glsl'
+    }
+
+    diagnostics.get(error.file.length - 1 ? error.file : docURI).push(diag)
+
+    // if is an include, highlight an error in the parents line of inclusion
+    propogateDiagnostic(error, diagnostics)
+  })
+}
+
+//errorFile: string, type: DiagnosticSeverity, line: number, msg: string
+function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnostic[]>, parentURI?: string) {
+  includeGraph.get(parentURI || error.file).parents.forEach((pair, parURI) => {
+    console.log('parent', parURI, 'child', error.file)
+    const diag: Diagnostic = {
+      severity: error.type,
       range: calcRange(pair.first,  parURI),
-      message: `Line ${line} ${errorFile.replace(conf.shaderpacksPath, '')} ${replaceWords(msg)}`,
+      message: `Line ${error.line} ${error.file.replace(conf.shaderpacksPath, '')} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
 
@@ -272,7 +292,7 @@ function propogateDiagnostic(errorFile: string, type: string, line: string, msg:
     diagnostics.get(parURI).push(diag)
 
     if (pair.second.parents.size > 0) {
-      propogateDiagnostic(errorFile, type, line, msg, diagnostics, includes, parURI)
+      propogateDiagnostic(error, diagnostics, parURI)
     }
   })
 }
