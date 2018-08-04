@@ -289,15 +289,17 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
       msg: match[4]
     }
 
+    const fileName = error.file.length - 1 ? error.file : docURI
+
     const diag: Diagnostic = {
       severity: error.type,
       // had to do - 2 here instead of - 1, windows only perhaps?
-      range: calcRange(error.line - (win ? 2 : 1), error.file.length - 1 ? error.file : docURI),
+      range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
       message: `Line ${error.line} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
 
-    diagnostics.get(error.file.length - 1 ? error.file : docURI).push(diag)
+    diagnostics.get(fileName).push(diag)
 
     // if is an include, highlight an error in the parents line of inclusion
     propogateDiagnostic(error, diagnostics, hasDirective)
