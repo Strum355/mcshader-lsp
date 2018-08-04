@@ -75,6 +75,8 @@ async function promptDownloadGlslang() {
 }
 
 async function downloadGlslang() {
+  connection.window.showInformationMessage('Downloading. Your settings will be updated automatically and you\'ll be notified when its done.')
+
   const res = await fetch(url[platform()])
 
   try {
