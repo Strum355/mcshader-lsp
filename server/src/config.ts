@@ -7,6 +7,7 @@ import { postError } from './utils'
 import { execSync } from 'child_process'
 import { serverLog } from './logging'
 import { dirname } from 'path'
+import { DidChangeConfigurationParams } from 'vscode-languageserver/lib/main'
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
@@ -23,7 +24,9 @@ export interface Config {
 
 export let conf: Config = {shaderpacksPath: '', glslangPath: ''}
 
-export const onConfigChange = async (change) => {
+let supress = false
+
+export async function onConfigChange(change: DidChangeConfigurationParams) {
   const temp = change.settings.mcglsl as Config
   if (temp.shaderpacksPath === conf.shaderpacksPath && temp.glslangPath === conf.glslangPath) return
   conf = {shaderpacksPath: temp['shaderpacksPath'].replace(/\\/g, '/'), glslangPath: temp['glslangValidatorPath'].replace(/\\/g, '/')}
@@ -31,8 +34,14 @@ export const onConfigChange = async (change) => {
   serverLog.debug(() => 'old config: ' + JSON.stringify(conf))
 
   if (conf.shaderpacksPath === '' || conf.shaderpacksPath.replace(dirname(conf.shaderpacksPath), '') !== '/shaderpacks') {
+    if (supress) return
     serverLog.error(() => 'shaderpack path not set or doesn\'t end in \'shaderpacks\'', null)
-    connection.window.showErrorMessage('mcglsl.shaderpacksPath is not set or doesn\'t end in \'shaderpacks\'. Please set it in your settings.')
+    supress = true
+    const clicked = await connection.window.showErrorMessage(
+      'mcglsl.shaderpacksPath is not set or doesn\'t end in \'shaderpacks\'. Please set it in your settings.',
+      {title: 'Supress'}
+    )
+    supress = (clicked && clicked.title === 'Supress') ? true : false
     return
   }
 

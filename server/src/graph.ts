@@ -4,7 +4,7 @@ export type Pair<T, S> = {
   second: S
 }
 
-type Node = {
+export type Node = {
   parents: Map<string, Pair<number, Node>>
   children: Map<string, Node>
 }

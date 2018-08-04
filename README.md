@@ -20,6 +20,7 @@ VSCode-MC-Shader is a [Visual Studio Code](https://code.visualstudio.com/) exten
 
 ## Planned
 
+- Multi-workspaces (currently only one is supported and using multiple is very undefined behaviour)
 - Warnings for unused uniforms/varyings
 - Some cool `DRAWBUFFERS` stuff
 

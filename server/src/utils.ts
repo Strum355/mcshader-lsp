@@ -5,7 +5,8 @@ import { serverLog } from './logging'
 
 export function postError(e: Error) {
     connection.window.showErrorMessage(e.message)
-    serverLog.error(e.message, new Error())
+    serverLog.error(e.message, null)
+    console.log(e)
 }
 
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '').replace(/^(?:\/)c%3A/, 'C:').replace(/\\/g, '/')

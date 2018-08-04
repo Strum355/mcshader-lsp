@@ -6,7 +6,7 @@ import { readFileSync, existsSync, statSync, Stats } from 'fs'
 import { conf } from './config'
 import { postError, formatURI, getDocumentContents, trimPath } from './utils'
 import { platform } from 'os'
-import { Graph } from './graph'
+import { Graph, Node } from './graph'
 import { Comment } from './comment'
 import { linterLog } from './logging'
 
@@ -91,7 +91,7 @@ export function preprocess(lines: string[], docURI: string) {
 
   const includeMap = new Map<string, IncludeObj>(Array.from(allIncludes).map(obj => [obj.path, obj]) as [string, IncludeObj][])
 
-  lint(docURI, lines, includeMap, diagnostics)
+  lint(docURI, lines, includeMap, diagnostics, hasDirective)
 }
 
 function includeDirective(lines: string[], docURI: string): boolean {
@@ -123,11 +123,24 @@ function includeDirective(lines: string[], docURI: string): boolean {
 const buildIncludeGraph = (inc: IncludeObj) => includeGraph.setParent(inc.path, inc.parent, inc.lineNum)
 
 function processIncludes(lines: string[], incStack: string[], allIncludes: Set<IncludeObj>, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
+  // todo figure out why incStack[0] here
   const includes = getIncludes(incStack[0], lines)
   includes.forEach(i => allIncludes.add(i))
-  if (includes.length > 0) {
-    linterLog.info(() => `${trimPath(incStack[0])} has ${includes.length} include(s). [${includes.map(i => '\n\t\t' + trimPath(i.path))}\n\t]`)
-    includes.reverse().forEach(inc => {
+
+  const parent = incStack[incStack.length - 1]
+  includeGraph.nodes.get(parent).children.forEach((node, uri) => {
+    if (!includes.has(uri)) {
+      includeGraph.nodes.get(parent).children.delete(uri)
+      node.parents.delete(parent)
+    }
+  })
+
+  const includeList = Array.from(includes.values())
+
+  if (includeList.length > 0) {
+    linterLog.info(() => `${trimPath(parent)} has ${includeList.length} include(s). [${includeList.map(i => '\n\t\t' + trimPath(i.path))}\n\t]`)
+
+    includeList.reverse().forEach(inc => {
       buildIncludeGraph(inc)
       mergeInclude(inc, lines, incStack, diagnostics, hasDirective)
     })
@@ -137,16 +150,14 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Set<I
 }
 
 function getIncludes(uri: string, lines: string[]) {
-  // the numbers start at -1 because we increment them as soon as we enter the loop so that we
-  // dont have to put an incrememnt at each return
   const lineInfo: LinesProcessingInfo = {
     total: -1,
     comment: Comment.State.No,
     parStack: [uri],
-    count: [-1],
+    count: [0],
   }
 
-  return lines.reduce<IncludeObj[]>((out, line, i): IncludeObj[] => processLine(out, line, lines, i, lineInfo), [])
+  return new Map(lines.reduce<IncludeObj[]>((out, line, i) => processLine(out, line, lines, i, lineInfo), []).map(inc => [inc.path, inc] as [string, IncludeObj]))
 }
 
 // TODO can surely be reworked
@@ -191,7 +202,7 @@ function processLine(includes: IncludeObj[], line: string, lines: string[], i: n
   return includes
 }
 
-function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>) {
+function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   const msg = `${trimPath(inc.path)} is missing or an invalid file.`
 
   linterLog.error(msg, null)
@@ -212,7 +223,7 @@ function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], dia
     line: inc.lineNum,
     msg, file,
   }
-  propogateDiagnostic(error, diagnostics)
+  propogateDiagnostic(error, diagnostics, hasDirective)
 }
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
@@ -221,14 +232,14 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
     stats = statSync(inc.path)
   } catch (e) {
     if (e.code === 'ENOENT') {
-      ifInvalidFile(inc, lines, incStack, diagnostics)
+      ifInvalidFile(inc, lines, incStack, diagnostics, hasDirective)
       return
     }
     throw e
   }
 
   if (!stats.isFile()) {
-    ifInvalidFile(inc, lines, incStack, diagnostics)
+    ifInvalidFile(inc, lines, incStack, diagnostics, hasDirective)
     return
   }
 
@@ -248,7 +259,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
 }
 
-function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>) {
+function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   let out: string = ''
   try {
     execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(docURI))}`, {input: lines.join('\n')})
@@ -261,7 +272,7 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
     if (!diagnostics.has(key)) diagnostics.set(key, [])
   })
 
-  processErrors(out, docURI, diagnostics)
+  processErrors(out, docURI, diagnostics, hasDirective)
 
   daigsArray(diagnostics).forEach(d => {
     if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
@@ -269,7 +280,7 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
   })
 }
 
-function processErrors(out: string, docURI: string, diagnostics: Map<string, Diagnostic[]>) {
+function processErrors(out: string, docURI: string, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   filterMatches(out).forEach(match => {
     const error: ErrorMatch = {
       type: errorType(match[1]),
@@ -289,16 +300,16 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
     diagnostics.get(error.file.length - 1 ? error.file : docURI).push(diag)
 
     // if is an include, highlight an error in the parents line of inclusion
-    propogateDiagnostic(error, diagnostics)
+    propogateDiagnostic(error, diagnostics, hasDirective)
   })
 }
 
 //errorFile: string, type: DiagnosticSeverity, line: number, msg: string
-function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnostic[]>, parentURI?: string) {
+function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean, parentURI?: string) {
   includeGraph.get(parentURI || error.file).parents.forEach((pair, parURI) => {
     const diag: Diagnostic = {
       severity: error.type,
-      range: calcRange(pair.first - 1,  parURI),
+      range: calcRange(pair.first - (pair.second.parents.size > 0 ? 0 : (2 - (hasDirective ? 1 : 0))), parURI),
       message: `Line ${error.line} ${trimPath(error.file)} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
@@ -307,7 +318,7 @@ function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnos
     diagnostics.get(parURI).push(diag)
 
     if (pair.second.parents.size > 0) {
-      propogateDiagnostic(error, diagnostics, parURI)
+      propogateDiagnostic(error, diagnostics, hasDirective, parURI)
     }
   })
 }
