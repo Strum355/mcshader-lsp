@@ -1,5 +1,6 @@
 import { connection, documents } from './server'
 import { readFileSync } from 'fs'
+import { conf } from './config'
 
 export function postError(e: Error) {
     connection.window.showErrorMessage(e.message)
@@ -11,4 +12,8 @@ export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '').replace(
 export function getDocumentContents(uri: string): string {
   if (documents.keys().includes('file://' + uri)) return documents.get('file://' + uri).getText()
   else return readFileSync(uri).toString()
+}
+
+export function trimPath(path: string): string {
+  return path.replace(conf.shaderpacksPath, '')
 }

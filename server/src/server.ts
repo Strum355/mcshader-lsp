@@ -32,6 +32,7 @@ documents.onDidOpen((event) => onEvent(event.document))
 
 documents.onDidSave((event) => onEvent(event.document))
 
+// what am i saying here
 // dont do this for include files, for non-include files, clear diags for all its includes. Cache this maybe
 documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.uri, diagnostics: []}))
 
@@ -44,6 +45,7 @@ export function onEvent(document: vsclangproto.TextDocument) {
     return
   }
 
+  // i think we still need to keep this in case we havent found the root of this files include tree
   if (!ext.has(extname(document.uri))) return
 
   try {
@@ -59,8 +61,13 @@ function lintBubbleDown(uri: string, document: vsclangproto.TextDocument) {
       lintBubbleDown(parentURI, document)
     } else {
       const lines = getDocumentContents(parentURI).split('\n')
+      // feel like we could perhaps do better? Hope no one puts #version at the top of their includes..
       if (lines.filter(l => reVersion.test(l)).length > 0) {
-        preprocess(lines, parentURI)
+        try {
+          preprocess(lines, parentURI)
+        } catch (e) {
+          postError(e)
+        }
       }
     }
   })

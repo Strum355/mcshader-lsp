@@ -15,6 +15,7 @@
 		"@types/node-fetch": "^2.1.1",
 		"@types/unzip": "^0.1.1",
 		"node-fetch": "^2.1.2",
+		"typescript-logging": "^0.6.2",
 		"unzip": "^0.1.11",
 		"vscode-languageserver": "^4.1.3"
 	},
