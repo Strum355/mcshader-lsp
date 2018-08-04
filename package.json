@@ -1,11 +1,12 @@
 {
     "name": "vscode-mc-shader",
-    "displayName": "Minecraft GLSL Shader",
+    "displayName": "Minecraft GLSL Shaders",
     "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
     "version": "0.9.0",
     "publisher": "Strum355",
     "author": "Noah Santschi-Cooney (Strum355)",
     "license": "MIT",
+    "icon": "logo.png",
     "repository": {
         "url": "https://github.com/Strum355/vscode-mc-shader"
     },

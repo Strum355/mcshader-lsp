@@ -1,4 +1,5 @@
-# vscode-mc-shader
+# Minecraft GLSL Shaders
+## vscode-mc-shader
 
 [![CI](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)
 [![Issues](https://img.shields.io/github/issues-raw/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader/issues)
