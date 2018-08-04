@@ -4,3 +4,4 @@ CategoryServiceFactory.setDefaultConfiguration(new CategoryConfiguration(LogLeve
 
 export const linterLog = new Category('linter')
 export const completionLog = new Category('completion')
+export const serverLog = new Category('server')

@@ -136,7 +136,7 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Set<I
   }
 }
 
-export function getIncludes(uri: string, lines: string[]) {
+function getIncludes(uri: string, lines: string[]) {
   // the numbers start at -1 because we increment them as soon as we enter the loop so that we
   // dont have to put an incrememnt at each return
   const lineInfo: LinesProcessingInfo = {
@@ -312,7 +312,7 @@ function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnos
   })
 }
 
-export const replaceWords = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)
+const replaceWords = (msg: string) => Array.from(tokens.entries()).reduce((acc, [key, value]) => acc.replace(key, value), msg)
 
 const errorType = (error: string) => error === 'ERROR' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning
 
@@ -333,7 +333,7 @@ function calcRange(lineNum: number, uri: string): Range {
   return Range.create(lineNum, startOfLine, lineNum, endOfLine)
 }
 
-export function absPath(currFile: string, includeFile: string): string {
+function absPath(currFile: string, includeFile: string): string {
   if (!currFile.startsWith(conf.shaderpacksPath) || conf.shaderpacksPath === '') {
     connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in '${currFile}' but the path is set to '${conf.shaderpacksPath}'`)
     return ''

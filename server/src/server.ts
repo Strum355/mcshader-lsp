@@ -2,14 +2,14 @@ import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
 import { preprocess, ext, includeGraph } from './linter'
-import { extname } from 'path'
+import { extname, dirname } from 'path'
 
 const reVersion = /#version [\d]{3}/
 
 export let connection: vsclang.IConnection
 connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
 
-import { onConfigChange } from './config'
+import { onConfigChange, conf, glslangReady } from './config'
 import { formatURI, postError, getDocumentContents } from './utils'
 
 export const documents = new vsclang.TextDocuments()
@@ -39,6 +39,8 @@ documents.onDidClose((event) => connection.sendDiagnostics({uri: event.document.
 //documents.onDidChangeContent(onEvent)
 
 export function onEvent(document: vsclangproto.TextDocument) {
+  if (conf.shaderpacksPath.replace(dirname(conf.shaderpacksPath), '') !== '/shaderpacks' || !glslangReady) return
+
   const uri = formatURI(document.uri)
   if (includeGraph.get(uri).parents.size > 0) {
     lintBubbleDown(uri, document)

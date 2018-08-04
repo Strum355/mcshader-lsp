@@ -12,9 +12,9 @@ VSCode-MC-Shader is a [Visual Studio Code](https://code.visualstudio.com/) exten
 
 ## Features
 
-- Linting (unpolished)
+- Linting
 - Syntax highlighting (by extension dependency)
-- Support for `#includes` directives
+- Support for `#include` directives
 - Auto-complete prompts (incomplete)
 
 ## Planned
@@ -37,7 +37,6 @@ Got a feature request? Chuck it into an Issue!
 | Option Name | Data Type | Description | Default Value |
 | ----------- | --------- | ----------- | ------------- |
 | `mcglsl.glslangValidatorPath` | string |  The path to the glslangValidator executable. | In your `PATH`.|
-| `mcglsl.lintOnType` | bool | Whether or not to lint while typing. Can decrease performance. | `false` |
 | `mcglsl.shaderpacksPath` | string | The path to the shaderpacks folder in your Minecraft installation folder. | None |
 
 ## Contributing

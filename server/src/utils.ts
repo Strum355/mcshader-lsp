@@ -1,10 +1,11 @@
 import { connection, documents } from './server'
 import { readFileSync } from 'fs'
 import { conf } from './config'
+import { serverLog } from './logging'
 
 export function postError(e: Error) {
     connection.window.showErrorMessage(e.message)
-    console.log(e)
+    serverLog.error(e.message, new Error())
 }
 
 export const formatURI = (uri: string) => uri.replace(/^file:\/\//, '').replace(/^(?:\/)c%3A/, 'C:').replace(/\\/g, '/')

@@ -1,16 +1,20 @@
 import { connection, documents, onEvent } from './server'
 import fetch from 'node-fetch'
 import { platform } from 'os'
-import { createWriteStream, chmodSync, createReadStream, unlinkSync } from 'fs'
+import { createWriteStream, chmodSync, createReadStream, unlinkSync, read } from 'fs'
 import * as unzip from 'unzip'
 import { postError } from './utils'
 import { execSync } from 'child_process'
+import { serverLog } from './logging'
+import { dirname } from 'path'
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
   'linux': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-linux-Release.zip',
   'darwin': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-osx-Release.zip'
 }
+
+export let glslangReady = false
 
 export interface Config {
   readonly shaderpacksPath: string
@@ -21,17 +25,28 @@ export let conf: Config = {shaderpacksPath: '', glslangPath: ''}
 
 export const onConfigChange = async (change) => {
   const temp = change.settings.mcglsl as Config
+  if (temp.shaderpacksPath === conf.shaderpacksPath && temp.glslangPath === conf.glslangPath) return
   conf = {shaderpacksPath: temp['shaderpacksPath'].replace(/\\/g, '/'), glslangPath: temp['glslangValidatorPath'].replace(/\\/g, '/')}
+  serverLog.debug(() => 'new config: ' + JSON.stringify(temp))
+  serverLog.debug(() => 'old config: ' + JSON.stringify(conf))
+
+  if (conf.shaderpacksPath === '' || conf.shaderpacksPath.replace(dirname(conf.shaderpacksPath), '') !== '/shaderpacks') {
+    serverLog.error(() => 'shaderpack path not set or doesn\'t end in \'shaderpacks\'', null)
+    connection.window.showErrorMessage('mcglsl.shaderpacksPath is not set or doesn\'t end in \'shaderpacks\'. Please set it in your settings.')
+    return
+  }
 
   try {
     if (!execSync(conf.glslangPath).toString().startsWith('Usage')) {
       documents.all().forEach(onEvent)
+      glslangReady = true
     } else {
       promptDownloadGlslang()
     }
   } catch (e) {
     if ((e.stdout.toString() as string).startsWith('Usage')) {
       documents.all().forEach(onEvent)
+      glslangReady = true
     } else {
       promptDownloadGlslang()
     }
@@ -46,11 +61,6 @@ async function promptDownloadGlslang() {
   )
 
   if (!chosen || chosen.title !== 'Download') return
-
-  if (conf.shaderpacksPath === '') {
-    connection.window.showErrorMessage('Please set mcglsl.shaderpacksPath as this is where glslangValidator will be saved to.')
-    return
-  }
 
   downloadGlslang()
 }
@@ -76,7 +86,8 @@ async function downloadGlslang() {
           chmodSync(conf.shaderpacksPath + '/glslangValidator', 0o775)
           unlinkSync(conf.shaderpacksPath + '/glslangValidator.zip')
           connection.sendNotification('update-config', conf.shaderpacksPath + '/glslangValidator')
-          connection.window.showInformationMessage('glslangValidator has been downloaded to ' + conf.shaderpacksPath + '/glslangValidator')
+          connection.window.showInformationMessage('glslangValidator has been downloaded to ' + conf.shaderpacksPath + '/glslangValidator. Your config should be updated automatically.')
+          glslangReady = true
         })
     })
   } catch (e) {
