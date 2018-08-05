@@ -33,10 +33,7 @@ export namespace Comment {
 
   function empty(i: number, line: string, twice: boolean): string {
     line = line.substr(0, i) + ' ' + line.substr(i + 1)
-    if (twice) {
-      i++
-      line = line.substr(0, i) + ' ' + line.substr(i + 1)
-    }
+    if (twice) line = line.substr(0, i + 1) + ' ' + line.substr(i + 3)
     return line
   }
 }

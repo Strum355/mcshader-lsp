@@ -15,7 +15,7 @@ const reVersion = /#version [\d]{3}/
 const reInclude = /^(?:\s)*?(?:#include) "(.+)"\r?/
 const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
-const win = platform() === 'win32'
+export const win = platform() === 'win32'
 
 const filters = [
   /stdin/,
@@ -111,11 +111,11 @@ function includeDirective(lines: string[], docURI: string): boolean {
       break
     }
 
-    if (i === lines.length - 1) {
+    /* if (i === lines.length - 1) {
       linterLog.warn(() => `no version found for ${docURI}. inserting at top`)
       lines.splice(0, 0, include)
       break
-    }
+    } */
   }
   return hasDirective
 }
@@ -123,11 +123,10 @@ function includeDirective(lines: string[], docURI: string): boolean {
 const buildIncludeGraph = (inc: IncludeObj) => includeGraph.setParent(inc.path, inc.parent, inc.lineNum)
 
 function processIncludes(lines: string[], incStack: string[], allIncludes: Set<IncludeObj>, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
-  // todo figure out why incStack[0] here
-  const includes = getIncludes(incStack[0], lines)
+  const parent = incStack[incStack.length - 1]
+  const includes = getIncludes(parent, lines)
   includes.forEach(i => allIncludes.add(i))
 
-  const parent = incStack[incStack.length - 1]
   includeGraph.nodes.get(parent).children.forEach((node, uri) => {
     if (!includes.has(uri)) {
       includeGraph.nodes.get(parent).children.delete(uri)
@@ -154,14 +153,14 @@ function getIncludes(uri: string, lines: string[]) {
     total: -1,
     comment: Comment.State.No,
     parStack: [uri],
-    count: [0],
+    count: [-1],
   }
 
-  return new Map(lines.reduce<IncludeObj[]>((out, line, i) => processLine(out, line, lines, i, lineInfo), []).map(inc => [inc.path, inc] as [string, IncludeObj]))
+  return lines.reduce<Map<string, IncludeObj>>((out, line, i) => processLine(out, line, lines, i, lineInfo), new Map())
 }
 
 // TODO can surely be reworked
-function processLine(includes: IncludeObj[], line: string, lines: string[], i: number, linesInfo: LinesProcessingInfo): IncludeObj[] {
+function processLine(includes: Map<string, IncludeObj>, line: string, lines: string[], i: number, linesInfo: LinesProcessingInfo): Map<string, IncludeObj> {
   const updated =  Comment.update(line, linesInfo.comment)
   linesInfo.comment = updated[0]
 
@@ -177,7 +176,6 @@ function processLine(includes: IncludeObj[], line: string, lines: string[], i: n
 
   if (line.startsWith('#line')) {
     const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
-
     if (inc === linesInfo.parStack[linesInfo.parStack.length - 2]) {
       linesInfo.count.pop()
       linesInfo.parStack.pop()
@@ -191,13 +189,16 @@ function processLine(includes: IncludeObj[], line: string, lines: string[], i: n
   const match = line.match(reInclude)
 
   if (match) {
-    includes.push({
-      path: formatURI(absPath(linesInfo.parStack[linesInfo.parStack.length - 1], match[1])),
-      lineNum: linesInfo.count[linesInfo.count.length - 1],
-      lineNumTopLevel: linesInfo.total,
-      parent: formatURI(linesInfo.parStack[linesInfo.parStack.length - 1]),
-      match
-    })
+    includes.set(
+      formatURI(absPath(linesInfo.parStack[linesInfo.parStack.length - 1], match[1])),
+      {
+        path: formatURI(absPath(linesInfo.parStack[linesInfo.parStack.length - 1], match[1])),
+        lineNum: linesInfo.count[linesInfo.count.length - 1],
+        lineNumTopLevel: linesInfo.total,
+        parent: formatURI(linesInfo.parStack[linesInfo.parStack.length - 1]),
+        match
+      }
+    )
   }
   return includes
 }
@@ -210,7 +211,7 @@ function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], dia
   const file = incStack[incStack.length - 1]
   const diag: Diagnostic = {
     severity: DiagnosticSeverity.Error,
-    range: calcRange(inc.lineNum, file),
+    range: calcRange(inc.lineNum - ((!hasDirective && includeGraph.get(file).parents.size === 0) ? 1 : 0), file),
     message: msg,
     source: 'mc-glsl'
   }
@@ -227,20 +228,19 @@ function ifInvalidFile(inc: IncludeObj, lines: string[], incStack: string[], dia
 }
 
 function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
-  let stats: Stats
   try {
-    stats = statSync(inc.path)
+    const stats = statSync(inc.path)
+    if (!stats.isFile()) {
+      const err = new Error()
+      err['code'] = 'ENOENT'
+      throw err
+    }
   } catch (e) {
     if (e.code === 'ENOENT') {
       ifInvalidFile(inc, lines, incStack, diagnostics, hasDirective)
       return
     }
     throw e
-  }
-
-  if (!stats.isFile()) {
-    ifInvalidFile(inc, lines, incStack, diagnostics, hasDirective)
-    return
   }
 
   const dataLines = readFileSync(inc.path).toString().split('\n')
@@ -293,9 +293,8 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
 
     const diag: Diagnostic = {
       severity: error.type,
-      // had to do - 2 here instead of - 1, windows only perhaps?
       range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
-      message: `Line ${error.line} ${replaceWords(error.msg)}`,
+      message: `Line ${error.line + 1} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
 
@@ -311,8 +310,8 @@ function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnos
   includeGraph.get(parentURI || error.file).parents.forEach((pair, parURI) => {
     const diag: Diagnostic = {
       severity: error.type,
-      range: calcRange(pair.first - (pair.second.parents.size > 0 ? 0 : (2 - (hasDirective ? 1 : 0))), parURI),
-      message: `Line ${error.line} ${trimPath(error.file)} ${replaceWords(error.msg)}`,
+      range: calcRange(pair.first - ((!hasDirective && pair.second.parents.size === 0) ? 1 : 0), parURI),
+      message: `Line ${error.line + 1} ${trimPath(error.file)} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
 
@@ -338,6 +337,8 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
+  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum}`)
+
   const lines = getDocumentContents(uri).split('\n')
   const line = lines[lineNum]
   const startOfLine = line.length - line.trimLeft().length
@@ -353,9 +354,11 @@ function absPath(currFile: string, includeFile: string): string {
   }
 
   // TODO add explanation comment
-  if (includeFile.charAt(0) === '/') {
+  if (includeFile.charAt(0) === '/' || (includeFile.charAt(0) === '.' && includeFile.charAt(1) === '.')) {
     const shaderPath = trimPath(currFile).split('/').slice(0, 3).join('/')
     return path.join(conf.shaderpacksPath, shaderPath, includeFile)
-  }
+  } /* else if (includeFile.charAt(0) === '.' && includeFile.charAt(1) === '.') {
+
+  } */
   return path.join(path.dirname(currFile), includeFile)
 }

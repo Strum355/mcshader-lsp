@@ -45,14 +45,14 @@ export function onEvent(document: vsclangproto.TextDocument) {
 
   const uri = formatURI(document.uri)
   if (includeGraph.get(uri).parents.size > 0) {
-    lintBubbleDown(uri, document)
+    lintBubbleDown(uri)
     return
   }
 
   // i think we still need to keep this in case we havent found the root of this files include tree
   const lines = document.getText().split('\n')
   const hasVersion = lines.filter(l => reVersion.test(l)).length > 0
-  if (!ext.has(extname(document.uri)) || !hasVersion) return
+  if (!hasVersion) return
 
   try {
     preprocess(document.getText().split('\n'), uri)
@@ -61,10 +61,10 @@ export function onEvent(document: vsclangproto.TextDocument) {
   }
 }
 
-function lintBubbleDown(uri: string, document: vsclangproto.TextDocument) {
+function lintBubbleDown(uri: string) {
   includeGraph.get(uri).parents.forEach((parent, parentURI) => {
     if (parent.second.parents.size > 0) {
-      lintBubbleDown(parentURI, document)
+      lintBubbleDown(parentURI)
     } else {
       const lines = getDocumentContents(parentURI).split('\n')
       // feel like we could perhaps do better? Hope no one puts #version at the top of their includes..

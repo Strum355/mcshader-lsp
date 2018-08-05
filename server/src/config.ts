@@ -8,6 +8,7 @@ import { execSync } from 'child_process'
 import { serverLog } from './logging'
 import { dirname } from 'path'
 import { DidChangeConfigurationParams } from 'vscode-languageserver/lib/main'
+import { win } from './linter';
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
@@ -87,16 +88,16 @@ async function downloadGlslang() {
       createReadStream(conf.shaderpacksPath + '/glslangValidator.zip')
         .pipe(unzip.Parse())
         .on('entry', entry => {
-          if (entry.path === 'bin/glslangValidator') {
-            entry.pipe(createWriteStream(conf.shaderpacksPath + '/glslangValidator'))
+          if (entry.path === 'bin/glslangValidator' + win ? '.exe' : '') {
+            entry.pipe(createWriteStream(conf.shaderpacksPath + '/glslangValidator' + win ? '.exe' : ''))
             return
           }
           entry.autodrain()
         })
         .on('close', () => {
-          chmodSync(conf.shaderpacksPath + '/glslangValidator', 0o775)
+          chmodSync(conf.shaderpacksPath + '/glslangValidator' + win ? '.exe' : '', 0o775)
           unlinkSync(conf.shaderpacksPath + '/glslangValidator.zip')
-          connection.sendNotification('update-config', conf.shaderpacksPath + '/glslangValidator')
+          connection.sendNotification('update-config', conf.shaderpacksPath + '/glslangValidator' + win ? '.exe' : '')
           connection.window.showInformationMessage('glslangValidator has been downloaded to ' + conf.shaderpacksPath + '/glslangValidator. Your config should be updated automatically.')
           glslangReady = true
         })
