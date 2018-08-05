@@ -82,19 +82,18 @@ const tokens = new Map([
 ])
 
 export function preprocess(lines: string[], docURI: string) {
-  const hasDirective = includeDirective(lines, docURI)
+  const hasDirective = includeDirective(lines)
 
-  const allIncludes = new Set<IncludeObj>()
   const diagnostics = new Map<string, Diagnostic[]>()
 
-  processIncludes(lines, [docURI], allIncludes, diagnostics, hasDirective)
+  processIncludes(lines, [docURI], new Set<IncludeObj>(), diagnostics, hasDirective)
 
-  const includeMap = new Map<string, IncludeObj>(Array.from(allIncludes).map(obj => [obj.path, obj]) as [string, IncludeObj][])
+  //const includeMap = new Map<string, IncludeObj>(Array.from(allIncludes).map(obj => [obj.path, obj]) as [string, IncludeObj][])
 
-  lint(docURI, lines, includeMap, diagnostics, hasDirective)
+  lint(docURI, lines, diagnostics, hasDirective)
 }
 
-function includeDirective(lines: string[], docURI: string): boolean {
+function includeDirective(lines: string[]): boolean {
   if (lines.findIndex(x => reIncludeExt.test(x)) > -1) {
     linterLog.info(() => 'include directive found')
     return true
@@ -259,7 +258,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
 }
 
-function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
+function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
   let out: string = ''
   try {
     execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(docURI))}`, {input: lines.join('\n')})
@@ -274,7 +273,16 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
 
   processErrors(out, docURI, diagnostics, hasDirective)
 
-  daigsArray(diagnostics).forEach(d => {
+  diagnostics.forEach((diags, uri) => {
+    if (diags.length === 0) return
+    linterLog.info(() => `found ${diags.length} error(s) for ${trimPath(uri)}`)
+  })
+
+  const diagsList = daigsArray(diagnostics)
+
+  if (diagsList.filter(d => d.diag.length > 0).length === 0) linterLog.info(() => 'no errors found')
+
+  diagsList.forEach(d => {
     if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
     connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
   })
@@ -293,7 +301,8 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
 
     const diag: Diagnostic = {
       severity: error.type,
-      range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
+      range: calcRange(error.line - 1, fileName),
+      //range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
       message: `Line ${error.line + 1} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
@@ -337,7 +346,7 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
-  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum}`)
+  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}`)
 
   const lines = getDocumentContents(uri).split('\n')
   const line = lines[lineNum]
