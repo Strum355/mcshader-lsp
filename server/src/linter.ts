@@ -1,12 +1,12 @@
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
-import { connection, documents } from './server'
+import { connection } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
-import { readFileSync, existsSync, statSync, Stats } from 'fs'
+import { readFileSync, statSync } from 'fs'
 import { conf } from './config'
-import { postError, formatURI, getDocumentContents, trimPath } from './utils'
+import { formatURI, getDocumentContents, trimPath } from './utils'
 import { platform } from 'os'
-import { Graph, Node } from './graph'
+import { Graph } from './graph'
 import { Comment } from './comment'
 import { linterLog } from './logging'
 
@@ -22,12 +22,11 @@ const errorFilters = [
   /(No code generated)/,
   /(compilation terminated)/,
   /Could not process include directive for header name:/,
-  /extension not supported: GL_EXT_gpu_shader4/,
-  /extra tokens -- expected newline/
+  /global const initializers must be constant/,
 ]
 
 const codeFilters = [
-  /#extension GL_EXT_gpu_shader4 : require/
+  /#extension GL_EXT_gpu_shader4 : require/,
 ]
 
 export const includeGraph = new Graph()
