@@ -17,11 +17,17 @@ const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
 export const win = platform() === 'win32'
 
-const filters = [
+const errorFilters = [
   /stdin/,
   /(No code generated)/,
   /(compilation terminated)/,
-  /Could not process include directive for header name:/
+  /Could not process include directive for header name:/,
+  /extension not supported: GL_EXT_gpu_shader4/,
+  /extra tokens -- expected newline/
+]
+
+const codeFilters = [
+  /#extension GL_EXT_gpu_shader4 : require/
 ]
 
 export const includeGraph = new Graph()
@@ -255,10 +261,12 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   // merge the lines of the file into the current document
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
   // add the closing #line indicating we're re-entering a block a level up
-  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
+  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
 }
 
 function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
+  lines.forEach((l, i) => {if (codeFilters.some(r => r.test(l))) lines[i] = ''})
+
   let out: string = ''
   try {
     execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(docURI))}`, {input: lines.join('\n')})
@@ -301,7 +309,7 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
 
     const diag: Diagnostic = {
       severity: error.type,
-      range: calcRange(error.line - 1, fileName),
+      range: calcRange(error.line, fileName),
       //range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
       message: `Line ${error.line + 1} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
@@ -341,7 +349,7 @@ const daigsArray = (diags: Map<string, Diagnostic[]>) => Array.from(diags).map(k
 
 const filterMatches = (output: string) => output
   .split('\n')
-  .filter(s => s.length > 1 && !filters.some(reg => reg.test(s)))
+  .filter(s => s.length > 1 && !errorFilters.some(reg => reg.test(s)))
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 5)
 
@@ -349,7 +357,7 @@ function calcRange(lineNum: number, uri: string): Range {
   linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}`)
 
   const lines = getDocumentContents(uri).split('\n')
-  const line = lines[lineNum]
+  const line = lines[Math.min(Math.max(lineNum, 0), lines.length - 1)]
   const startOfLine = line.length - line.trimLeft().length
   const endOfLine = line.trimRight().length + 1
   //const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 2
