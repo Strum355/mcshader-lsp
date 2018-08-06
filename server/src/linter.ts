@@ -22,11 +22,6 @@ const errorFilters = [
   /(No code generated)/,
   /(compilation terminated)/,
   /Could not process include directive for header name:/,
-  /global const initializers must be constant/,
-]
-
-const codeFilters = [
-  /#extension GL_EXT_gpu_shader4 : require/,
 ]
 
 export const includeGraph = new Graph()
@@ -154,10 +149,10 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Set<I
 
 function getIncludes(uri: string, lines: string[]) {
   const lineInfo: LinesProcessingInfo = {
-    total: -1,
+    total: 0,
     comment: Comment.State.No,
     parStack: [uri],
-    count: [-1],
+    count: [0],
   }
 
   return lines.reduce<Map<string, IncludeObj>>((out, line, i) => processLine(out, line, lines, i, lineInfo), new Map())
@@ -180,11 +175,12 @@ function processLine(includes: Map<string, IncludeObj>, line: string, lines: str
 
   if (line.startsWith('#line')) {
     const inc = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'))
+    if (inc.length + 1 === line.length) lines[i] = ''
     if (inc === linesInfo.parStack[linesInfo.parStack.length - 2]) {
       linesInfo.count.pop()
       linesInfo.parStack.pop()
     } else {
-      linesInfo.count.push(-1)
+      linesInfo.count.push(0)
       linesInfo.parStack.push(inc)
     }
     return includes
@@ -197,8 +193,8 @@ function processLine(includes: Map<string, IncludeObj>, line: string, lines: str
       formatURI(absPath(linesInfo.parStack[linesInfo.parStack.length - 1], match[1])),
       {
         path: formatURI(absPath(linesInfo.parStack[linesInfo.parStack.length - 1], match[1])),
-        lineNum: linesInfo.count[linesInfo.count.length - 1],
-        lineNumTopLevel: linesInfo.total,
+        lineNum: linesInfo.count[linesInfo.count.length - 1] - 1,
+        lineNumTopLevel: linesInfo.total - 1,
         parent: formatURI(linesInfo.parStack[linesInfo.parStack.length - 1]),
         match
       }
@@ -260,11 +256,11 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   // merge the lines of the file into the current document
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
   // add the closing #line indicating we're re-entering a block a level up
-  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
+  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
 }
 
 function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
-  lines.forEach((l, i) => {if (codeFilters.some(r => r.test(l))) lines[i] = ''})
+  //console.log(lines.join('\n'))
 
   let out: string = ''
   try {
@@ -282,12 +278,16 @@ function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnost
 
   diagnostics.forEach((diags, uri) => {
     if (diags.length === 0) return
-    linterLog.info(() => `found ${diags.length} error(s) for ${trimPath(uri)}`)
+    const errors = diags.filter(d => d.severity === DiagnosticSeverity.Error)
+    const warnings = diags.filter(d => d.severity === DiagnosticSeverity.Warning)
+    linterLog.info(() => `found ${errors.length} error(s) and ${warnings.length} warning(s) for ${trimPath(uri)}`)
   })
 
   const diagsList = daigsArray(diagnostics)
 
   if (diagsList.filter(d => d.diag.length > 0).length === 0) linterLog.info(() => 'no errors found')
+
+  //console.log(JSON.stringify(diagsList.filter(d => d.diag.length > 0), null, 2))
 
   diagsList.forEach(d => {
     if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
@@ -296,6 +296,7 @@ function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnost
 }
 
 function processErrors(out: string, docURI: string, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
+  linterLog.debug(() => out.split('\n').filter(s => s.length > 2).join('\n'))
   filterMatches(out).forEach(match => {
     const error: ErrorMatch = {
       type: errorType(match[1]),
@@ -308,9 +309,9 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
 
     const diag: Diagnostic = {
       severity: error.type,
-      range: calcRange(error.line, fileName),
-      //range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
-      message: `Line ${error.line + 1} ${replaceWords(error.msg)}`,
+      //range: calcRange(error.line - 1, fileName),
+      range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
+      message: `Line ${error.line + ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1)} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
 
@@ -353,7 +354,7 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
-  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}`)
+  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}, index ${lineNum}`)
 
   const lines = getDocumentContents(uri).split('\n')
   const line = lines[Math.min(Math.max(lineNum, 0), lines.length - 1)]
