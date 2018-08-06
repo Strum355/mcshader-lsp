@@ -2,13 +2,13 @@ import { connection, documents, onEvent } from './server'
 import fetch from 'node-fetch'
 import { platform } from 'os'
 import { createWriteStream, chmodSync, createReadStream, unlinkSync, read } from 'fs'
-import * as unzip from 'unzip'
+import * as unzip from 'unzip-stream'
 import { postError } from './utils'
 import { execSync } from 'child_process'
 import { serverLog } from './logging'
 import { dirname } from 'path'
 import { DidChangeConfigurationParams } from 'vscode-languageserver/lib/main'
-import { win } from './linter';
+import { win } from './linter'
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
@@ -84,7 +84,7 @@ async function downloadGlslang() {
     const zip = createWriteStream(conf.shaderpacksPath + '/glslangValidator.zip')
     res.body.pipe(zip)
 
-    zip.on('finish', async () => {
+    zip.on('finish', () => {
       createReadStream(conf.shaderpacksPath + '/glslangValidator.zip')
         .pipe(unzip.Parse())
         .on('entry', entry => {

@@ -12,12 +12,11 @@
 		"node": "*"
 	},
 	"dependencies": {
-		"@types/node-fetch": "^2.1.1",
-		"@types/unzip": "^0.1.1",
-		"node-fetch": "^2.1.2",
+		"@types/node-fetch": "^2.1.2",
+		"node-fetch": "^2.2.0",
 		"typescript-logging": "^0.6.2",
-		"unzip": "^0.1.11",
-		"vscode-languageserver": "^4.1.3"
+		"unzip-stream": "^0.3.0",
+		"vscode-languageserver": "^4.4.0"
 	},
 	"scripts": {
 		"installServer": "installServerIntoExtension ../client ./package.json ./tsconfig.json",
