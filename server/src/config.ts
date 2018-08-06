@@ -7,7 +7,7 @@ import { postError } from './utils'
 import { execSync } from 'child_process'
 import { serverLog } from './logging'
 import { dirname } from 'path'
-import { DidChangeConfigurationParams } from 'vscode-languageserver/lib/main'
+import { DidChangeConfigurationParams } from 'vscode-languageserver'
 import { win } from './linter'
 
 const url = {
@@ -36,8 +36,10 @@ export async function onConfigChange(change: DidChangeConfigurationParams) {
 
   if (conf.shaderpacksPath === '' || conf.shaderpacksPath.replace(dirname(conf.shaderpacksPath), '') !== '/shaderpacks') {
     if (supress) return
+
     serverLog.error(() => 'shaderpack path not set or doesn\'t end in \'shaderpacks\'', null)
     supress = true
+
     const clicked = await connection.window.showErrorMessage(
       'mcglsl.shaderpacksPath is not set or doesn\'t end in \'shaderpacks\'. Please set it in your settings.',
       {title: 'Supress'}
@@ -78,29 +80,47 @@ async function promptDownloadGlslang() {
 async function downloadGlslang() {
   connection.window.showInformationMessage('Downloading. Your settings will be updated automatically and you\'ll be notified when its done.')
 
+  serverLog.info(() => 'downloading glslangValidator...')
+
   const res = await fetch(url[platform()])
+
+  serverLog.info(() => 'glslangValidator downloaded. Extracting...')
 
   try {
     const zip = createWriteStream(conf.shaderpacksPath + '/glslangValidator.zip')
     res.body.pipe(zip)
 
+    const glslang = '/glslangValidator' + (win ? '.exe' : '')
+
     zip.on('finish', () => {
-      createReadStream(conf.shaderpacksPath + '/glslangValidator.zip')
-        .pipe(unzip.Parse())
-        .on('entry', entry => {
-          if (entry.path === 'bin/glslangValidator' + win ? '.exe' : '') {
-            entry.pipe(createWriteStream(conf.shaderpacksPath + '/glslangValidator' + win ? '.exe' : ''))
-            return
-          }
-          entry.autodrain()
-        })
-        .on('close', () => {
-          chmodSync(conf.shaderpacksPath + '/glslangValidator' + win ? '.exe' : '', 0o775)
-          unlinkSync(conf.shaderpacksPath + '/glslangValidator.zip')
-          connection.sendNotification('update-config', conf.shaderpacksPath + '/glslangValidator' + win ? '.exe' : '')
-          connection.window.showInformationMessage('glslangValidator has been downloaded to ' + conf.shaderpacksPath + '/glslangValidator. Your config should be updated automatically.')
-          glslangReady = true
-        })
+      try {
+        createReadStream(conf.shaderpacksPath + '/glslangValidator.zip')
+          .pipe(unzip.Parse())
+          .on('entry', entry => {
+            try {
+              if (entry.path === 'bin' + glslang) {
+                entry.pipe(createWriteStream(conf.shaderpacksPath + glslang))
+                return
+              }
+              entry.autodrain()
+            } catch (e) {
+              postError(e)
+            }
+          })
+          .on('close', () => {
+            try {
+              chmodSync(conf.shaderpacksPath + glslang, 0o775)
+              unlinkSync(conf.shaderpacksPath + '/glslangValidator.zip')
+              connection.sendNotification('update-config', conf.shaderpacksPath + glslang)
+              connection.window.showInformationMessage('glslangValidator has been downloaded to ' + conf.shaderpacksPath + '/glslangValidator. Your config should be updated automatically.')
+              glslangReady = true
+            } catch (e) {
+              postError(e)
+            }
+          })
+      } catch (e) {
+        postError(e)
+      }
     })
   } catch (e) {
     postError(e)

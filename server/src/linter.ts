@@ -1,12 +1,12 @@
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
-import { connection, documents } from './server'
+import { connection } from './server'
 import { execSync } from 'child_process'
 import * as path from 'path'
-import { readFileSync, existsSync, statSync, Stats } from 'fs'
+import { readFileSync, statSync } from 'fs'
 import { conf } from './config'
-import { postError, formatURI, getDocumentContents, trimPath } from './utils'
+import { formatURI, getDocumentContents, trimPath } from './utils'
 import { platform } from 'os'
-import { Graph, Node } from './graph'
+import { Graph } from './graph'
 import { Comment } from './comment'
 import { linterLog } from './logging'
 
@@ -17,11 +17,16 @@ const reIncludeExt = /#extension GL_GOOGLE_include_directive ?: ?require/
 const include = '#extension GL_GOOGLE_include_directive : require'
 export const win = platform() === 'win32'
 
-const filters = [
+const errorFilters = [
   /stdin/,
   /(No code generated)/,
   /(compilation terminated)/,
-  /Could not process include directive for header name:/
+  /Could not process include directive for header name:/,
+  /global const initializers must be constant/,
+]
+
+const codeFilters = [
+  /#extension GL_EXT_gpu_shader4 : require/,
 ]
 
 export const includeGraph = new Graph()
@@ -82,19 +87,18 @@ const tokens = new Map([
 ])
 
 export function preprocess(lines: string[], docURI: string) {
-  const hasDirective = includeDirective(lines, docURI)
+  const hasDirective = includeDirective(lines)
 
-  const allIncludes = new Set<IncludeObj>()
   const diagnostics = new Map<string, Diagnostic[]>()
 
-  processIncludes(lines, [docURI], allIncludes, diagnostics, hasDirective)
+  processIncludes(lines, [docURI], new Set<IncludeObj>(), diagnostics, hasDirective)
 
-  const includeMap = new Map<string, IncludeObj>(Array.from(allIncludes).map(obj => [obj.path, obj]) as [string, IncludeObj][])
+  //const includeMap = new Map<string, IncludeObj>(Array.from(allIncludes).map(obj => [obj.path, obj]) as [string, IncludeObj][])
 
-  lint(docURI, lines, includeMap, diagnostics, hasDirective)
+  lint(docURI, lines, diagnostics, hasDirective)
 }
 
-function includeDirective(lines: string[], docURI: string): boolean {
+function includeDirective(lines: string[]): boolean {
   if (lines.findIndex(x => reIncludeExt.test(x)) > -1) {
     linterLog.info(() => 'include directive found')
     return true
@@ -256,10 +260,12 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
   // merge the lines of the file into the current document
   lines.splice(inc.lineNumTopLevel + 1, 0, ...dataLines)
   // add the closing #line indicating we're re-entering a block a level up
-  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum + 1} "${inc.parent}"`)
+  lines.splice(inc.lineNumTopLevel + 1 + dataLines.length, 0, `#line ${inc.lineNum} "${inc.parent}"`)
 }
 
-function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
+function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
+  lines.forEach((l, i) => {if (codeFilters.some(r => r.test(l))) lines[i] = ''})
+
   let out: string = ''
   try {
     execSync(`${conf.glslangPath} --stdin -S ${ext.get(path.extname(docURI))}`, {input: lines.join('\n')})
@@ -274,7 +280,16 @@ function lint(docURI: string, lines: string[], includes: Map<string, IncludeObj>
 
   processErrors(out, docURI, diagnostics, hasDirective)
 
-  daigsArray(diagnostics).forEach(d => {
+  diagnostics.forEach((diags, uri) => {
+    if (diags.length === 0) return
+    linterLog.info(() => `found ${diags.length} error(s) for ${trimPath(uri)}`)
+  })
+
+  const diagsList = daigsArray(diagnostics)
+
+  if (diagsList.filter(d => d.diag.length > 0).length === 0) linterLog.info(() => 'no errors found')
+
+  diagsList.forEach(d => {
     if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
     connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
   })
@@ -293,7 +308,8 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
 
     const diag: Diagnostic = {
       severity: error.type,
-      range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
+      range: calcRange(error.line, fileName),
+      //range: calcRange(error.line - ((!hasDirective && includeGraph.get(fileName).parents.size === 0) ? 2 : 1), fileName),
       message: `Line ${error.line + 1} ${replaceWords(error.msg)}`,
       source: 'mc-glsl'
     }
@@ -332,15 +348,15 @@ const daigsArray = (diags: Map<string, Diagnostic[]>) => Array.from(diags).map(k
 
 const filterMatches = (output: string) => output
   .split('\n')
-  .filter(s => s.length > 1 && !filters.some(reg => reg.test(s)))
+  .filter(s => s.length > 1 && !errorFilters.some(reg => reg.test(s)))
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string): Range {
-  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum}`)
+  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}`)
 
   const lines = getDocumentContents(uri).split('\n')
-  const line = lines[lineNum]
+  const line = lines[Math.min(Math.max(lineNum, 0), lines.length - 1)]
   const startOfLine = line.length - line.trimLeft().length
   const endOfLine = line.trimRight().length + 1
   //const endOfLine = line.slice(0, line.indexOf('//')).trimRight().length + 2
