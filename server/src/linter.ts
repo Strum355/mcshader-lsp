@@ -322,7 +322,6 @@ function processErrors(out: string, docURI: string, diagnostics: Map<string, Dia
   })
 }
 
-//errorFile: string, type: DiagnosticSeverity, line: number, msg: string
 function propogateDiagnostic(error: ErrorMatch, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean, parentURI?: string) {
   includeGraph.get(parentURI || error.file).parents.forEach((pair, parURI) => {
     const diag: Diagnostic = {
