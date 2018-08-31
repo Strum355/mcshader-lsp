@@ -1,11 +1,15 @@
 # Minecraft GLSL Shaders
 ## vscode-mc-shader
 
-<!-- [![CI](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)
-[![Issues](https://img.shields.io/github/issues-raw/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader/issues)
+[![Marketplace Version](https://vsmarketplacebadge.apphb.com/version/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader) [![Installs](https://vsmarketplacebadge.apphb.com/installs/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader)
 [![license](https://img.shields.io/github/license/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader)
+[![Issues](https://img.shields.io/github/issues-raw/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader/issues)
 [![Maintainability](https://api.codeclimate.com/v1/badges/c2c813cb0a42a8aad483/maintainability)](https://codeclimate.com/github/Strum355/vscode-mc-shader/maintainability)
-[![Waffle.io - Columns and their card count](https://badge.waffle.io/Strum355/vscode-mc-shader.svg?columns=all)](https://waffle.io/Strum355/vscode-mc-shader) -->
+[![Waffle.io - Columns and their card count](https://badge.waffle.io/Strum355/vscode-mc-shader.png?columns=all)](https://waffle.io/Strum355/vscode-mc-shader)
+
+<!-- It doesnt seem to like these :<
+[![CI](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)
+ -->
 
 VSCode-mc-shader is a [Visual Studio Code](https://code.visualstudio.com/) extension for developing Minecraft GLSL Shaders for [Optifine](http://optifine.net). It currently provides linting and syntax highlighting (by stef-levesque/vscode-shader dependency).
 
