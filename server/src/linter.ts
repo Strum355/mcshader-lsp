@@ -260,7 +260,7 @@ function mergeInclude(inc: IncludeObj, lines: string[], incStack: string[], diag
 }
 
 function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
-  //console.log(lines.join('\n'))
+  console.log(lines.join('\n'))
 
   let out: string = ''
   try {
@@ -352,7 +352,7 @@ const filterMatches = (output: string) => output
   .map(s => s.match(reDiag))
   .filter(match => match && match.length === 5)
 
-function calcRange(lineNum: number, uri: string): Range {
+function calcRange(lineNum: number, uri: string) {
   linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}, index ${lineNum}`)
 
   const lines = getDocumentContents(uri).split('\n')
@@ -363,7 +363,7 @@ function calcRange(lineNum: number, uri: string): Range {
   return Range.create(lineNum, startOfLine, lineNum, endOfLine)
 }
 
-function absPath(currFile: string, includeFile: string): string {
+function absPath(currFile: string, includeFile: string) {
   if (!currFile.startsWith(conf.shaderpacksPath) || conf.shaderpacksPath === '') {
     connection.window.showErrorMessage(`Shaderpacks path may not be correct. Current file is in '${currFile}' but the path is set to '${conf.shaderpacksPath}'`)
     return ''

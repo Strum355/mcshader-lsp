@@ -71,7 +71,7 @@
         "fix": "tslint -c tslint.json --fix server/src/**/*.ts && tslint -c tslint.json --fix client/src/**/*.ts"
     },
     "devDependencies": {
-        "@types/node": "^10.5.6",
+        "@types/node": "^10.9.2",
         "concurrently": "^3.6.1",
         "tslint": "^5.11.0",
         "typescript": "^3.0.1"
