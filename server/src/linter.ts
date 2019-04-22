@@ -1,14 +1,14 @@
-import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
-import { connection } from './server'
-import { execSync } from 'child_process'
-import * as path from 'path'
-import { readFileSync, statSync } from 'fs'
-import { conf } from './config'
-import { formatURI, getDocumentContents, trimPath } from './utils'
-import { platform } from 'os'
-import { Graph } from './graph'
-import { Comment } from './comment'
-import { linterLog } from './logging'
+import { execSync } from 'child_process';
+import { readFileSync, statSync } from 'fs';
+import { platform } from 'os';
+import * as path from 'path';
+import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver';
+import { Comment } from './comment';
+import { conf } from './config';
+import { Graph } from './graph';
+import { linterLog } from './logging';
+import { connection } from './server';
+import { formatURI, getDocumentContents, trimPath } from './utils';
 
 const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
 const reVersion = /#version [\d]{3}/
@@ -290,7 +290,10 @@ function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnost
   //console.log(JSON.stringify(diagsList.filter(d => d.diag.length > 0), null, 2))
 
   diagsList.forEach(d => {
-    if (win) d.uri = d.uri.replace('file://C:', 'file:///c%3A')
+    if (win) {
+      const drive = d.uri[7]
+      d.uri = d.uri.replace(`file://${drive}:`, `file:///${drive.toLowerCase()}%3A`)
+    }
     connection.sendDiagnostics({uri: d.uri, diagnostics: d.diag})
   })
 }
