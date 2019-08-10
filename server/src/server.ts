@@ -1,24 +1,29 @@
+import { dirname } from 'path'
 import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
-import { preprocess, ext, includeGraph } from './linter'
-import { extname, dirname } from 'path'
+import { conf, glslangReady, onConfigChange } from './config'
+import { getDocumentLinks } from './linksProvider'
+import { includeGraph, preprocess } from './linter'
+import { formatURI, getDocumentContents, postError } from './utils'
 
 const reVersion = /#version [\d]{3}/
 
-export let connection: vsclang.IConnection
-connection = vsclang.createConnection(new vsclang.IPCMessageReader(process), new vsclang.IPCMessageWriter(process))
+export let connection = vsclang.createConnection(vsclang.ProposedFeatures.all)
 
-import { onConfigChange, conf, glslangReady } from './config'
-import { formatURI, postError, getDocumentContents } from './utils'
+console.log = connection.console.log.bind(connection.console)
+console.error = connection.console.error.bind(connection.console)
 
 export const documents = new vsclang.TextDocuments()
 documents.listen(connection)
 
-connection.onInitialize((params): vsclang.InitializeResult => (
+connection.onInitialize((params) => (
   {
     capabilities: {
       textDocumentSync: documents.syncKind,
+      documentLinkProvider: {
+        resolveProvider: true,
+      },
       completionProvider: {
         resolveProvider: true
       },
@@ -78,6 +83,8 @@ function lintBubbleDown(uri: string) {
     }
   })
 }
+
+connection.onDocumentLinks((params: vsclang.DocumentLinkParams)  => getDocumentLinks(params.textDocument.uri))
 
 connection.onDidChangeConfiguration(onConfigChange)
 

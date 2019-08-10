@@ -1,6 +1,6 @@
+import * as path from 'path'
 import * as vscode from 'vscode'
 import * as vscodeLang from 'vscode-languageclient'
-import * as path from 'path'
 
 export async function activate(context: vscode.ExtensionContext) {
   const serverModule = context.asAbsolutePath(path.join('server', 'out', 'server.js'))

@@ -12,16 +12,13 @@
 		"node": "*"
 	},
 	"dependencies": {
-		"@types/node-fetch": "^2.1.2",
-		"node-fetch": "^2.2.0",
-		"typescript-logging": "^0.6.2",
+		"@types/node-fetch": "^2.5.0",
+		"node-fetch": "^2.6.0",
+		"typescript-logging": "^0.6.3",
 		"unzip-stream": "^0.3.0",
 		"vscode-languageserver": "^4.4.2"
 	},
 	"scripts": {
-		"installServer": "installServerIntoExtension ../client ./package.json ./tsconfig.json",
-		"compile": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -p .",
-		"watch": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -w -p .",
 		"lint": "tslint -c ../tslint.json 'src/**/*.ts'"
 	}
 }

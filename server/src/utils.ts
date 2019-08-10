@@ -1,7 +1,7 @@
-import { readFileSync } from 'fs';
-import { conf } from './config';
-import { serverLog } from './logging';
-import { connection, documents } from './server';
+import { readFileSync } from 'fs'
+import { conf } from './config'
+import { serverLog } from './logging'
+import { connection, documents } from './server'
 
 export function postError(e: Error) {
     connection.window.showErrorMessage(e.message)

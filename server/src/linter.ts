@@ -1,14 +1,14 @@
-import { execSync } from 'child_process';
-import { readFileSync, statSync } from 'fs';
-import { platform } from 'os';
-import * as path from 'path';
-import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver';
-import { Comment } from './comment';
-import { conf } from './config';
-import { Graph } from './graph';
-import { linterLog } from './logging';
-import { connection } from './server';
-import { formatURI, getDocumentContents, trimPath } from './utils';
+import { execSync } from 'child_process'
+import { readFileSync, statSync } from 'fs'
+import { platform } from 'os'
+import * as path from 'path'
+import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver'
+import { Comment } from './comment'
+import { conf } from './config'
+import { Graph } from './graph'
+import { linterLog } from './logging'
+import { connection } from './server'
+import { formatURI, getDocumentContents, trimPath } from './utils'
 
 const reDiag = /^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?/
 const reVersion = /#version [\d]{3}/
