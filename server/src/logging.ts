@@ -2,7 +2,10 @@ import { Category, CategoryConfiguration, CategoryServiceFactory, LogLevel } fro
 
 CategoryServiceFactory.setDefaultConfiguration(new CategoryConfiguration(LogLevel.Debug))
 
+
 export const linterLog = new Category('linter')
 export const completionLog = new Category('completion')
 export const serverLog = new Category('server')
 export const linkLog = new Category('links')
+export const glslProviderLog = new Category('glslangProvider')
+export const uriLog = new Category('uri')

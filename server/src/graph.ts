@@ -38,4 +38,24 @@ export class Graph {
     }
     this.nodes.set(parent, par)
   }
+
+  public toString(): string {
+    let result = ''
+    let start = true
+    this.nodes.forEach((node, key) => {
+      if (!start) {
+        key += '\n'
+        start = false
+      }
+      result += `${key}:\n\tchildren: `
+      node.children.forEach((_, key) => {
+        result += key + ' '
+      })
+      result + '\n\tparents: '
+      node.parents.forEach((_, key) => {
+        result += key + ' '
+      })
+    })
+    return result
+  }
 }

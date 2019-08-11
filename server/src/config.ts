@@ -1,14 +1,8 @@
-import { connection, documents, onEvent } from './server'
-import fetch from 'node-fetch'
-import { platform } from 'os'
-import { createWriteStream, chmodSync, createReadStream, unlinkSync, read } from 'fs'
-import * as unzip from 'unzip-stream'
-import { postError } from './utils'
-import { execSync } from 'child_process'
-import { serverLog } from './logging'
+import { connection } from './server'
+import { serverLog as log } from './logging'
 import { dirname } from 'path'
 import { DidChangeConfigurationParams } from 'vscode-languageserver'
-import { win } from './linter'
+import { GLSLangProvider } from './glslangValidator'
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
@@ -18,26 +12,75 @@ const url = {
 
 export let glslangReady = false
 
-export interface Config {
-  readonly shaderpacksPath: string
-  readonly glslangPath: string
+export class ConfigProvider {
+  private _config: Config
+  private _onChange: (settings: Config) => void
+  private _glslang: GLSLangProvider
+
+  public constructor(func?: (confProv: ConfigProvider, settings: Config) => void) {
+    this._config = {
+      shaderpacksPath: '',
+      glslangValidatorPath: ''
+    }
+
+    if (!func) {
+      this._onChange = (settings: Config) => {
+        onConfigChange(this, settings)
+      }
+    } else {
+      this._onChange = (settings: Config) => {
+        func(this, settings)
+      }
+    }
+  }
+
+  public set config(c: Config) {
+    Object.assign(this._config, c)
+  }
+
+  public get config(): Config {
+    return this._config
+  }
+
+  public set onChange(func: (confProv: ConfigProvider, settings: Config) => void) {
+    this._onChange = (settings: Config) => {
+      func(this, settings)
+    }
+  }
+
+  public onConfigChange = (change: DidChangeConfigurationParams) => {
+    this._onChange(change.settings.mcglsl as Config)
+  }
+
+  public set glslang(glslang: GLSLangProvider) {
+    this._glslang = glslang
+  }
+
+  public get glslang(): GLSLangProvider {
+    return this._glslang
+  }
 }
 
-export let conf: Config = {shaderpacksPath: '', glslangPath: ''}
+interface Config {
+  shaderpacksPath: string
+  glslangValidatorPath: string
+}
 
 let supress = false
 
-export async function onConfigChange(change: DidChangeConfigurationParams) {
-  const temp = change.settings.mcglsl as Config
-  if (temp.shaderpacksPath === conf.shaderpacksPath && temp.glslangPath === conf.glslangPath) return
-  conf = {shaderpacksPath: temp['shaderpacksPath'].replace(/\\/g, '/'), glslangPath: temp['glslangValidatorPath'].replace(/\\/g, '/')}
-  serverLog.debug(() => 'new config: ' + JSON.stringify(temp))
-  serverLog.debug(() => 'old config: ' + JSON.stringify(conf))
+async function onConfigChange(confProv: ConfigProvider, old: Config) {
+  if (!confProv.config == undefined && 
+    old.shaderpacksPath === confProv.config.shaderpacksPath && 
+    old.glslangValidatorPath === confProv.config.glslangValidatorPath) return
 
-  if (conf.shaderpacksPath === '' || conf.shaderpacksPath.replace(dirname(conf.shaderpacksPath), '') !== '/shaderpacks') {
+  confProv.config = {shaderpacksPath: old['shaderpacksPath'], glslangValidatorPath: old['glslangValidatorPath']}
+  log.debug(() => 'new config: ' + JSON.stringify(old))
+  log.debug(() => 'old config: ' + JSON.stringify(confProv.config))
+
+  if (confProv.config.shaderpacksPath === '' || confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '') !== '/shaderpacks') {
     if (supress) return
 
-    serverLog.error(() => 'shaderpack path not set or doesn\'t end in \'shaderpacks\'', null)
+    log.error(() => `shaderpack path '${confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '')}' not set or doesn't end in 'shaderpacks'`, null)
     supress = true
 
     const clicked = await connection.window.showErrorMessage(
@@ -48,81 +91,9 @@ export async function onConfigChange(change: DidChangeConfigurationParams) {
     return
   }
 
-  try {
-    if (!execSync(conf.glslangPath).toString().startsWith('Usage')) {
-      documents.all().forEach(onEvent)
-      glslangReady = true
-    } else {
-      promptDownloadGlslang()
-    }
-  } catch (e) {
-    if ((e.stdout.toString() as string).startsWith('Usage')) {
-      documents.all().forEach(onEvent)
-      glslangReady = true
-    } else {
-      promptDownloadGlslang()
-    }
-  }
-}
-
-async function promptDownloadGlslang() {
-  const chosen = await connection.window.showErrorMessage(
-    `[mc-glsl] glslangValidator not found at: '${conf.glslangPath}'.`,
-    {title: 'Download'},
-    {title: 'Cancel'}
-  )
-
-  if (!chosen || chosen.title !== 'Download') return
-
-  downloadGlslang()
-}
-
-async function downloadGlslang() {
-  connection.window.showInformationMessage('Downloading. Your settings will be updated automatically and you\'ll be notified when its done.')
-
-  serverLog.info(() => 'downloading glslangValidator...')
-
-  const res = await fetch(url[platform()])
-
-  serverLog.info(() => 'glslangValidator downloaded. Extracting...')
-
-  try {
-    const zip = createWriteStream(conf.shaderpacksPath + '/glslangValidator.zip')
-    res.body.pipe(zip)
-
-    const glslang = '/glslangValidator' + (win ? '.exe' : '')
-
-    zip.on('finish', () => {
-      try {
-        createReadStream(conf.shaderpacksPath + '/glslangValidator.zip')
-          .pipe(unzip.Parse())
-          .on('entry', entry => {
-            try {
-              if (entry.path === 'bin' + glslang) {
-                entry.pipe(createWriteStream(conf.shaderpacksPath + glslang))
-                return
-              }
-              entry.autodrain()
-            } catch (e) {
-              postError(e)
-            }
-          })
-          .on('close', () => {
-            try {
-              chmodSync(conf.shaderpacksPath + glslang, 0o775)
-              unlinkSync(conf.shaderpacksPath + '/glslangValidator.zip')
-              connection.sendNotification('update-config', conf.shaderpacksPath + glslang)
-              connection.window.showInformationMessage('glslangValidator has been downloaded to ' + conf.shaderpacksPath + '/glslangValidator. Your config should be updated automatically.')
-              glslangReady = true
-            } catch (e) {
-              postError(e)
-            }
-          })
-      } catch (e) {
-        postError(e)
-      }
-    })
-  } catch (e) {
-    postError(e)
+  if (!confProv.glslang.testExecutable()) {
+    await confProv.glslang.promptDownload()
+  } else {
+    glslangReady = true
   }
 }
