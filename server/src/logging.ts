@@ -1,11 +1,43 @@
-import { Category, CategoryConfiguration, CategoryServiceFactory, LogLevel } from 'typescript-logging'
+import { Logger } from 'ts-log-debug'
 
-CategoryServiceFactory.setDefaultConfiguration(new CategoryConfiguration(LogLevel.Debug))
+export const glslProviderLog = new Logger('glslangProvider')
+glslProviderLog.appenders.set('std-log', {
+  type: 'stdout',
+  layout: {type: 'basic'},
+  levels: ['info', 'warn', 'error']
+})
 
+export const linterLog = new Logger('glslangProvider')
+linterLog.appenders.set('std-log', {
+  type: 'stdout',
+  layout: {type: 'basic'},
+  levels: ['info', 'warn', 'error']
+})
 
-export const linterLog = new Category('linter')
-export const completionLog = new Category('completion')
-export const serverLog = new Category('server')
-export const linkLog = new Category('links')
-export const glslProviderLog = new Category('glslangProvider')
-export const uriLog = new Category('uri')
+export const completionLog = new Logger('glslangProvider')
+completionLog.appenders.set('std-log', {
+  type: 'stdout',
+  layout: {type: 'basic'},
+  levels: ['info', 'warn', 'error']
+})
+
+export const serverLog = new Logger('glslangProvider')
+serverLog.appenders.set('std-log', {
+  type: 'stdout',
+  layout: {type: 'basic'},
+  levels: ['info', 'warn', 'error']
+})
+
+export const linkLog = new Logger('glslangProvider')
+linkLog.appenders.set('std-log', {
+  type: 'stdout',
+  layout: {type: 'basic'},
+  levels: ['info', 'warn', 'error']
+})
+
+export const uriLog = new Logger('glslangProvider')
+uriLog.appenders.set('std-log', {
+  type: 'stdout',
+  layout: {type: 'basic'},
+  levels: ['info', 'warn', 'error']
+})

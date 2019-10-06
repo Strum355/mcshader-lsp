@@ -1,7 +1,4 @@
-import { Category } from 'typescript-logging'
-import { platform } from 'os'
-import { uriLog as log } from './logging';
-
+import { uriLog as log } from './logging'
 
 export function formatURI(uri: string): string {
     const drive = uri[7]
@@ -11,13 +8,11 @@ export function formatURI(uri: string): string {
 
 export class URI {
     public static fromFileURI(uri: string): string {
-      log.debug(() => `normalizing ${uri}`)
+      log.debug(`normalizing ${uri}`)
       if (URI.isNormalized(uri)) {
-        log.debug(() => `already normalized ${uri}`)
+        log.debug(`already normalized ${uri}`)
         return uri
       }
-
-
 
       return ''
     }
@@ -37,7 +32,7 @@ export class URI {
         fileURI = fileURI.replace('file://', 'file:///')
       }
 
-      log.debug(() => `formatted '${uri}' to '${fileURI}'`)
+      log.debug(`formatted '${uri}' to '${fileURI}'`)
       return fileURI
     }
 
@@ -49,4 +44,3 @@ export class URI {
       return true
     }
 }
-  

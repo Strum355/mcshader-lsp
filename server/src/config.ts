@@ -1,8 +1,8 @@
-import { connection } from './server'
-import { serverLog as log } from './logging'
 import { dirname } from 'path'
 import { DidChangeConfigurationParams } from 'vscode-languageserver'
 import { GLSLangProvider } from './glslangValidator'
+import { serverLog as log } from './logging'
+import { connection } from './server'
 
 const url = {
   'win32': 'https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-windows-x64-Release.zip',
@@ -69,18 +69,18 @@ interface Config {
 let supress = false
 
 async function onConfigChange(confProv: ConfigProvider, old: Config) {
-  if (!confProv.config == undefined && 
-    old.shaderpacksPath === confProv.config.shaderpacksPath && 
+  if (!confProv.config == undefined &&
+    old.shaderpacksPath === confProv.config.shaderpacksPath &&
     old.glslangValidatorPath === confProv.config.glslangValidatorPath) return
 
   confProv.config = {shaderpacksPath: old['shaderpacksPath'], glslangValidatorPath: old['glslangValidatorPath']}
-  log.debug(() => 'new config: ' + JSON.stringify(old))
-  log.debug(() => 'old config: ' + JSON.stringify(confProv.config))
+  log.debug('new config: ' + JSON.stringify(old))
+  log.debug('old config: ' + JSON.stringify(confProv.config))
 
   if (confProv.config.shaderpacksPath === '' || confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '') !== '/shaderpacks') {
     if (supress) return
 
-    log.error(() => `shaderpack path '${confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '')}' not set or doesn't end in 'shaderpacks'`, null)
+    log.error(`shaderpack path '${confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '')}' not set or doesn't end in 'shaderpacks'`)
     supress = true
 
     const clicked = await connection.window.showErrorMessage(

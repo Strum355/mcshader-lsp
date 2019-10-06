@@ -88,23 +88,23 @@ export function preprocess(lines: string[], docURI: string) {
 
 function includeDirective(lines: string[]): boolean {
   if (lines.findIndex(x => reIncludeExt.test(x)) > -1) {
-    linterLog.info(() => 'include directive found')
+    linterlog.info('include directive found')
     return true
   }
 
   let hasDirective = true
-  linterLog.info(() => 'include directive not found')
+  linterlog.info('include directive not found')
   hasDirective = false
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (reVersion.test(line)) {
-      linterLog.info(() => 'found version on line ' + (i + 1))
+      linterlog.info('found version on line ' + (i + 1))
       lines.splice(i + 1, 0, include)
       break
     }
 
     /* if (i === lines.length - 1) {
-      linterLog.warn(() => `no version found for ${docURI}. inserting at top`)
+      linterlog.warn(`no version found for ${docURI}. inserting at top`)
       lines.splice(0, 0, include)
       break
     } */
@@ -129,7 +129,7 @@ function processIncludes(lines: string[], incStack: string[], allIncludes: Set<I
   const includeList = Array.from(includes.values())
 
   if (includeList.length > 0) {
-    linterLog.info(() => `${trimPath(parent)} has ${includeList.length} include(s). [${includeList.map(i => '\n\t\t' + trimPath(i.path))}\n\t]`)
+    linterlog.info(`${trimPath(parent)} has ${includeList.length} include(s). [${includeList.map(i => '\n\t\t' + trimPath(i.path))}\n\t]`)
 
     includeList.reverse().forEach(inc => {
       buildIncludeGraph(inc)
@@ -156,7 +156,7 @@ function processLine(includes: Map<string, IncludeObj>, line: string, lines: str
   const updated =  Comment.update(line, linesInfo.comment)
   linesInfo.comment = updated[0]
 
-  if (updated[1] !== line) linterLog.debug(() => `change:\n\t'${line}'\n\t'${updated[1]}'`)
+  if (updated[1] !== line) linterlog.debug(`change:\n\t'${line}'\n\t'${updated[1]}'`)
 
   line = updated[1]
   lines[i] = line
@@ -273,12 +273,12 @@ function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnost
     if (diags.length === 0) return
     const errors = diags.filter(d => d.severity === DiagnosticSeverity.Error)
     const warnings = diags.filter(d => d.severity === DiagnosticSeverity.Warning)
-    linterLog.info(() => `found ${errors.length} error(s) and ${warnings.length} warning(s) for ${trimPath(uri)}`)
+    linterlog.info(`found ${errors.length} error(s) and ${warnings.length} warning(s) for ${trimPath(uri)}`)
   })
 
   const diagsList = daigsArray(diagnostics)
 
-  if (diagsList.filter(d => d.diag.length > 0).length === 0) linterLog.info(() => 'no errors found')
+  if (diagsList.filter(d => d.diag.length > 0).length === 0) linterlog.info('no errors found')
 
   //console.log(JSON.stringify(diagsList.filter(d => d.diag.length > 0), null, 2))
 
@@ -292,7 +292,7 @@ function lint(docURI: string, lines: string[], diagnostics: Map<string, Diagnost
 }
 
 function processErrors(out: string, docURI: string, diagnostics: Map<string, Diagnostic[]>, hasDirective: boolean) {
-  linterLog.debug(() => out.split('\n').filter(s => s.length > 2).join('\n'))
+  linterlog.debug(out.split('\n').filter(s => s.length > 2).join('\n'))
   filterMatches(out).forEach(match => {
     const error: ErrorMatch = {
       type: errorType(match[1]),
@@ -349,7 +349,7 @@ const filterMatches = (output: string) => output
   .filter(match => match && match.length === 5)
 
 function calcRange(lineNum: number, uri: string) {
-  linterLog.debug(() => `calculating range for ${trimPath(uri)} at L${lineNum + 1}, index ${lineNum}`)
+  linterlog.debug(`calculating range for ${trimPath(uri)} at L${lineNum + 1}, index ${lineNum}`)
 
   const lines = getDocumentContents(uri).split('\n')
   const line = lines[Math.min(Math.max(lineNum, 0), lines.length - 1)]

@@ -3,7 +3,7 @@ import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
 import { ConfigProvider } from './config'
 import { getDocumentLinks } from './linksProvider'
-import { GLSLangProvider } from './glslangValidator';
+import { GLSLangProvider } from './glslangValidator'
 
 const reVersion = /#version [\d]{3}/
 

@@ -1,13 +1,10 @@
-import { readFileSync, FSWatcher, ReadStream } from 'fs'
-import * as urL from 'url'
+import { readFileSync } from 'fs'
 import { serverLog as log } from './logging'
 import { connection, documents } from './server'
-import { url } from 'inspector';
-import { Readable } from 'stream';
 
 export function postError(e: Error) {
     connection.window.showErrorMessage(e.message)
-    log.error(() => e.message, null)
+    log.error(e.message)
 }
 
 export function formatURI(uri: string): string {

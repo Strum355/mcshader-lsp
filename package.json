@@ -72,5 +72,8 @@
         "concurrently": "^3.6.1",
         "tslint": "^5.18.0",
         "typescript": "^3.5.3"
+    },
+    "dependencies": {
+        "ts-log-debug": "^5.1.1"
     }
 }
