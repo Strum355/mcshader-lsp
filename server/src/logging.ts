@@ -6,7 +6,7 @@ const defaultOpts = {
   levels: ['debug', 'info', 'warn', 'error']
 }
 
-export const glslProviderLog = new Logger('glslangProvider')
+export const glslProviderLog = new Logger('glslang')
 glslProviderLog.appenders.set('std-log', defaultOpts)
 
 export const linterLog = new Logger('linter')

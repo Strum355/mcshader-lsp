@@ -2,8 +2,9 @@ import * as vsclang from 'vscode-languageserver'
 import * as vsclangproto from 'vscode-languageserver-protocol'
 import { completions } from './completionProvider'
 import { ConfigProvider } from './config'
-import { getDocumentLinks } from './linksProvider'
 import { GLSLangProvider } from './glslangValidator'
+import { getDocumentLinks } from './linksProvider'
+import { Linter } from './linter'
 
 const reVersion = /#version [\d]{3}/
 
@@ -49,8 +50,11 @@ documents.onDidClose((event) => {
 
 export function lint(document: vsclangproto.TextDocument) {
   if (!glslangValidator.testExecutable()) {
-
+    glslangValidator.promptDownload()
+    return
   }
+
+  Linter.do(document, configProvider)
   /*
   let sanitizedPath = conf.shaderpacksPath.replace(dirname(conf.shaderpacksPath), '')
   if (sanitizedPath.startsWith('/shaderpacks') || glslangReady) return

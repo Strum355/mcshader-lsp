@@ -1,4 +1,4 @@
-import { uriLog as log } from './logging'
+import { uriLog as log, uriLog } from './logging'
 
 export function formatURI(uri: string): string {
     const drive = uri[7]
@@ -7,40 +7,45 @@ export function formatURI(uri: string): string {
   }
 
 export class URI {
-    public static fromFileURI(uri: string): string {
-      log.debug(`normalizing ${uri}`)
-      if (URI.isNormalized(uri)) {
-        log.debug(`already normalized ${uri}`)
-        return uri
+  public static trimShaderpacksPath(uri: string, path: string): string {
+    uriLog.debug(`replacing ${path} in ${uri}`)
+    return uri.replace(path, '')
+  }
+
+  public static fromFileURI(uri: string): string {
+    log.debug(`normalizing ${uri}`)
+    if (URI.isNormalized(uri)) {
+      log.debug(`already normalized ${uri}`)
+      return uri
+    }
+    // TODO windows
+    return uri.replace(/^file:\/\//, '').replace(/\\/, '/')
+  }
+
+  public static toFileURI(uri: string): string {
+    let fileURI = uri
+
+    if (!fileURI.startsWith('file:///')) {
+      if (/^\\[a-zA-Z]/.test(fileURI)) {
+        fileURI = 'file:///' + fileURI.substr(1)
+      } else if (fileURI.startsWith('/')) {
+        fileURI = 'file://' + fileURI
       }
-      // TODO windows
-      return uri.replace(/^file:\/\//, '').replace(/\\/, '/')
+    } else if (fileURI.startsWith('file://\\')) {
+      fileURI = fileURI.replace('file://\\', 'file:///')
+    } else if (/^file:\/\/[a-zA-Z]/.test(fileURI)) {
+      fileURI = fileURI.replace('file://', 'file:///')
     }
 
-    public static toFileURI(uri: string): string {
-      let fileURI = uri
+    log.debug(`formatted '${uri}' to '${fileURI}'`)
+    return fileURI
+  }
 
-      if (!fileURI.startsWith('file:///')) {
-        if (/^\\[a-zA-Z]/.test(fileURI)) {
-          fileURI = 'file:///' + fileURI.substr(1)
-        } else if (fileURI.startsWith('/')) {
-          fileURI = 'file://' + fileURI
-        }
-      } else if (fileURI.startsWith('file://\\')) {
-        fileURI = fileURI.replace('file://\\', 'file:///')
-      } else if (/^file:\/\/[a-zA-Z]/.test(fileURI)) {
-        fileURI = fileURI.replace('file://', 'file:///')
-      }
-
-      log.debug(`formatted '${uri}' to '${fileURI}'`)
-      return fileURI
+  private static isNormalized(uri: string): boolean {
+    if (uri.startsWith('file://') || uri.includes('%3A')) {
+      return false
     }
 
-    private static isNormalized(uri: string): boolean {
-      if (uri.startsWith('file://') || uri.includes('%3A')) {
-        return false
-      }
-
-      return true
-    }
+    return true
+  }
 }
