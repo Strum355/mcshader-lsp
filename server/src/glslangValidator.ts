@@ -48,6 +48,7 @@ export class GLSLangProvider {
 
       const response = await fetch(url[platform()])
       log.warn('glslangValidator download response status: ' + response.status )
+
       const zip = new unzip(await response.buffer())
 
       const bin = zip.readFile('bin' + glslangBin)
@@ -55,9 +56,7 @@ export class GLSLangProvider {
       writeFileSync(glslangPath, bin, {encoding: null, mode: 0o755})
 
       if (!this.testExecutable()) {
-        connection.window.showErrorMessage(
-          'Unexpected error occurred. Please try again'
-        )
+        connection.window.showErrorMessage('Unexpected error occurred. Please try again')
         return
       }
 
@@ -68,9 +67,7 @@ export class GLSLangProvider {
       connection.sendNotification('update-config', glslangPath)
     } catch (e) {
       log.error(`failed downloading glslangValidator ${e}`)
-      connection.window.showErrorMessage(
-        `Failed to install glslangValidator: ${e}`
-      )
+      connection.window.showErrorMessage(`Failed to install glslangValidator: ${e}`)
     }
   }
 
@@ -84,7 +81,7 @@ export class GLSLangProvider {
       stdout = (e.stdout.toString() as string)
     }
 
-    log.warn('glslangValidator first line stdout: "' + stdout.split('\n')[0] + '"')
+    log.debug('glslangValidator first line stdout: "' + stdout.split('\n')[0] + '"')
     const success = stdout.startsWith('Usage')
 
     if (success) {

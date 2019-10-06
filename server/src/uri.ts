@@ -13,8 +13,8 @@ export class URI {
         log.debug(`already normalized ${uri}`)
         return uri
       }
-
-      return ''
+      // TODO windows
+      return uri.replace(/^file:\/\//, '').replace(/\\/, '/')
     }
 
     public static toFileURI(uri: string): string {

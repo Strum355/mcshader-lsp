@@ -55,6 +55,12 @@
                     "type": "string",
                     "default": "",
                     "description": "Absolute path to your Minecraft's shaderpacks folder."
+                },
+                "mcglsl.logLevel": {
+                  "type": "string",
+                  "default": "info",
+                  "description": "Verbosity of output logging.",
+                  "enum": ["debug", "info", "warn", "error"]
                 }
             }
         }

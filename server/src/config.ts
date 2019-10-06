@@ -1,7 +1,7 @@
 import { dirname } from 'path'
 import { DidChangeConfigurationParams } from 'vscode-languageserver'
 import { GLSLangProvider } from './glslangValidator'
-import { serverLog as log } from './logging'
+import { configLog as log, loggers } from './logging'
 import { connection } from './server'
 
 const url = {
@@ -12,25 +12,22 @@ const url = {
 
 export let glslangReady = false
 
+// Maps the JSON settings from VSCode to an object
+interface Config {
+  shaderpacksPath: string
+  glslangValidatorPath: string
+  logLevel: 'error' | 'warn' | 'info' | 'debug'
+}
+
 export class ConfigProvider {
   private _config: Config
-  private _onChange: (settings: Config) => void
   private _glslang: GLSLangProvider
 
-  public constructor(func?: (confProv: ConfigProvider, settings: Config) => void) {
+  public constructor() {
     this._config = {
       shaderpacksPath: '',
-      glslangValidatorPath: ''
-    }
-
-    if (!func) {
-      this._onChange = (settings: Config) => {
-        onConfigChange(this, settings)
-      }
-    } else {
-      this._onChange = (settings: Config) => {
-        func(this, settings)
-      }
+      glslangValidatorPath: '',
+      logLevel: 'info'
     }
   }
 
@@ -42,14 +39,8 @@ export class ConfigProvider {
     return this._config
   }
 
-  public set onChange(func: (confProv: ConfigProvider, settings: Config) => void) {
-    this._onChange = (settings: Config) => {
-      func(this, settings)
-    }
-  }
-
   public onConfigChange = (change: DidChangeConfigurationParams) => {
-    this._onChange(change.settings.mcglsl as Config)
+    onConfigChange(this, change.settings.mcglsl as Config)
   }
 
   public set glslang(glslang: GLSLangProvider) {
@@ -61,39 +52,52 @@ export class ConfigProvider {
   }
 }
 
-interface Config {
-  shaderpacksPath: string
-  glslangValidatorPath: string
-}
-
 let supress = false
 
-async function onConfigChange(confProv: ConfigProvider, old: Config) {
+async function onConfigChange(confProv: ConfigProvider, current: Config) {
   if (!confProv.config == undefined &&
-    old.shaderpacksPath === confProv.config.shaderpacksPath &&
-    old.glslangValidatorPath === confProv.config.glslangValidatorPath) return
+    current.shaderpacksPath === confProv.config.shaderpacksPath &&
+    current.glslangValidatorPath === confProv.config.glslangValidatorPath &&
+    current.logLevel === confProv.config.logLevel) return
 
-  confProv.config = {shaderpacksPath: old['shaderpacksPath'], glslangValidatorPath: old['glslangValidatorPath']}
-  log.debug('new config: ' + JSON.stringify(old))
-  log.debug('old config: ' + JSON.stringify(confProv.config))
+    log.debug('new config: ' + JSON.stringify(current, Object.keys(current).sort()))
+    log.debug('old config: ' + JSON.stringify(confProv.config || {}, Object.keys(confProv.config).sort()))
+    confProv.config = {
+      shaderpacksPath: current['shaderpacksPath'], 
+      glslangValidatorPath: current['glslangValidatorPath'],
+      logLevel: current['logLevel'],
+    }
 
-  if (confProv.config.shaderpacksPath === '' || confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '') !== '/shaderpacks') {
-    if (supress) return
-
-    log.error(`shaderpack path '${confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '')}' not set or doesn't end in 'shaderpacks'`)
-    supress = true
-
-    const clicked = await connection.window.showErrorMessage(
-      'mcglsl.shaderpacksPath is not set or doesn\'t end in \'shaderpacks\'. Please set it in your settings.',
-      {title: 'Supress'}
-    )
-    supress = (clicked && clicked.title === 'Supress') ? true : false
-    return
+  // handle config.shaderpacksPath
+  {
+    if (confProv.config.shaderpacksPath === '' || confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '') !== '/shaderpacks') {
+      if (supress) return
+  
+      log.error(`shaderpack path '${confProv.config.shaderpacksPath.replace(dirname(confProv.config.shaderpacksPath), '')}' not set or doesn't end in 'shaderpacks'`)
+      supress = true
+  
+      const clicked = await connection.window.showErrorMessage(
+        'mcglsl.shaderpacksPath is not set or doesn\'t end in \'shaderpacks\'. Please set it in your settings.',
+        {title: 'Supress'}
+      )
+      supress = (clicked && clicked.title === 'Supress') ? true : false
+      return
+    }
   }
 
-  if (!confProv.glslang.testExecutable()) {
-    await confProv.glslang.promptDownload()
-  } else {
-    glslangReady = true
+  // handle config.logLevel
+  {
+    for(let logger of loggers) {
+      logger.level = current.logLevel
+    }
+  }
+
+  // handle config.glslang
+  {
+    if (!confProv.glslang.testExecutable()) {
+      await confProv.glslang.promptDownload()
+    } else {
+      glslangReady = true
+    }
   }
 }

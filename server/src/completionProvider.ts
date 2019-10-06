@@ -357,7 +357,7 @@ export const completions: CompletionItem[] = [
   }
 ]
 
-for (let i = 1; i < completions.length + 1; i++) {
-  completions[i - 1].data = i
-  completions[i - 1].kind = value
+for (let i = 0; i < completions.length; i++) {
+  completions[i].data = i
+  completions[i].kind = value
 }
