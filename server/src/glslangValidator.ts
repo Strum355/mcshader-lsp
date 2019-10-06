@@ -1,14 +1,12 @@
-import { ConfigProvider } from './config'
-import { execSync } from 'child_process'
-import { extensionMap, ShaderFileExtension } from './fileTypes'
-import * as path from 'path'
+import * as unzip from 'adm-zip';
+import { execSync } from 'child_process';
+import { writeFileSync } from 'fs';
 import fetch from 'node-fetch';
 import { platform } from 'os';
-import * as unzip from 'adm-zip'
-import { createWriteStream } from 'fs'
-import { writeFileSync, fstat } from 'fs';
-import { connection } from './server';
+import { ConfigProvider } from './config';
+import { extensionMap, ShaderFileExtension } from './fileTypes';
 import { glslProviderLog as log } from './logging';
+import { connection } from './server';
 
 
 const url = {
@@ -50,12 +48,12 @@ export class GLSLangProvider {
       const glslangPath = this._config.config.shaderpacksPath + glslangBin
 
       const response = await fetch(url[platform()])
-      
+      log.warn(() => 'glslangValidator download response status: ' + response.status )
       const zip = new unzip(await response.buffer())
       
       const bin = zip.readFile('bin' + glslangBin)
-      
-      writeFileSync(glslangPath, bin)
+      log.warn(() => 'buffer length ' + bin.length)
+      writeFileSync(glslangPath, bin, {encoding: null, mode: 0o755})
 
       if (!this.testExecutable()) {
         connection.window.showErrorMessage(
@@ -79,20 +77,22 @@ export class GLSLangProvider {
   }
   
   public testExecutable(glslangPath?: string): boolean {
-    let success = false
+    let stdout = ''
     try {
-      const stdout = execSync(glslangPath || this._config.config.glslangValidatorPath, {
+      stdout = execSync(glslangPath || this._config.config.glslangValidatorPath, {
         stdio: 'pipe',
       }).toString()
-      success = stdout.startsWith('Usage')
     } catch (e) {
-      success = (e.stdout.toString() as string).startsWith('Usage')
+      stdout = (e.stdout.toString() as string)
     }
+
+    log.warn(() => 'glslangValidator first line stdout: ' + stdout.split('\n')[0])
+    const success = stdout.startsWith('Usage')
 
     if (success) {
       log.info(() => `glslangValidator found at ${this._config.config.glslangValidatorPath}`) 
     } else {
-      log.error(() => `glslangValidator not found at ${this._config.config.glslangValidatorPath}`, null)
+      log.warn(() => `glslangValidator not found at ${this._config.config.glslangValidatorPath}`)
     }
 
     return success
