@@ -1,0 +1,11 @@
+[package]
+name = "vscode-mc-shader"
+version = "0.1.0"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rust_lsp = { git = "https://github.com/Strum355/RustLSP" }
+serde_json = "1.0.48"
