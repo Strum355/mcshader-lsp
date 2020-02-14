@@ -10,7 +10,7 @@
         "url": "https://github.com/Strum355/vscode-mc-shader"
     },
     "engines": {
-        "vscode": "^1.37.0"
+        "vscode": "^1.42.0"
     },
     "scripts": {
         "update-vscode": "vscode-install",
@@ -19,7 +19,7 @@
         "compile": "tsc -p ./"
     },
     "dependencies": {
-        "vscode-languageclient": "^4.4.2"
+        "vscode-languageclient": "^6.1.0"
     },
     "devDependencies": {
         "vscode": "^1.1.36"

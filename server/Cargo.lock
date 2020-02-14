@@ -129,7 +129,7 @@ dependencies = [
 [[package]]
 name = "rust_lsp"
 version = "0.6.0"
-source = "git+https://github.com/Strum355/RustLSP#30d3247d70b8b8bff1cdeafd61cbfc3126ca432e"
+source = "git+https://github.com/Strum355/RustLSP#d820d8f604bbfe09657587b0febc3faa3164e8be"
 dependencies = [
  "languageserver-types 0.54.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
