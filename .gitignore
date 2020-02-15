@@ -4,3 +4,4 @@ out
 *.txt
 glslangValidator
 *.vsix
+graph.dot
