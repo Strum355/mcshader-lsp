@@ -67,37 +67,39 @@ impl MinecraftShaderLanguageServer {
     }
 
     pub fn gen_initial_graph(&mut self, root: String) {
+        self.endpoint.send_notification("status", vec!["$(loading~spin)", "Building project..."]).unwrap();
         let mut files = HashMap::new();
 
         eprintln!("root of project is {}", root);
-        for entry_res in walkdir::WalkDir::new(root.clone()).into_iter() {
-            let entry = match entry_res {
-                Ok(entry) => entry,
-                Err(e) => {
-                    eprintln!("error {} {:?}", e.path().unwrap_or(Path::new("")).display(), e);
-                    break;
-                },
-            };
 
+        // filter directories and files not ending in any of the 3 extensions
+        let file_iter = walkdir::WalkDir::new(root.clone()).into_iter().filter_map(|entry| {
+            if !entry.is_ok() {
+                return None;
+            }
+
+            let entry = entry.unwrap();
             let path = entry.path();
-
             if path.is_dir() {
-                continue;
+                return None;
             }
 
-            if !path.is_dir() {
-                let ext = path.extension().unwrap().to_str().unwrap();
-                if ext != "vsh" && ext != "fsh" && ext != "glsl" {
-                    continue;
-                }
+            let ext = path.extension().unwrap().to_str().unwrap();
+            if ext != "vsh" && ext != "fsh" && ext != "glsl" {
+                return None;
             }
+            Some(String::from(path.to_str().unwrap()))
+        });
 
-            let includes = self.find_includes(root.as_str(), path.to_str().unwrap());
+        // iterate all valid found files, search for includes, add a node into the graph for each
+        // file and add a file->includes KV into the map
+        for entry_res in file_iter {
+            let includes = self.find_includes(root.as_str(), entry_res.as_str());
 
-            let stripped_path = String::from(String::from(path.to_str().unwrap()).trim_start_matches(root.as_str()));
+            let stripped_path = String::from(String::from(entry_res));
             let idx = self.graph.add_node(stripped_path.clone());
 
-            eprintln!("adding {} with\n{:?}", stripped_path.clone(), includes);
+            //eprintln!("adding {} with\n{:?}", stripped_path.clone(), includes);
             
             files.insert(stripped_path, GLSLFile{
                 idx: idx, includes: includes,
@@ -105,20 +107,30 @@ impl MinecraftShaderLanguageServer {
         }
 
         // Add edges between nodes, finding target nodes on weight (value)
-        for (k, v) in files.into_iter() {
+        for (_, v) in files.into_iter() {
             for file in v.includes {
                 let mut iter = self.graph.node_indices();
-                eprintln!("searching for {}", file);
-                let idx = iter.find(|i| self.graph[*i] == file).unwrap();
+                //eprintln!("searching for {}", file);
+                let idx = iter.find(|i| self.graph[*i] == file);
+                if idx.is_none() {
+                    eprintln!("couldn't find {} in graph", file);
+                    continue;
+                }
                 //eprintln!("added edge between\n\t{}\n\t{}", k, file);
-                self.graph.add_edge(v.idx, idx, String::from("includes"));
+                self.graph.add_edge(v.idx, idx.unwrap(), String::from("includes"));
             }
         }
 
-        self.file.seek(std::io::SeekFrom::Start(0)).unwrap();
-        self.file.write_all(dot::Dot::new(&self.graph).to_string().as_bytes()).unwrap();
-        self.file.flush().unwrap();
-        self.file.seek(std::io::SeekFrom::Start(0)).unwrap();
+        /* self.file.seek(std::io::SeekFrom::Start(0))?;
+        self.file.write_all(dot::Dot::new(&self.graph).to_string().as_bytes())?;
+        self.file.flush()?;
+        self.file.seek(std::io::SeekFrom::Start(0))?; */
+
+        eprintln!("finished building project include graph");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        self.endpoint.send_notification("status", vec!["$(check)", "Finished building project!"]).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        self.endpoint.send_notification("clearStatus", None::<()>).unwrap();
     }
 
     pub fn find_includes(&self, root: &str, file: &str) -> Vec<String> {
@@ -157,7 +169,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     
     fn workspace_change_configuration(&mut self, _: DidChangeConfigurationParams) {}
     fn did_open_text_document(&mut self, _: DidOpenTextDocumentParams) {}
-    fn did_change_text_document(&mut self, _: DidChangeTextDocumentParams) {}
+    fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
+    }
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
     fn did_save_text_document(&mut self, _: DidSaveTextDocumentParams) {}
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
