@@ -62,14 +62,14 @@
     "scripts": {
         "vscode:prepublish": "cd client && npm run update-vscode && cd .. && npm run compile",
         "compile": "tsc -b",
-        "watch": "tsc -b -w",
+        "watch": "concurrently \"tsc -b -w\" \"cd server && cargo watch -x build\"",
         "postinstall": "cd client && npm install",
         "lint": "tslint -c tslint.json 'client/src/**/*.ts'",
         "fix": "tslint -c tslint.json --fix client/src/**/*.ts"
     },
     "devDependencies": {
         "@types/node": "^10.14.15",
-        "concurrently": "^3.6.1",
+        "concurrently": "^5.1.0",
         "tslint": "^5.18.0",
         "typescript": "^3.7.5"
     }

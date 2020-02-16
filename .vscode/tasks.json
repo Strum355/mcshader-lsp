@@ -15,10 +15,7 @@
                 "reveal": "silent",
                 "focus": false,
                 "panel": "shared"
-            },
-            /* "problemMatcher": [
-                "$tslint5"
-            ] */
+            }
         },
         {
 			"type": "npm",
@@ -43,10 +40,17 @@
 			"presentation": {
 				"panel": "dedicated",
 				"reveal": "never"
-			},
-			"problemMatcher": [
-				"$tsc-watch"
-			]
+            },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "(\\[Finished running. Exit status: 101\\])|(Found [1-9]\\d* errors. Watching for file changes.)"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "[Running 'cargo build']",
+                    "endsPattern": "(Watching for file changes)|(\\[Finished running. Exit status: 0\\])"
+                }
+            }
 		}
 	]
 }
