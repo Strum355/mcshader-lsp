@@ -155,6 +155,15 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn initialize(&mut self, params: InitializeParams, completable: MethodCompletable<InitializeResult, InitializeError>) {
         let mut capabilities = ServerCapabilities::default();
         capabilities.hover_provider = Some(true);
+        capabilities.text_document_sync = Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions{
+            open_close: Some(true),
+            will_save: None,
+            will_save_wait_until: None,
+            change: Some(TextDocumentSyncKind::Full),
+            save: Some(SaveOptions{
+                include_text: Some(true),
+            })
+        }));
 
         completable.complete(Ok(InitializeResult { capabilities: capabilities }));
 
@@ -170,9 +179,12 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn workspace_change_configuration(&mut self, _: DidChangeConfigurationParams) {}
     fn did_open_text_document(&mut self, _: DidOpenTextDocumentParams) {}
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
+        eprintln!("changed {} changes: {}", params.content_changes.get(0).unwrap(), params.text_document.uri);
     }
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
-    fn did_save_text_document(&mut self, _: DidSaveTextDocumentParams) {}
+    fn did_save_text_document(&mut self, params: DidSaveTextDocumentParams) {
+        eprintln!("saved {}", params.text_document.uri);
+    }
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
     
     fn completion(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<CompletionList>) {
