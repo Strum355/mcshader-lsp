@@ -6,16 +6,20 @@ use rust_lsp::jsonrpc::method_types::*;
 use walkdir;
 
 use std::ops::Add;
-use std::fs::OpenOptions;
-use std::io::prelude::*;
+/* use std::fs::OpenOptions;
+use std::io::prelude::*; */
 use std::io;
-use std::path::Path;
-use std::collections::HashMap;
 use std::io::{BufReader, BufRead};
+use std::process;
+/* use std::path::Path; */
+use std::collections::HashMap;
 
-use petgraph::visit::Dfs;
-use petgraph::dot;
+/* use petgraph::visit::Dfs;
+use petgraph::dot; */
 use petgraph::graph::Graph;
+
+
+use chan::WaitGroup;
 
 use regex::Regex;
 
@@ -35,15 +39,17 @@ fn main() {
 
     let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| io::stdout());
 
-    let file = OpenOptions::new()
+    /* let file = OpenOptions::new()
         .write(true)
         .open("/home/noah/TypeScript/vscode-mc-shader/graph.dot")
-        .unwrap();
+        .unwrap(); */
 
     let langserver = MinecraftShaderLanguageServer{
         endpoint: endpoint_output.clone(),
         graph: Graph::default(),
-        file: file,
+        config: Configuration::default(),
+        wait: WaitGroup::new(),
+        /* file: file, */
     };
 
     LSPEndpoint::run_server_from_input(&mut stdin.lock(), endpoint_output, langserver);
@@ -52,7 +58,25 @@ fn main() {
 struct MinecraftShaderLanguageServer {
     endpoint: Endpoint,
     graph: Graph<String, String>,
-    file: std::fs::File,
+    config: Configuration,
+    wait: WaitGroup,
+    /* file: std::fs::File, */
+}
+
+#[derive(Default)]
+struct Configuration {
+    glslang_validator_path: String,
+    shaderpacks_path: String,
+}
+
+impl Configuration {
+    fn validate(&self) -> bool {
+        if self.glslang_validator_path == "" || self.shaderpacks_path == "" {
+            return false;
+        }
+
+        return true;
+    }
 }
 
 struct GLSLFile {
@@ -101,9 +125,7 @@ impl MinecraftShaderLanguageServer {
 
             //eprintln!("adding {} with\n{:?}", stripped_path.clone(), includes);
             
-            files.insert(stripped_path, GLSLFile{
-                idx: idx, includes: includes,
-            });
+            files.insert(stripped_path, GLSLFile{idx, includes});
         }
 
         // Add edges between nodes, finding target nodes on weight (value)
@@ -149,10 +171,16 @@ impl MinecraftShaderLanguageServer {
 
         return includes;
     }
+
+    pub fn lint(&self) {
+        process::Command::new("program: S");
+    }
 }
 
 impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn initialize(&mut self, params: InitializeParams, completable: MethodCompletable<InitializeResult, InitializeError>) {
+        self.wait.add(1);
+
         let mut capabilities = ServerCapabilities::default();
         capabilities.hover_provider = Some(true);
         capabilities.text_document_sync = Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions{
@@ -165,26 +193,50 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             })
         }));
 
-        completable.complete(Ok(InitializeResult { capabilities: capabilities }));
+        completable.complete(Ok(InitializeResult{capabilities}));
 
         self.gen_initial_graph(params.root_path.unwrap());
+        self.lint();
     }
+    
     fn shutdown(&mut self, _: (), completable: LSCompletable<()>) {
         completable.complete(Ok(()));
     }
+    
     fn exit(&mut self, _: ()) {
         self.endpoint.request_shutdown();
     }
     
-    fn workspace_change_configuration(&mut self, _: DidChangeConfigurationParams) {}
-    fn did_open_text_document(&mut self, _: DidOpenTextDocumentParams) {}
-    fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
-        eprintln!("changed {} changes: {}", params.content_changes.get(0).unwrap(), params.text_document.uri);
+    fn workspace_change_configuration(&mut self, params: DidChangeConfigurationParams) {
+        let config = params.settings.as_object().unwrap().get("mcglsl").unwrap();
+
+        self.config.glslang_validator_path = String::from(config.get("glslangValidatorPath").unwrap().as_str().unwrap());
+        self.config.shaderpacks_path = String::from(config.get("shaderpacksPath").unwrap().as_str().unwrap());
+
+        if !self.config.validate() {
+            self.endpoint.send_notification("badConfig", None::<()>).unwrap();
+        }
+
+        eprintln!("{:?}", params.settings.as_object().unwrap());
+
+        self.wait.done();
     }
+    
+    fn did_open_text_document(&mut self, _: DidOpenTextDocumentParams) {}
+    
+    fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
+        self.wait.wait();
+        let text_change = params.content_changes.get(0).unwrap();
+        //eprintln!("changed {} changes: {}", text_change., params.text_document.uri);
+    }
+    
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
+
     fn did_save_text_document(&mut self, params: DidSaveTextDocumentParams) {
+        self.wait.wait();
         eprintln!("saved {}", params.text_document.uri);
     }
+
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
     
     fn completion(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<CompletionList>) {
@@ -194,6 +246,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         completable.complete(Err(Self::error_not_available(())));
     }
     fn hover(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Hover>) {
+        self.wait.wait();
         self.endpoint.send_notification("sampleText", vec![1,2,3]).unwrap();
         completable.complete(Ok(Hover{
             contents: HoverContents::Markup(MarkupContent{
