@@ -15,48 +15,49 @@ export async function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('vscode-mc-shader')
   globalContext = context
 
-  {
-    if (!testExecutable(vscode.workspace.getConfiguration().get(glslConfigParam))) {
-      await promptDownload()
-    } else {
-      outputChannel.appendLine('glslangValidator found!')
-    }
+  if (!testExecutable(vscode.workspace.getConfiguration().get(glslConfigParam))) {
+    await promptDownload()
+  } else {
+    outputChannel.appendLine('glslangValidator found!')
   }
+
+  const clientOpts: vscodeLang.LanguageClientOptions = {
+    documentSelector: [{scheme: 'file', language: 'glsl'}],
+    outputChannel: outputChannel,
+    outputChannelName: 'vscode-mc-shader',
+    synchronize: {
+      configurationSection: 'mcglsl',
+      fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{fsh,gsh,vsh,glsl}')
+    },
+  }
+
+  const serverOpts: vscodeLang.ServerOptions = {
+    command: context.asAbsolutePath(path.join('server', 'target', 'debug', 'vscode-mc-shader')), 
+  }
+
+  outputChannel.appendLine('starting language server...')
+
+  const langServer = new vscodeLang.LanguageClient('vscode-mc-shader', serverOpts, clientOpts)
+
+  context.subscriptions.push(langServer.start())
   
-  {
+  await langServer.onReady()
 
-    const clientOpts: vscodeLang.LanguageClientOptions = {
-      documentSelector: [{scheme: 'file', language: 'glsl'}],
-      outputChannel: outputChannel,
-      outputChannelName: 'vscode-mc-shader',
-      synchronize: {
-        configurationSection: 'mcglsl',
-        fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{fsh,gsh,vsh,glsl}')
-      },
-    }
+  langServer.onNotification('updateConfig', (dir: string) => {
+    vscode.workspace.getConfiguration().update(glslConfigParam, dir, vscode.ConfigurationTarget.Global)
+  })
 
-    const serverOpts: vscodeLang.ServerOptions = {
-      command: context.asAbsolutePath(path.join('server', 'target', 'debug', 'vscode-mc-shader')), 
-    }
+  langServer.onNotification('status', updateStatus)
 
-    outputChannel.appendLine('starting language server...')
+  langServer.onNotification('clearStatus', clearStatus)
 
-    const langServer = new vscodeLang.LanguageClient('vscode-mc-shader', serverOpts, clientOpts)
+  outputChannel.appendLine('language server started!')
 
-    context.subscriptions.push(langServer.start())
-    
-    await langServer.onReady()
-
-    langServer.onNotification('updateConfig', (dir: string) => {
-      vscode.workspace.getConfiguration().update(glslConfigParam, dir, vscode.ConfigurationTarget.Global)
+  context.subscriptions.push(vscode.commands.registerCommand("mcshader.graphDot", async () => {
+    await langServer.sendRequest(vscodeLang.ExecuteCommandRequest.type.method, {
+      command: 'graphDot'
     })
-
-    langServer.onNotification('status', updateStatus)
-
-    langServer.onNotification('clearStatus', clearStatus)
-
-    outputChannel.appendLine('language server started!')
-  }
+  }))
 }
 
 export function updateStatus(icon: string, text: string) {

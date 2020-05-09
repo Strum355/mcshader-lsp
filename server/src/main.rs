@@ -6,16 +6,16 @@ use rust_lsp::jsonrpc::method_types::*;
 use walkdir;
 
 use std::ops::Add;
-/* use std::fs::OpenOptions;
-use std::io::prelude::*; */
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 use std::io;
 use std::io::{BufReader, BufRead};
 use std::process;
 /* use std::path::Path; */
 use std::collections::HashMap;
 
-/* use petgraph::visit::Dfs;
-use petgraph::dot; */
+//use petgraph::visit::Dfs;
+use petgraph::dot;
 use petgraph::graph::Graph;
 
 
@@ -39,17 +39,12 @@ fn main() {
 
     let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| io::stdout());
 
-    /* let file = OpenOptions::new()
-        .write(true)
-        .open("/home/noah/TypeScript/vscode-mc-shader/graph.dot")
-        .unwrap(); */
-
     let langserver = MinecraftShaderLanguageServer{
         endpoint: endpoint_output.clone(),
         graph: Graph::default(),
         config: Configuration::default(),
         wait: WaitGroup::new(),
-        /* file: file, */
+        root: None,
     };
 
     LSPEndpoint::run_server_from_input(&mut stdin.lock(), endpoint_output, langserver);
@@ -60,7 +55,7 @@ struct MinecraftShaderLanguageServer {
     graph: Graph<String, String>,
     config: Configuration,
     wait: WaitGroup,
-    /* file: std::fs::File, */
+    root: Option<String>
 }
 
 #[derive(Default)]
@@ -87,7 +82,7 @@ struct GLSLFile {
 impl MinecraftShaderLanguageServer {
     pub fn error_not_available<DATA>(data: DATA) -> MethodError<DATA> {
         let msg = "Functionality not implemented.".to_string();
-        MethodError::<DATA> { code: 1, message: msg, data: data }
+        MethodError::<DATA> { code: 1, message: msg, data }
     }
 
     pub fn gen_initial_graph(&mut self, root: String) {
@@ -109,7 +104,7 @@ impl MinecraftShaderLanguageServer {
             }
 
             let ext = path.extension().unwrap().to_str().unwrap();
-            if ext != "vsh" && ext != "fsh" && ext != "glsl" {
+            if ext != "vsh" && ext != "fsh" && ext != "glsl" && ext != "inc" {
                 return None;
             }
             Some(String::from(path.to_str().unwrap()))
@@ -143,11 +138,6 @@ impl MinecraftShaderLanguageServer {
             }
         }
 
-        /* self.file.seek(std::io::SeekFrom::Start(0))?;
-        self.file.write_all(dot::Dot::new(&self.graph).to_string().as_bytes())?;
-        self.file.flush()?;
-        self.file.seek(std::io::SeekFrom::Start(0))?; */
-
         eprintln!("finished building project include graph");
         std::thread::sleep(std::time::Duration::from_secs(1));
         self.endpoint.send_notification("status", vec!["$(check)", "Finished building project!"]).unwrap();
@@ -164,7 +154,12 @@ impl MinecraftShaderLanguageServer {
             .filter(|line| RE_INCLUDE.is_match(line.as_str()))
             .for_each(|line| {
                 let caps = RE_INCLUDE.captures(line.as_str()).unwrap();
-                let full_include = String::from(root).add("/shaders").add(caps.get(1).unwrap().as_str());
+                //eprintln!("{:?}", caps);
+                let mut path: String = String::from(caps.get(1).unwrap().as_str());
+                if !path.starts_with("/") {
+                    path.insert(0, '/');
+                }
+                let full_include = String::from(root).add("/shaders").add(path.as_str());
                 includes.push(full_include.clone());
                 //eprintln!("{} includes {}", file, full_include);
             });
@@ -183,6 +178,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         let mut capabilities = ServerCapabilities::default();
         capabilities.hover_provider = Some(true);
+        capabilities.execute_command_provider = Some(ExecuteCommandOptions{
+            commands: vec![String::from("graphDot")],
+        });
         capabilities.text_document_sync = Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions{
             open_close: Some(true),
             will_save: None,
@@ -193,9 +191,11 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             })
         }));
 
+        self.root = Some(params.root_path.unwrap());
+
         completable.complete(Ok(InitializeResult{capabilities}));
 
-        self.gen_initial_graph(params.root_path.unwrap());
+        self.gen_initial_graph(self.root.clone().unwrap());
         self.lint();
     }
     
@@ -256,6 +256,38 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             range: None,
         }));
     }
+
+    fn execute_command(&mut self, params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
+        if params.command == "graphDot" {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(self.root.clone().unwrap() + "/graph.dot")
+                .unwrap();
+
+            let mut write_data_closure = || -> Result<(), std::io::Error> {
+                file.seek(std::io::SeekFrom::Start(0))?;
+                file.write_all(dot::Dot::new(&self.graph).to_string().as_bytes())?;
+                file.flush()?;
+                file.seek(std::io::SeekFrom::Start(0))?;
+                Ok(())
+            };
+
+            match write_data_closure() {
+                Err(err) => {
+                    completable.complete(Err(MethodError::new(32420, format!("Error generating graphviz data: {}", err), ())));
+                    return;
+                },
+                _ => {}
+            }
+        }
+
+        completable.complete(Ok(WorkspaceEdit{
+            changes: None,
+            document_changes: None,
+        }));
+    }
+
     fn signature_help(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<SignatureHelp>) {
         completable.complete(Err(Self::error_not_available(())));
     }

@@ -29,6 +29,13 @@
     ],
     "main": "./client/out/extension",
     "contributes": {
+        "commands": [
+            {
+                "command": "mcshader.graphDot",
+                "title": "Minecraft GLSL: Generate Graphviz DOT dependency graph",
+                "category": "Minecraft Shader"
+            }
+        ],
         "languages": [
             {
                 "id": "glsl",
