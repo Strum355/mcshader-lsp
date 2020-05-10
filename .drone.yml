@@ -1,14 +1,15 @@
-pipeline:
-  lint:
-    image: node:${NODE_VERSION}
-    commands:
-      - npm i
-      - npm run lint
+kind: pipeline
+name: default
 
-matrix:
-  NODE_VERSION:
-    - "10-alpine"
-    - "9-alpine"
-    - "8.11-alpine"
-    - "7.9-alpine"
-    - "alpine"
+steps:
+- name: Test Server
+  image: rust:1.43
+  commands:
+    - cd server
+    - cargo test
+
+- name: lint
+  image: node:14
+  commands:
+    - npm i
+    - npm run lint
