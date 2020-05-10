@@ -1,29 +1,30 @@
 use rust_lsp::lsp::*;
-use rust_lsp::ls_types::*;
+use rust_lsp::lsp_types::*;
 use rust_lsp::jsonrpc::*;
 use rust_lsp::jsonrpc::method_types::*;
 
 use walkdir;
 
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::ops::Add;
-use std::fs::OpenOptions;
-use std::io::prelude::*;
-use std::io;
 use std::io::{BufReader, BufRead};
 use std::process;
-/* use std::path::Path; */
 use std::collections::HashMap;
+use std::io;
 
-//use petgraph::visit::Dfs;
-use petgraph::dot;
 use petgraph::graph::Graph;
-
 
 use chan::WaitGroup;
 
 use regex::Regex;
 
 use lazy_static::lazy_static;
+
+mod provider;
+
+#[cfg(test)]
+mod test;
 
 lazy_static! {
     static ref RE_DIAGNOSTIC: Regex = Regex::new(r#"^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?"#).unwrap();
@@ -32,6 +33,7 @@ lazy_static! {
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
 }
 
+#[allow(dead_code)]
 static INCLUDE_STR: &'static str = "#extension GL_GOOGLE_include_directive : require";
 
 fn main() {
@@ -39,23 +41,31 @@ fn main() {
 
     let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| io::stdout());
 
-    let langserver = MinecraftShaderLanguageServer{
+    let mut langserver = MinecraftShaderLanguageServer{
         endpoint: endpoint_output.clone(),
-        graph: Graph::default(),
+        graph: Rc::new(RefCell::new(Graph::default())),
         config: Configuration::default(),
         wait: WaitGroup::new(),
         root: None,
+        command_provider: None,
     };
+
+    langserver.command_provider = Some(provider::CustomCommandProvider::new(vec![
+        ("graphDot", Box::new(provider::GraphDotCommand{
+            graph: langserver.graph.clone(),
+        }))
+    ]));
 
     LSPEndpoint::run_server_from_input(&mut stdin.lock(), endpoint_output, langserver);
 }
 
 struct MinecraftShaderLanguageServer {
     endpoint: Endpoint,
-    graph: Graph<String, String>,
+    graph: Rc<RefCell<Graph<String, String>>>,
     config: Configuration,
     wait: WaitGroup,
-    root: Option<String>
+    root: Option<String>,
+    command_provider: Option<provider::CustomCommandProvider>
 }
 
 #[derive(Default)]
@@ -116,7 +126,7 @@ impl MinecraftShaderLanguageServer {
             let includes = self.find_includes(root.as_str(), entry_res.as_str());
 
             let stripped_path = String::from(String::from(entry_res));
-            let idx = self.graph.add_node(stripped_path.clone());
+            let idx = self.graph.borrow_mut().add_node(stripped_path.clone());
 
             //eprintln!("adding {} with\n{:?}", stripped_path.clone(), includes);
             
@@ -126,15 +136,15 @@ impl MinecraftShaderLanguageServer {
         // Add edges between nodes, finding target nodes on weight (value)
         for (_, v) in files.into_iter() {
             for file in v.includes {
-                let mut iter = self.graph.node_indices();
+                let mut iter = self.graph.borrow().node_indices();
                 //eprintln!("searching for {}", file);
-                let idx = iter.find(|i| self.graph[*i] == file);
+                let idx = iter.find(|i| self.graph.borrow_mut()[*i] == file);
                 if idx.is_none() {
                     eprintln!("couldn't find {} in graph", file);
                     continue;
                 }
                 //eprintln!("added edge between\n\t{}\n\t{}", k, file);
-                self.graph.add_edge(v.idx, idx.unwrap(), String::from("includes"));
+                self.graph.borrow_mut().add_edge(v.idx, idx.unwrap(), String::from("includes"));
             }
         }
 
@@ -180,6 +190,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         capabilities.hover_provider = Some(true);
         capabilities.execute_command_provider = Some(ExecuteCommandOptions{
             commands: vec![String::from("graphDot")],
+            work_done_progress_options: WorkDoneProgressOptions{
+                work_done_progress: None,
+            },
         });
         capabilities.text_document_sync = Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions{
             open_close: Some(true),
@@ -193,7 +206,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         self.root = Some(params.root_path.unwrap());
 
-        completable.complete(Ok(InitializeResult{capabilities}));
+        completable.complete(Ok(InitializeResult{capabilities, server_info: None}));
 
         self.gen_initial_graph(self.root.clone().unwrap());
         self.lint();
@@ -226,6 +239,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
         self.wait.wait();
+        
+        #[allow(unused_variables)]
         let text_change = params.content_changes.get(0).unwrap();
         //eprintln!("changed {} changes: {}", text_change., params.text_document.uri);
     }
@@ -242,6 +257,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn completion(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<CompletionList>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn resolve_completion_item(&mut self, _: CompletionItem, completable: LSCompletable<CompletionItem>) {
         completable.complete(Err(Self::error_not_available(())));
     }
@@ -257,79 +273,73 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         }));
     }
 
-    fn execute_command(&mut self, params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
-        if params.command == "graphDot" {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(self.root.clone().unwrap() + "/graph.dot")
-                .unwrap();
-
-            let mut write_data_closure = || -> Result<(), std::io::Error> {
-                file.seek(std::io::SeekFrom::Start(0))?;
-                file.write_all(dot::Dot::new(&self.graph).to_string().as_bytes())?;
-                file.flush()?;
-                file.seek(std::io::SeekFrom::Start(0))?;
-                Ok(())
-            };
-
-            match write_data_closure() {
-                Err(err) => {
-                    completable.complete(Err(MethodError::new(32420, format!("Error generating graphviz data: {}", err), ())));
-                    return;
-                },
-                _ => {}
-            }
+    fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
+        params.arguments.push(serde_json::Value::String(self.root.clone().unwrap()));
+        match self.command_provider.as_ref().unwrap().execute(params.command, params.arguments) {
+            Ok(_) => completable.complete(Ok(WorkspaceEdit{
+                changes: None,
+                document_changes: None,
+            })),
+            Err(err) => completable.complete(Err(MethodError::new(32420, err, ())))
         }
-
-        completable.complete(Ok(WorkspaceEdit{
-            changes: None,
-            document_changes: None,
-        }));
     }
 
     fn signature_help(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<SignatureHelp>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn goto_definition(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Vec<Location>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn references(&mut self, _: ReferenceParams, completable: LSCompletable<Vec<Location>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn document_highlight(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Vec<DocumentHighlight>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn document_symbols(&mut self, _: DocumentSymbolParams, completable: LSCompletable<Vec<SymbolInformation>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn workspace_symbols(&mut self, _: WorkspaceSymbolParams, completable: LSCompletable<Vec<SymbolInformation>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn code_action(&mut self, _: CodeActionParams, completable: LSCompletable<Vec<Command>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn code_lens(&mut self, _: CodeLensParams, completable: LSCompletable<Vec<CodeLens>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn code_lens_resolve(&mut self, _: CodeLens, completable: LSCompletable<CodeLens>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn document_link(&mut self, _params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn document_link_resolve(&mut self, _params: DocumentLink, completable: LSCompletable<DocumentLink>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn formatting(&mut self, _: DocumentFormattingParams, completable: LSCompletable<Vec<TextEdit>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn range_formatting(&mut self, _: DocumentRangeFormattingParams, completable: LSCompletable<Vec<TextEdit>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn on_type_formatting(&mut self, _: DocumentOnTypeFormattingParams, completable: LSCompletable<Vec<TextEdit>>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+    
     fn rename(&mut self, _: RenameParams, completable: LSCompletable<WorkspaceEdit>) {
         completable.complete(Err(Self::error_not_available(())));
     }
