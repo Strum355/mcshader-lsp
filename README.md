@@ -4,7 +4,7 @@
 [![Marketplace Version](https://vsmarketplacebadge.apphb.com/version/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader) [![Installs](https://vsmarketplacebadge.apphb.com/installs/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader)
 [![license](https://img.shields.io/github/license/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader)
 [![Issues](https://img.shields.io/github/issues-raw/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/vscode-mc-shader/issues)
-[![Maintainability](https://api.codeclimate.com/v1/badges/c2c813cb0a42a8aad483/maintainability)](https://codeclimate.com/github/Strum355/vscode-mc-shader/maintainability)
+[![Build Status](https://cloud.drone.io/api/badges/Strum355/vscode-mc-shader/status.svg)](https://cloud.drone.io/Strum355/vscode-mc-shader)
 
 <!-- It doesnt seem to like these :<
 [![CI](https://ci.netsoc.co/api/badges/Strum355/vscode-mc-shader/status.svg?branch=master)](https://ci.netsoc.co/Strum355/vscode-mc-shader)

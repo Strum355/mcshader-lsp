@@ -7,7 +7,8 @@ use std::io::prelude::*;
 use serde_json::Value;
 
 use petgraph::dot;
-use petgraph::graph::Graph;
+
+use crate::graph::CachedStableGraph;
 
 pub struct CustomCommandProvider {
     commands: HashMap<String, Box<dyn Invokeable>>
@@ -35,7 +36,7 @@ pub trait Invokeable {
 }
 
 pub struct GraphDotCommand {
-    pub graph: Rc<RefCell<Graph<String, String>>>
+    pub graph: Rc<RefCell<CachedStableGraph>>
 }
 
 impl<'a> Invokeable for GraphDotCommand {
@@ -51,7 +52,7 @@ impl<'a> Invokeable for GraphDotCommand {
         let mut write_data_closure = || -> Result<(), std::io::Error> {
             let graph = self.graph.as_ref();
             file.seek(std::io::SeekFrom::Start(0))?;
-            file.write_all(dot::Dot::new(&(*(graph.borrow()))).to_string().as_bytes())?;
+            file.write_all(dot::Dot::new(&(graph.borrow().graph)).to_string().as_bytes())?;
             file.flush()?;
             file.seek(std::io::SeekFrom::Start(0))?;
             Ok(())

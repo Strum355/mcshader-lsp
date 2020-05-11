@@ -2,7 +2,7 @@ kind: pipeline
 name: default
 
 steps:
-- name: Test Server
+- name: test server
   image: rust:1.43
   commands:
     - cd server
@@ -12,4 +12,5 @@ steps:
   image: node:14
   commands:
     - npm i
+    - npm run compile                                                    
     - npm run lint

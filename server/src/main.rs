@@ -13,8 +13,6 @@ use std::process;
 use std::collections::HashMap;
 use std::io;
 
-use petgraph::graph::Graph;
-
 use chan::WaitGroup;
 
 use regex::Regex;
@@ -22,7 +20,7 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 mod provider;
-
+mod graph;
 #[cfg(test)]
 mod test;
 
@@ -41,9 +39,11 @@ fn main() {
 
     let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| io::stdout());
 
+    let cache_graph = graph::CachedStableGraph::new();
+
     let mut langserver = MinecraftShaderLanguageServer{
         endpoint: endpoint_output.clone(),
-        graph: Rc::new(RefCell::new(Graph::default())),
+        graph: Rc::new(RefCell::new(cache_graph)),
         config: Configuration::default(),
         wait: WaitGroup::new(),
         root: None,
@@ -61,7 +61,7 @@ fn main() {
 
 struct MinecraftShaderLanguageServer {
     endpoint: Endpoint,
-    graph: Rc<RefCell<Graph<String, String>>>,
+    graph: Rc<RefCell<graph::CachedStableGraph>>,
     config: Configuration,
     wait: WaitGroup,
     root: Option<String>,
@@ -136,15 +136,14 @@ impl MinecraftShaderLanguageServer {
         // Add edges between nodes, finding target nodes on weight (value)
         for (_, v) in files.into_iter() {
             for file in v.includes {
-                let mut iter = self.graph.borrow().node_indices();
                 //eprintln!("searching for {}", file);
-                let idx = iter.find(|i| self.graph.borrow_mut()[*i] == file);
+                let idx = self.graph.borrow_mut().find_node(file.clone());
                 if idx.is_none() {
-                    eprintln!("couldn't find {} in graph", file);
+                    eprintln!("couldn't find {} in graph for {}", file, self.graph.borrow().graph[v.idx]);
                     continue;
                 }
                 //eprintln!("added edge between\n\t{}\n\t{}", k, file);
-                self.graph.borrow_mut().add_edge(v.idx, idx.unwrap(), String::from("includes"));
+                self.graph.borrow_mut().graph.add_edge(v.idx, idx.unwrap(), String::from("includes"));
             }
         }
 
@@ -204,7 +203,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             })
         }));
 
-        self.root = Some(params.root_path.unwrap());
+        self.root = Some(String::from(params.root_uri.unwrap().path()));
 
         completable.complete(Ok(InitializeResult{capabilities, server_info: None}));
 
