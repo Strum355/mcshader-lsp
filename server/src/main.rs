@@ -187,6 +187,12 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         let mut capabilities = ServerCapabilities::default();
         capabilities.hover_provider = Some(true);
+        capabilities.document_link_provider = Some(DocumentLinkOptions{
+            resolve_provider: None,
+            work_done_progress_options: WorkDoneProgressOptions{
+                work_done_progress: None,
+            },
+        });
         capabilities.execute_command_provider = Some(ExecuteCommandOptions{
             commands: vec![String::from("graphDot")],
             work_done_progress_options: WorkDoneProgressOptions{
@@ -319,11 +325,33 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         completable.complete(Err(Self::error_not_available(())));
     }
     
-    fn document_link(&mut self, _params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
-        completable.complete(Err(Self::error_not_available(())));
+    fn document_link(&mut self, params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
+        eprintln!("document link file: {:?}", params.text_document.uri.to_file_path().unwrap());
+        let node = match self.graph.borrow_mut().find_node(params.text_document.uri.to_file_path().unwrap().as_os_str().to_str().unwrap().to_string()) {
+            Some(n) => n,
+            None => return,
+        };
+
+        let edges: Vec<DocumentLink> = self.graph.borrow().neighbors(node).into_iter().filter_map(|value| {
+            let path = std::path::Path::new(&value);
+            let url = match Url::from_file_path(path) {
+                Ok(url) => url,
+                Err(e) => {
+                    eprintln!("error converting {:?} into url: {:?}", path, e);
+                    return None;
+                }
+            };
+            Some(DocumentLink{
+                range: Range::new(Position::new(18, 0), Position::new(18, 20)),
+                target: url,
+                tooltip: None,
+            })
+        }).collect();
+        eprintln!("links: {:?}", edges);
+        completable.complete(Ok(edges));
     }
     
-    fn document_link_resolve(&mut self, _params: DocumentLink, completable: LSCompletable<DocumentLink>) {
+    fn document_link_resolve(&mut self, _: DocumentLink, completable: LSCompletable<DocumentLink>) {
         completable.complete(Err(Self::error_not_available(())));
     }
     
