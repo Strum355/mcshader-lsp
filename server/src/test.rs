@@ -19,7 +19,6 @@ impl io::Write for StdoutNewline {
         if buf[buf.len()-1] == "}".as_bytes()[0] {
             #[allow(unused_variables)]
             let res = self.s.write("\n\n".as_bytes());
-            
         }
         res
     }
@@ -42,6 +41,13 @@ fn new_temp_server() -> MinecraftShaderLanguageServer {
     }
 }
 
+fn copy_files(files: &str, dest: &TempDir) {
+    let opts = &fs_extra::dir::CopyOptions::new();
+    let files = fs::read_dir(files).unwrap().map(|e| String::from(e.unwrap().path().as_os_str().to_str().unwrap())).collect::<Vec<String>>();
+    fs_extra::copy_items(&files, dest.path().join("shaders"), opts).unwrap();
+}
+
+#[allow(deprecated)]
 #[test]
 fn test_empty_initialize() {
     let mut server = new_temp_server();
@@ -84,6 +90,7 @@ fn test_empty_initialize() {
     //std::thread::sleep(std::time::Duration::from_secs(1));
 }
 
+#[allow(deprecated)]
 #[test]
 fn test_01_initialize() {
     let mut server = new_temp_server();
@@ -91,9 +98,7 @@ fn test_01_initialize() {
     let tmp_dir = TempDir::new("mcshader").unwrap();
     fs::create_dir(tmp_dir.path().join("shaders")).unwrap();
 
-    let opts = &fs_extra::dir::CopyOptions::new();
-    let files = fs::read_dir("./testdata/01").unwrap().map(|e| String::from(e.unwrap().path().as_os_str().to_str().unwrap())).collect::<Vec<String>>();
-    fs_extra::copy_items(&files, tmp_dir.path().join("shaders"), opts).unwrap();
+    copy_files("./testdata/01", &tmp_dir);
 
     let tmp_path = tmp_dir.path().as_os_str().to_str().unwrap();
     let tmp_uri = format!("{}{}", "file://", tmp_path);
@@ -121,10 +126,36 @@ fn test_01_initialize() {
     let completable = MethodCompletable::new(ResponseCompletable::new(Some(Id::Number(1)), Box::new(on_response)));
     server.initialize(initialize_params, completable);
 
+    // Assert there is one edge between two nodes
     assert_eq!(server.graph.borrow().graph.edge_count(), 1);
+    
     let edge = server.graph.borrow().graph.edge_indices().next().unwrap();
     let (node1, node2) = server.graph.borrow().graph.edge_endpoints(edge).unwrap();
+    
+    // Assert the values of the two nodes in the tree
     assert_eq!(server.graph.borrow().graph[node1].as_str(), tmp_dir.path().join("shaders").join("final.fsh").as_os_str().to_str().unwrap());
+    assert_eq!(server.graph.borrow().graph[node2].as_str(), tmp_dir.path().join("shaders").join("common.glsl").as_os_str().to_str().unwrap());
 
     server.endpoint.request_shutdown();
+}
+
+#[test]
+fn test_graph_two_connected_nodes() {
+    let mut graph = graph::CachedStableGraph::new();
+
+    graph.add_node("sample");
+    graph.add_node("banana");
+    let idx1 = graph.find_node("sample").unwrap();
+    let idx2 = graph.find_node("banana").unwrap();
+    graph.add_edge(idx1, idx2);
+
+    let neighbors = graph.neighbors(idx1);
+    assert_eq!(neighbors.len(), 1);
+    assert_eq!(neighbors[0], "banana");
+
+    graph.remove_node("sample");
+    assert_eq!(graph.graph.node_count(), 1);
+    assert!(graph.find_node("sample").is_none());
+    let neighbors = graph.neighbors(idx2);
+    assert_eq!(neighbors.len(), 0);
 }
