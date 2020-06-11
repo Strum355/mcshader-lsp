@@ -2,6 +2,7 @@ use petgraph::stable_graph::StableDiGraph;
 use petgraph::stable_graph::NodeIndex;
 use petgraph::stable_graph::EdgeIndex;
 use std::collections::HashMap;
+use super::IncludePosition;
 
 /// Wraps a `StableDiGraph` with caching behaviour for node search by maintaining
 /// an index for node value to node index and a reverse index.
@@ -9,7 +10,7 @@ use std::collections::HashMap;
 pub struct CachedStableGraph {
     // StableDiGraph is used as it allows for String node values, essential for
     // generating the GraphViz DOT render.
-    pub graph: StableDiGraph<String, String>,
+    pub graph: StableDiGraph<String, IncludePosition>,
     cache: HashMap<String, NodeIndex>,
     // Maps a node index to its abstracted string representation.
     // Mainly used as the graph is based on NodeIndex and 
@@ -51,7 +52,7 @@ impl CachedStableGraph {
         }
     }
 
-    pub fn add_node<S: Into<String>>(&mut self, name: S) -> NodeIndex {
+    pub fn add_node(&mut self, name: impl Into<String>) -> NodeIndex {
         let name_str = name.into();
         let idx = self.graph.add_node(name_str.clone());
         self.cache.insert(name_str.clone(), idx);
@@ -59,12 +60,17 @@ impl CachedStableGraph {
         idx
     }
 
-    pub fn add_edge(&mut self, a: NodeIndex, b: NodeIndex) -> EdgeIndex {
-        self.graph.add_edge(a, b, String::from("includes"))
+    pub fn add_edge(&mut self, a: NodeIndex, b: NodeIndex, line: u64, start: u64, end: u64) -> EdgeIndex {
+        let child_path = self.reverse_index.get(&b).unwrap().clone();
+        self.graph.add_edge(a, b, IncludePosition{filepath: child_path, line, start, end})
     }
 
     /// Returns the filepaths of the neighbors for the given `NodeIndex`
     pub fn neighbors(&self, node: NodeIndex) -> Vec<String> {
         self.graph.neighbors(node).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
+    }
+
+    pub fn get_includes(&self, node: NodeIndex) -> Vec<IncludePosition> {
+        self.graph.edges(node).into_iter().map(|e| e.weight().clone()).collect()
     }
 }

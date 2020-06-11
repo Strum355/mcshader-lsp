@@ -1,3 +1,5 @@
+#![feature(str_strip)]
+
 use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::*;
 use rust_lsp::jsonrpc::*;
@@ -12,6 +14,9 @@ use std::io::{BufReader, BufRead};
 use std::process;
 use std::collections::HashMap;
 use std::io;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::convert::TryFrom;
 
 use chan::WaitGroup;
 
@@ -86,7 +91,21 @@ impl Configuration {
 
 struct GLSLFile {
     idx: petgraph::graph::NodeIndex,
-    includes: Vec<String>,
+    includes: Vec<IncludePosition>,
+}
+
+#[derive(Clone)]
+pub struct IncludePosition {
+    filepath: String,
+    line:  u64,
+    start: u64,
+    end:   u64,
+}
+
+impl Display for IncludePosition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{{{}, l {}, s, {}, e {}}}", self.filepath, self.line, self.start, self.end)
+    }
 }
 
 impl MinecraftShaderLanguageServer {
@@ -113,7 +132,13 @@ impl MinecraftShaderLanguageServer {
                 return None;
             }
 
-            let ext = path.extension().unwrap().to_str().unwrap();
+            let ext = match path.extension() {
+                Some(e) => e,
+                None => {
+                    eprintln!("filepath {} had no extension", path.to_str().unwrap());
+                    return None
+                },
+            };
             if ext != "vsh" && ext != "fsh" && ext != "glsl" && ext != "inc" {
                 return None;
             }
@@ -137,13 +162,14 @@ impl MinecraftShaderLanguageServer {
         for (_, v) in files.into_iter() {
             for file in v.includes {
                 //eprintln!("searching for {}", file);
-                let idx = self.graph.borrow_mut().find_node(file.clone());
+                let idx = self.graph.borrow_mut().find_node(file.filepath.clone());
                 if idx.is_none() {
                     eprintln!("couldn't find {} in graph for {}", file, self.graph.borrow().graph[v.idx]);
                     continue;
                 }
                 //eprintln!("added edge between\n\t{}\n\t{}", k, file);
-                self.graph.borrow_mut().graph.add_edge(v.idx, idx.unwrap(), String::from("includes"));
+                self.graph.borrow_mut().add_edge(v.idx, idx.unwrap(), file.line, file.start, file.end);
+                //self.graph.borrow_mut().graph.add_edge(v.idx, idx.unwrap(), String::from("includes"));
             }
         }
 
@@ -154,22 +180,28 @@ impl MinecraftShaderLanguageServer {
         self.endpoint.send_notification("clearStatus", None::<()>).unwrap();
     }
 
-    pub fn find_includes(&self, root: &str, file: &str) -> Vec<String> {
+    pub fn find_includes(&self, root: &str, file: &str) -> Vec<IncludePosition> {
         let mut includes = Vec::default();
 
         let buf = BufReader::new(std::fs::File::open(file).unwrap());
-        buf.lines()
-            .filter_map(|line| line.ok())
-            .filter(|line| RE_INCLUDE.is_match(line.as_str()))
+        buf.lines().enumerate()
+            .filter_map(|line|  match line.1 { 
+                Ok(t) => Some((line.0, t)), 
+                Err(_e) => None }
+            )
+            .filter(|line| RE_INCLUDE.is_match(line.1.as_str()))
             .for_each(|line| {
-                let caps = RE_INCLUDE.captures(line.as_str()).unwrap();
+                let cap = RE_INCLUDE.captures(line.1.as_str()).unwrap().get(1).unwrap();
                 //eprintln!("{:?}", caps);
-                let mut path: String = String::from(caps.get(1).unwrap().as_str());
+
+                let start = u64::try_from(cap.start()).unwrap();
+                let end = u64::try_from(cap.end()).unwrap();
+                let mut path: String = String::from(cap.as_str());
                 if !path.starts_with("/") {
                     path.insert(0, '/');
                 }
                 let full_include = String::from(root).add("/shaders").add(path.as_str());
-                includes.push(full_include.clone());
+                includes.push(IncludePosition{filepath: full_include.clone(), line: u64::try_from(line.0).unwrap(), start, end});
                 //eprintln!("{} includes {}", file, full_include);
             });
 
@@ -186,7 +218,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         self.wait.add(1);
 
         let mut capabilities = ServerCapabilities::default();
-        capabilities.hover_provider = Some(true);
+        capabilities.hover_provider = Some(false);
         capabilities.document_link_provider = Some(DocumentLinkOptions{
             resolve_provider: None,
             work_done_progress_options: WorkDoneProgressOptions{
@@ -266,16 +298,17 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn resolve_completion_item(&mut self, _: CompletionItem, completable: LSCompletable<CompletionItem>) {
         completable.complete(Err(Self::error_not_available(())));
     }
+
     fn hover(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Hover>) {
         self.wait.wait();
         self.endpoint.send_notification("sampleText", vec![1,2,3]).unwrap();
-        completable.complete(Ok(Hover{
+        /* completable.complete(Ok(Hover{
             contents: HoverContents::Markup(MarkupContent{
                 kind: MarkupKind::Markdown,
                 value: String::from("# Hello World"),
             }),
             range: None,
-        }));
+        })); */
     }
 
     fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
@@ -327,13 +360,14 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     
     fn document_link(&mut self, params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
         eprintln!("document link file: {:?}", params.text_document.uri.to_file_path().unwrap());
+        // node for current document
         let node = match self.graph.borrow_mut().find_node(params.text_document.uri.to_file_path().unwrap().as_os_str().to_str().unwrap().to_string()) {
             Some(n) => n,
             None => return,
         };
 
-        let edges: Vec<DocumentLink> = self.graph.borrow().neighbors(node).into_iter().filter_map(|value| {
-            let path = std::path::Path::new(&value);
+        let edges: Vec<DocumentLink> = self.graph.borrow().get_includes(node).into_iter().filter_map(|value| {
+            let path = std::path::Path::new(&value.filepath);
             let url = match Url::from_file_path(path) {
                 Ok(url) => url,
                 Err(e) => {
@@ -341,9 +375,11 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                     return None;
                 }
             };
+
             Some(DocumentLink{
-                range: Range::new(Position::new(18, 0), Position::new(18, 20)),
-                target: url,
+                range: Range::new(Position::new(value.line, value.start), Position::new(value.line, value.end)),
+                target: url.clone(),
+                //tooltip: Some(url.path().to_string().strip_prefix(self.root.clone().unwrap().as_str()).unwrap().to_string()),
                 tooltip: None,
             })
         }).collect();

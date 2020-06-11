@@ -147,7 +147,7 @@ fn test_graph_two_connected_nodes() {
     graph.add_node("banana");
     let idx1 = graph.find_node("sample").unwrap();
     let idx2 = graph.find_node("banana").unwrap();
-    graph.add_edge(idx1, idx2);
+    graph.add_edge(idx1, idx2, 3, 10, 50);
 
     let neighbors = graph.neighbors(idx1);
     assert_eq!(neighbors.len(), 1);
