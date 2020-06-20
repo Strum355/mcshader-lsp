@@ -149,13 +149,28 @@ fn test_graph_two_connected_nodes() {
     let idx2 = graph.find_node("banana").unwrap();
     graph.add_edge(idx1, idx2, 3, 10, 50);
 
-    let neighbors = graph.neighbors(idx1);
-    assert_eq!(neighbors.len(), 1);
-    assert_eq!(neighbors[0], "banana");
+    let children = graph.child_node_names(idx1);
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0], "banana");
+
+    let children = graph.child_node_indexes(idx1);
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0], idx2);
+
+    let parents = graph.parent_node_names(idx1);
+    assert_eq!(parents.len(), 0);
+    
+    let parents = graph.parent_node_names(idx2);
+    assert_eq!(parents.len(), 1);
+    assert_eq!(parents[0], "sample");
+
+    let parents = graph.parent_node_indexes(idx2);
+    assert_eq!(parents.len(), 1);
+    assert_eq!(parents[0], idx1);
 
     graph.remove_node("sample");
     assert_eq!(graph.graph.node_count(), 1);
     assert!(graph.find_node("sample").is_none());
-    let neighbors = graph.neighbors(idx2);
+    let neighbors = graph.child_node_names(idx2);
     assert_eq!(neighbors.len(), 0);
 }

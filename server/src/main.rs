@@ -243,9 +243,10 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         self.root = Some(String::from(params.root_uri.unwrap().path()));
 
+        self.gen_initial_graph(self.root.clone().unwrap());
+
         completable.complete(Ok(InitializeResult{capabilities, server_info: None}));
 
-        self.gen_initial_graph(self.root.clone().unwrap());
         self.lint();
     }
     
@@ -278,7 +279,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         self.wait.wait();
         
         #[allow(unused_variables)]
-        let text_change = params.content_changes.get(0).unwrap();
+        let text_change = params.content_changes[0].clone();
         //eprintln!("changed {} changes: {}", text_change., params.text_document.uri);
     }
     
@@ -299,7 +300,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         completable.complete(Err(Self::error_not_available(())));
     }
 
-    fn hover(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Hover>) {
+    fn hover(&mut self, _: TextDocumentPositionParams, _: LSCompletable<Hover>) {
         self.wait.wait();
         self.endpoint.send_notification("sampleText", vec![1,2,3]).unwrap();
         /* completable.complete(Ok(Hover{
@@ -366,7 +367,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             None => return,
         };
 
-        let edges: Vec<DocumentLink> = self.graph.borrow().get_includes(node).into_iter().filter_map(|value| {
+        let edges: Vec<DocumentLink> = self.graph.borrow().get_include_meta(node).into_iter().filter_map(|value| {
             let path = std::path::Path::new(&value.filepath);
             let url = match Url::from_file_path(path) {
                 Ok(url) => url,
@@ -378,9 +379,10 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
             Some(DocumentLink{
                 range: Range::new(Position::new(value.line, value.start), Position::new(value.line, value.end)),
-                target: url.clone(),
+                target: Some(url.clone()),
                 //tooltip: Some(url.path().to_string().strip_prefix(self.root.clone().unwrap().as_str()).unwrap().to_string()),
                 tooltip: None,
+                data: None,
             })
         }).collect();
         eprintln!("links: {:?}", edges);

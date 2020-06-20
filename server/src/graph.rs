@@ -1,5 +1,6 @@
 use petgraph::stable_graph::StableDiGraph;
 use petgraph::stable_graph::NodeIndex;
+use petgraph::Direction;
 use petgraph::stable_graph::EdgeIndex;
 use std::collections::HashMap;
 use super::IncludePosition;
@@ -60,17 +61,28 @@ impl CachedStableGraph {
         idx
     }
 
-    pub fn add_edge(&mut self, a: NodeIndex, b: NodeIndex, line: u64, start: u64, end: u64) -> EdgeIndex {
-        let child_path = self.reverse_index.get(&b).unwrap().clone();
-        self.graph.add_edge(a, b, IncludePosition{filepath: child_path, line, start, end})
+    pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, line: u64, start: u64, end: u64) -> EdgeIndex {
+        let child_path = self.reverse_index.get(&child).unwrap().clone();
+        self.graph.add_edge(parent, child, IncludePosition{filepath: child_path, line, start, end})
     }
 
-    /// Returns the filepaths of the neighbors for the given `NodeIndex`
-    pub fn neighbors(&self, node: NodeIndex) -> Vec<String> {
+    pub fn child_node_names(&self, node: NodeIndex) -> Vec<String> {
         self.graph.neighbors(node).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
     }
 
-    pub fn get_includes(&self, node: NodeIndex) -> Vec<IncludePosition> {
+    pub fn child_node_indexes(&self, node: NodeIndex) -> Vec<NodeIndex> {
+        self.graph.neighbors(node).collect()
+    }
+
+    pub fn parent_node_names(&self, node: NodeIndex) -> Vec<String> {
+        self.graph.neighbors_directed(node, Direction::Incoming).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
+    }
+
+    pub fn parent_node_indexes(&self, node: NodeIndex) -> Vec<NodeIndex> {
+        self.graph.neighbors_directed(node, Direction::Incoming).collect()
+    }
+
+    pub fn get_include_meta(&self, node: NodeIndex) -> Vec<IncludePosition> {
         self.graph.edges(node).into_iter().map(|e| e.weight().clone()).collect()
     }
 }
