@@ -55,7 +55,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(vscode.commands.registerCommand("mcshader.graphDot", async () => {
     await langServer.sendRequest(vscodeLang.ExecuteCommandRequest.type.method, {
-      command: 'graphDot'
+      command: 'graphDot',
+      arguments: [vscode.workspace.workspaceFolders[0].uri.path],
     })
   }))
 }

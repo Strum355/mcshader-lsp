@@ -23,9 +23,9 @@ impl CustomCommandProvider {
         }
     }
 
-    pub fn execute(&self, command: String, args: Vec<Value>) -> Result<(), String> {
-        if self.commands.contains_key(&command) {
-            return self.commands.get(&command).unwrap().run_command(args);
+    pub fn execute(&self, command: &str, args: Vec<Value>) -> Result<(), String> {
+        if self.commands.contains_key(command) {
+            return self.commands.get(command).unwrap().run_command(args);
         }
         Err(String::from("command doesn't exist"))
     }
@@ -42,7 +42,9 @@ pub struct GraphDotCommand {
 impl<'a> Invokeable for GraphDotCommand {
     fn run_command(&self, params: Vec<Value>) -> Result<(), String> {
         let rootpath = params.get(0).unwrap().to_string();
+        let rootpath = String::from(rootpath.trim_start_matches('"').trim_end_matches('"'));
         let filepath = rootpath + "/graph.dot";
+        eprintln!("generating dot file at {}", filepath);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)

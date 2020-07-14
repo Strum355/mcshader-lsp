@@ -1,5 +1,3 @@
-#![feature(str_strip)]
-
 use rust_lsp::jsonrpc::method_types::*;
 use rust_lsp::jsonrpc::*;
 use rust_lsp::lsp::*;
@@ -20,6 +18,8 @@ use std::process;
 use std::rc::Rc;
 
 use chan::WaitGroup;
+
+use percent_encoding;
 
 use regex::Regex;
 
@@ -75,10 +75,19 @@ struct MinecraftShaderLanguageServer {
     command_provider: Option<provider::CustomCommandProvider>,
 }
 
-#[derive(Default)]
 struct Configuration {
     glslang_validator_path: String,
     shaderpacks_path: String,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        let shaderpacks_path = std::env::var("HOME").unwrap() + "/.minecraft/shaderpacks";
+        Configuration{
+            glslang_validator_path: String::from("glslangValidator"),
+            shaderpacks_path
+        }
+    }
 }
 
 impl Configuration {
@@ -120,7 +129,7 @@ impl MinecraftShaderLanguageServer {
         }
     }
 
-    pub fn gen_initial_graph(&mut self, root: String) {
+    pub fn gen_initial_graph(&self, root: &str) {
         self.endpoint
             .send_notification("status", vec!["$(loading~spin)", "Building project..."])
             .unwrap();
@@ -129,7 +138,7 @@ impl MinecraftShaderLanguageServer {
         eprintln!("root of project is {}", root);
 
         // filter directories and files not ending in any of the 3 extensions
-        let file_iter = walkdir::WalkDir::new(root.clone())
+        let file_iter = walkdir::WalkDir::new(root)
             .into_iter()
             .filter_map(|entry| {
                 if !entry.is_ok() {
@@ -157,22 +166,21 @@ impl MinecraftShaderLanguageServer {
 
         // iterate all valid found files, search for includes, add a node into the graph for each
         // file and add a file->includes KV into the map
-        for entry_res in file_iter {
-            let includes = self.find_includes(root.as_str(), entry_res.as_str());
+        for path in file_iter {
+            let includes = self.find_includes(root, path.as_str());
 
-            let stripped_path = String::from(String::from(entry_res));
-            let idx = self.graph.borrow_mut().add_node(stripped_path.clone());
+            let idx = self.graph.borrow_mut().add_node(path.clone());
 
-            //eprintln!("adding {} with\n{:?}", stripped_path.clone(), includes);
+            //eprintln!("adding {} with\n{:?}", path.clone(), includes);
 
-            files.insert(stripped_path, GLSLFile { idx, includes });
+            files.insert(path, GLSLFile { idx, includes });
         }
 
         // Add edges between nodes, finding target nodes on weight (value)
         for (_, v) in files.into_iter() {
             for file in v.includes {
                 //eprintln!("searching for {}", file);
-                let idx = self.graph.borrow_mut().find_node(file.filepath.clone());
+                let idx = self.graph.borrow_mut().find_node(file.filepath.as_str());
                 if idx.is_none() {
                     eprintln!("couldn't find {} in graph for {}", file, self.graph.borrow().graph[v.idx]);
                     continue;
@@ -248,7 +256,7 @@ impl MinecraftShaderLanguageServer {
 
         let mut child = cmd.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
-        stdin.write("#version 120".as_bytes()).expect("failed to write to stdin");
+        stdin.write(source.into().as_bytes()).expect("failed to write to stdin");
         
         let output = child.wait_with_output().expect("expected output");
         eprintln!("glslangValidator output: {}\n", String::from_utf8(output.stdout).unwrap());
@@ -285,9 +293,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             },
         ));
 
-        self.root = Some(String::from(params.root_uri.unwrap().path()));
+        self.root = Some(percent_encoding::percent_decode_str(params.root_uri.unwrap().path()).decode_utf8().unwrap().into());
 
-        self.gen_initial_graph(self.root.clone().unwrap());
+        self.gen_initial_graph(self.root.as_ref().unwrap());
 
         completable.complete(Ok(InitializeResult {
             capabilities,
@@ -325,11 +333,12 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         eprintln!("{:?}", params.settings.as_object().unwrap());
 
         self.wait.done();
-
-        self.lint("version #120");
     }
 
-    fn did_open_text_document(&mut self, _: DidOpenTextDocumentParams) {}
+    fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
+        eprintln!("opened doc {}", params.text_document.uri);
+        self.lint(params.text_document.text);
+    }
 
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
         self.wait.wait();
@@ -343,7 +352,11 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn did_save_text_document(&mut self, params: DidSaveTextDocumentParams) {
         self.wait.wait();
-        eprintln!("saved {}", params.text_document.uri);
+
+        let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
+        
+        let file_content = std::fs::read(path).unwrap();
+        self.lint(String::from_utf8(file_content).unwrap());
     }
 
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
@@ -375,13 +388,20 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             .command_provider
             .as_ref()
             .unwrap()
-            .execute(params.command, params.arguments)
+            .execute(params.command.as_ref(), params.arguments)
         {
-            Ok(_) => completable.complete(Ok(WorkspaceEdit {
-                changes: None,
-                document_changes: None,
-            })),
-            Err(err) => completable.complete(Err(MethodError::new(32420, err, ()))),
+            Ok(_) => {
+                eprintln!("executed {} successfully", params.command);
+                // TODO: notification popup
+                completable.complete(Ok(WorkspaceEdit {
+                    changes: None,
+                    document_changes: None,
+                }))
+            },
+            Err(err) => {
+                eprintln!("failed to execute {}: {}", params.command, err);
+                completable.complete(Err(MethodError::new(32420, err, ())))
+            },
         }
     }
 
