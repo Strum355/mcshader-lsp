@@ -2,6 +2,7 @@ use rust_lsp::jsonrpc::method_types::*;
 use rust_lsp::jsonrpc::*;
 use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::*;
+use rust_lsp::lsp_types::notification::*;
 
 use walkdir;
 
@@ -16,6 +17,8 @@ use std::io::{BufRead, BufReader};
 use std::ops::Add;
 use std::process;
 use std::rc::Rc;
+use std::num::NonZeroU64;
+use std::str::FromStr;
 
 use chan::WaitGroup;
 
@@ -246,7 +249,8 @@ impl MinecraftShaderLanguageServer {
         return includes;
     }
 
-    pub fn lint(&self, source: impl Into<String>) {
+    pub fn lint(&self, uri: impl Into<Url>, source: impl Into<String>) {
+        let source: String = source.into();
         eprintln!("validator bin path: {}", self.config.glslang_validator_path);
         let cmd = process::Command::new(&self.config.glslang_validator_path)
             .args(&["--stdin", "-S", "frag"])
@@ -256,10 +260,63 @@ impl MinecraftShaderLanguageServer {
 
         let mut child = cmd.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
-        stdin.write(source.into().as_bytes()).expect("failed to write to stdin");
+        stdin.write(source.as_bytes()).expect("failed to write to stdin");
         
         let output = child.wait_with_output().expect("expected output");
-        eprintln!("glslangValidator output: {}\n", String::from_utf8(output.stdout).unwrap());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        eprintln!("glslangValidator output: {}\n", stdout);
+
+        let mut diagnostics: Vec<Diagnostic> = vec![];
+
+        let source_lines: Vec<&str> = source.split('\n').collect();
+
+        stdout.split('\n').into_iter().for_each(|line| {
+            let diagnostic_capture = match RE_DIAGNOSTIC.captures(line) {
+                Some(d) => d,
+                None => return
+            };
+
+            eprintln!("match {:?}", diagnostic_capture);
+            
+            let msg = diagnostic_capture.get(4).unwrap().as_str().trim();
+
+            if msg.starts_with("compilation terminated") {
+                return
+            }
+
+            let line = NonZeroU64::from_str(diagnostic_capture.get(3).unwrap().as_str()).unwrap();
+            let line: u64 = line.into();
+            let line = line - 1;
+            
+
+            let line_text = source_lines.get(line as usize).unwrap();
+            let leading_whitespace = line_text.len() - line_text.trim_start().len();
+
+            let severity = match diagnostic_capture.get(0).unwrap().as_str() {
+                "ERROR" => DiagnosticSeverity::Error,
+                "WARNING" => DiagnosticSeverity::Warning,
+                _ => DiagnosticSeverity::Error,
+            };
+
+
+            let diagnostic = Diagnostic {
+                range: Range::new(Position::new(line, leading_whitespace as u64), Position::new(line, 1000)),
+                code: None,
+                severity: Some(severity),
+                source: Some(String::from("mc-glsl")),
+                message: String::from(msg),
+                related_information: None,
+                tags: None,
+            };
+
+            diagnostics.push(diagnostic);
+        });
+
+        self.endpoint.send_notification(PublishDiagnostics::METHOD, PublishDiagnosticsParams {
+            uri: uri.into(),
+            diagnostics,
+            version: None,
+        }).unwrap();
     }
 }
 
@@ -337,7 +394,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         eprintln!("opened doc {}", params.text_document.uri);
-        self.lint(params.text_document.text);
+        self.lint(params.text_document.uri, params.text_document.text);
     }
 
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
@@ -356,7 +413,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
         
         let file_content = std::fs::read(path).unwrap();
-        self.lint(String::from_utf8(file_content).unwrap());
+        self.lint(params.text_document.uri, String::from_utf8(file_content).unwrap());
     }
 
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
