@@ -43,6 +43,8 @@ lazy_static! {
 #[allow(dead_code)]
 static INCLUDE_STR: &'static str = "#extension GL_GOOGLE_include_directive : require";
 
+static SOURCE: &'static str = "mc-glsl";
+
 fn main() {
     let stdin = std::io::stdin();
 
@@ -249,7 +251,7 @@ impl MinecraftShaderLanguageServer {
         return includes;
     }
 
-    pub fn lint(&self, uri: impl Into<Url>, source: impl Into<String>) {
+    pub fn lint(&self, source: impl Into<String>) -> Vec<Diagnostic> {
         let source: String = source.into();
         eprintln!("validator bin path: {}", self.config.glslang_validator_path);
         let cmd = process::Command::new(&self.config.glslang_validator_path)
@@ -284,26 +286,34 @@ impl MinecraftShaderLanguageServer {
                 return
             }
 
-            let line = NonZeroU64::from_str(diagnostic_capture.get(3).unwrap().as_str()).unwrap();
+            let line = NonZeroU64::from_str(
+                diagnostic_capture
+                    .get(3)
+                    .expect("third capture group was None")
+                    .as_str()
+            ).expect("got non-numeric string value");
             let line: u64 = line.into();
             let line = line - 1;
             
 
-            let line_text = source_lines.get(line as usize).unwrap();
+            let line_text = source_lines[line as usize];
             let leading_whitespace = line_text.len() - line_text.trim_start().len();
 
             let severity = match diagnostic_capture.get(0).unwrap().as_str() {
                 "ERROR" => DiagnosticSeverity::Error,
                 "WARNING" => DiagnosticSeverity::Warning,
-                _ => DiagnosticSeverity::Error,
+                _ => DiagnosticSeverity::Information,
             };
 
 
             let diagnostic = Diagnostic {
-                range: Range::new(Position::new(line, leading_whitespace as u64), Position::new(line, 1000)),
+                range: Range::new(
+                    Position::new(line, leading_whitespace as u64),
+                    Position::new(line, line_text.len() as u64)
+                ),
                 code: None,
                 severity: Some(severity),
-                source: Some(String::from("mc-glsl")),
+                source: Some(String::from(SOURCE)),
                 message: String::from(msg),
                 related_information: None,
                 tags: None,
@@ -311,11 +321,14 @@ impl MinecraftShaderLanguageServer {
 
             diagnostics.push(diagnostic);
         });
+        diagnostics
+    }
 
+    pub fn publish_diagnostic(&self, diagnostics: Vec<Diagnostic>, uri: impl Into<Url>, document_version: Option<i64>) {
         self.endpoint.send_notification(PublishDiagnostics::METHOD, PublishDiagnosticsParams {
             uri: uri.into(),
             diagnostics,
-            version: None,
+            version: document_version,
         }).unwrap();
     }
 }
@@ -394,7 +407,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         eprintln!("opened doc {}", params.text_document.uri);
-        self.lint(params.text_document.uri, params.text_document.text);
+        let diagnostics = self.lint(params.text_document.text);
+        self.publish_diagnostic(diagnostics, params.text_document.uri, Some(params.text_document.version));
     }
 
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
@@ -413,7 +427,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
         
         let file_content = std::fs::read(path).unwrap();
-        self.lint(params.text_document.uri, String::from_utf8(file_content).unwrap());
+        let diagnostics = self.lint(String::from_utf8(file_content).unwrap());
+        self.publish_diagnostic(diagnostics, params.text_document.uri, None);
     }
 
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}

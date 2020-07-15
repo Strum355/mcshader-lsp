@@ -7,7 +7,7 @@ use super::IncludePosition;
 
 /// Wraps a `StableDiGraph` with caching behaviour for node search by maintaining
 /// an index for node value to node index and a reverse index.
-/// This allows for O(1) lookup for a value after the initial lookup.
+/// This allows for **O(1)** lookup for a value after the initial lookup.
 pub struct CachedStableGraph {
     // StableDiGraph is used as it allows for String node values, essential for
     // generating the GraphViz DOT render.
@@ -28,8 +28,9 @@ impl CachedStableGraph {
     }
 
     /// Returns the `NodeIndex` for a given graph node with the value of `name`
-    /// and caches the result in the `HashMap`. Complexity is O(1) if the value
-    /// is cached, else O(n) as an exhaustive search must be done.
+    /// and caches the result in the `HashMap`. Complexity is **O(1)** if the value
+    /// is cached (which should always be the case), else **O(n)** where **n** is
+    /// the number of node indices, as an exhaustive search must be done.
     pub fn find_node(&mut self, name: impl Into<String>) -> Option<NodeIndex> {
         let name_str = name.into();
         match self.cache.get(&name_str) {
