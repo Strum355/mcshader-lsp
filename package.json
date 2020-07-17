@@ -1,83 +1,91 @@
 {
-    "name": "vscode-mc-shader",
-    "displayName": "Minecraft GLSL Shaders",
-    "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
-    "version": "0.9.5",
-    "publisher": "Strum355",
-    "author": "Noah Santschi-Cooney (Strum355)",
-    "license": "MIT",
-    "icon": "logo.png",
-    "repository": {
-        "url": "https://github.com/Strum355/vscode-mc-shader"
-    },
-    "engines": {
-        "vscode": "^1.37.0"
-    },
-    "categories": [
-        "Linters",
-        "Programming Languages"
+  "name": "vscode-mc-shader",
+  "displayName": "Minecraft GLSL Shaders",
+  "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
+  "version": "0.9.5",
+  "publisher": "Strum355",
+  "author": "Noah Santschi-Cooney (Strum355)",
+  "license": "MIT",
+  "icon": "logo.png",
+  "repository": {
+    "url": "https://github.com/Strum355/vscode-mc-shader"
+  },
+  "engines": {
+    "vscode": "^1.43.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:glsl",
+    "workspaceContains:**/*.fsh",
+    "workspaceContains:**/*.vsh",
+    "workspaceContains:**/*.gsh",
+    "workspaceContains:**/*.glsl"
+  ],
+  "extensionDependencies": [
+    "slevesque.shader"
+  ],
+  "main": "./client/out/extension",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mcshader.graphDot",
+        "title": "Generate Graphviz DOT dependency graph",
+        "category": "Minecraft Shader"
+      },
+      {
+        "command": "mcshader.restart",
+        "title": "Reload Language Server",
+        "category": "Minecraft Shader"
+      }
     ],
-    "activationEvents": [
-        "onLanguage:glsl",
-        "workspaceContains:**/*.fsh",
-        "workspaceContains:**/*.vsh",
-        "workspaceContains:**/*.gsh",
-        "workspaceContains:**/*.glsl"
-    ],
-    "extensionDependencies": [
-        "slevesque.shader"
-    ],
-    "main": "./client/out/extension",
-    "contributes": {
-        "commands": [
-            {
-                "command": "mcshader.graphDot",
-                "title": "Minecraft GLSL: Generate Graphviz DOT dependency graph",
-                "category": "Minecraft Shader"
-            }
+    "languages": [
+      {
+        "id": "glsl",
+        "aliases": [
+          "OpenGL Shading Language"
         ],
-        "languages": [
-            {
-                "id": "glsl",
-                "aliases": [
-                    "OpenGL Shading Language"
-                ],
-                "extensions": [
-                    ".fsh",
-                    ".vsh",
-                    ".gsh",
-                    ".glsl"
-                ]
-            }
-        ],
-        "configuration": {
-            "title": "Minecraft GLSL configurations",
-            "properties": {
-                "mcglsl.glslangValidatorPath": {
-                    "type": "string",
-                    "default": "glslangValidator",
-                    "description": "The path to the glslangValidator executable. Default value assumes its in your PATH."
-                },
-                "mcglsl.shaderpacksPath": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Absolute path to your Minecraft's shaderpacks folder."
-                }
-            }
+        "extensions": [
+          ".fsh",
+          ".vsh",
+          ".gsh",
+          ".glsl"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Minecraft GLSL configurations",
+      "properties": {
+        "mcglsl.glslangValidatorPath": {
+          "type": "string",
+          "default": "glslangValidator",
+          "description": "The path to the glslangValidator executable. Default value assumes its in your PATH."
+        },
+        "mcglsl.shaderpacksPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to your Minecraft's shaderpacks folder."
         }
-    },
-    "scripts": {
-        "vscode:prepublish": "cd client && npm run update-vscode && cd .. && npm run compile",
-        "compile": "tsc -b",
-        "watch": "concurrently \"tsc -b -w\" \"cd server && cargo watch -x build\"",
-        "postinstall": "cd client && npm install",
-        "lint": "tslint -c tslint.json 'client/src/**/*.ts'",
-        "fix": "tslint -c tslint.json --fix client/src/**/*.ts"
-    },
-    "devDependencies": {
-        "@types/node": "^10.14.15",
-        "concurrently": "^5.1.0",
-        "tslint": "^5.18.0",
-        "typescript": "^3.7.5"
+      }
     }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -b",
+    "package": "vsce package -o vscode-mc-shader.vsix",
+    "watch": "concurrently \"tsc -b -w\" \"cd server && cargo watch -x build\"",
+    "postinstall": "cd client && npm install",
+    "lint": "eslint 'client/**/*.ts' --max-warnings 1",
+    "fix": "eslint 'client/**/*.ts' --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^10.14.15",
+    "@typescript-eslint/parser": "^3.6.1",
+    "concurrently": "^5.1.0",
+    "eslint": "^7.4.0",
+    "typescript": "^3.9.7",
+    "vsce": "^1.77.0"
+  }
 }

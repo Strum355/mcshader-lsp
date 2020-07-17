@@ -3,8 +3,9 @@
 		"module": "commonjs",
 		"target": "es6",
 		"outDir": "./client/out",
-		"rootDir": "./client/src",
-		"sourceMap": true
+        "rootDir": "./client/src",
+        "sourceMap": true,
+        //"skipLibCheck": true
 	},
 	"include": [
 		"./client"

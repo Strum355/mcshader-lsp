@@ -18,7 +18,7 @@ impl CustomCommandProvider {
     pub fn new(commands: Vec<(&str, Box<dyn Invokeable>)>) -> CustomCommandProvider {
        CustomCommandProvider{
             commands: commands.into_iter().map(|tup| {
-                (String::from(tup.0), tup.1)
+                (tup.0.into(), tup.1)
             }).collect(),
         }
     }
@@ -27,7 +27,7 @@ impl CustomCommandProvider {
         if self.commands.contains_key(command) {
             return self.commands.get(command).unwrap().run_command(args);
         }
-        Err(String::from("command doesn't exist"))
+        Err("command doesn't exist".into())
     }
 }
 
@@ -44,7 +44,7 @@ impl<'a> Invokeable for GraphDotCommand {
         let rootpath = params.get(0).unwrap().to_string();
         let rootpath = String::from(rootpath.trim_start_matches('"').trim_end_matches('"'));
         let filepath = rootpath + "/graph.dot";
-        eprintln!("generating dot file at {}", filepath);
+        eprint!("generating dot file at {}", filepath);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
