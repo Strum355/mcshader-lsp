@@ -56,7 +56,7 @@
       }
     ],
     "configuration": {
-      "title": "Minecraft GLSL configurations",
+      "title": "Minecraft GLSL Shaders",
       "properties": {
         "mcglsl.glslangValidatorPath": {
           "type": "string",

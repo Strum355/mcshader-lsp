@@ -1,10 +1,11 @@
 import * as unzip from 'adm-zip'
 import { execSync } from 'child_process'
+import * as fs from 'fs'
 import { writeFileSync } from 'fs'
 import fetch from 'node-fetch'
 import { platform } from 'os'
 import * as vscode from 'vscode'
-import { Extension, glslConfigParam } from './extension'
+import { Extension } from './extension'
 import { log } from './log'
 
 const url = {
@@ -15,9 +16,17 @@ const url = {
 
 const config = vscode.workspace.getConfiguration()
 
-export async function promptDownload(e: Extension): Promise<boolean> {
+export async function bootstrapGLSLangValidator(e: Extension): Promise<boolean> {
+  const glslangValidatorPath = config.get('mcglsl.glslangValidatorPath') as string
+  if (!testExecutable(glslangValidatorPath)) {
+    if(!await promptDownload(e, glslangValidatorPath)) return false
+  }
+  return true
+}
+
+async function promptDownload(e: Extension, glslangValidatorPath: string): Promise<boolean> {
   const chosen = await vscode.window.showErrorMessage(
-    `[mc-glsl] glslangValidator not found at: '${config.get(glslConfigParam)}'.`,
+    `[mc-glsl] glslangValidator not found at: '${glslangValidatorPath}'.`,
     {title: 'Download'},
     {title: 'Cancel'}
   )
@@ -40,10 +49,12 @@ async function tryInstallExecutable(e: Extension): Promise<boolean> {
 }
 
 async function installExecutable(e: Extension) {
+  fs.mkdirSync(e.context.globalStoragePath, { recursive: true })
+  
   e.updateStatus('$(cloud-download)', 'Downloading glslangValidator')
 
   const glslangBin = '/glslangValidator' + (platform() === 'win32' ? '.exe' : '')
-  const glslangPath = config.get('mcglsl.shaderpacksPath') + glslangBin
+  const glslangPath = e.context.globalStoragePath + glslangBin
 
   const response = await fetch(url[platform()])
   log.info('glslangValidator download response status: ' + response.status)
@@ -64,12 +75,11 @@ async function installExecutable(e: Extension) {
   vscode.window.showInformationMessage(
     `glslangValidator has been downloaded to ${glslangPath}. Your config should be updated automatically.`
   )
-  config.update('mcglsl.glslangValidatorPath', glslangPath, vscode.ConfigurationTarget.Global)
+  await config.update('mcglsl.glslangValidatorPath', glslangPath, vscode.ConfigurationTarget.Global)
   e.clearStatus()
 }
 
-export function testExecutable(glslangPath?: string): boolean {
-  glslangPath = glslangPath || config.get(glslConfigParam)
+function testExecutable(glslangPath: string): boolean {
   let stdout = ''
   try {
     stdout = execSync(glslangPath, {

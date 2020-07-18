@@ -2,7 +2,7 @@ import * as path from 'path'
 import { ConfigurationTarget, workspace } from 'vscode'
 import * as lsp from 'vscode-languageclient'
 import { Extension } from './extension'
-import { lspExceptionLogger } from './log'
+import { lspOutputChannel } from './log'
 import { ConfigUpdateParams, statusMethod, StatusParams, updateConfigMethod } from './lspExt'
 
 export class LanguageClient extends lsp.LanguageClient {
@@ -13,7 +13,7 @@ export class LanguageClient extends lsp.LanguageClient {
       command: ext.context.asAbsolutePath(path.join('server', 'target', 'debug', 'vscode-mc-shader')), 
     }, {
       documentSelector: [{scheme: 'file', language: 'glsl'}],
-      outputChannel: lspExceptionLogger,
+      outputChannel: lspOutputChannel,
       synchronize: {
         configurationSection: 'mcglsl',
         fileEvents: workspace.createFileSystemWatcher('**/*.{fsh,gsh,vsh,glsl}')

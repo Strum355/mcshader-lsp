@@ -104,11 +104,6 @@ impl Configuration {
     }
 }
 
-struct GLSLFile {
-    idx: petgraph::graph::NodeIndex,
-    includes: Vec<IncludePosition>,
-}
-
 #[derive(Clone)]
 pub struct IncludePosition {
     filepath: String,
@@ -136,7 +131,7 @@ impl MinecraftShaderLanguageServer {
     pub fn gen_initial_graph(&self, root: &str) {
         let mut files = HashMap::new();
 
-        eprint!("root of project is {}", root);
+        eprintln!("root of project is {}", root);
 
         // filter directories and files not ending in any of the 3 extensions
         let file_iter = walkdir::WalkDir::new(root)
@@ -155,7 +150,7 @@ impl MinecraftShaderLanguageServer {
                 let ext = match path.extension() {
                     Some(e) => e,
                     None => {
-                        eprint!("filepath {} had no extension", path.to_str().unwrap());
+                        eprintln!("filepath {} had no extension", path.to_str().unwrap());
                         return None;
                     }
                 };
@@ -172,21 +167,24 @@ impl MinecraftShaderLanguageServer {
 
             let idx = self.graph.borrow_mut().add_node(path.clone());
 
-            //eprint!("adding {} with\n{:?}", path.clone(), includes);
-
+            //eprintln!("adding {} with\n{:?}", path.clone(), includes);
+            struct GLSLFile {
+                idx: petgraph::graph::NodeIndex,
+                includes: Vec<IncludePosition>,
+            }
             files.insert(path, GLSLFile { idx, includes });
         }
 
         // Add edges between nodes, finding target nodes on weight (value)
         for (_, v) in files.into_iter() {
             for file in v.includes {
-                //eprint!("searching for {}", file);
+                //eprintln!("searching for {}", file);
                 let idx = self.graph.borrow_mut().find_node(file.filepath.as_str());
                 if idx.is_none() {
-                    eprint!("couldn't find {} in graph for {}", file, self.graph.borrow().graph[v.idx]);
+                    eprintln!("couldn't find {} in graph for {}", file, self.graph.borrow().graph[v.idx]);
                     continue;
                 }
-                //eprint!("added edge between\n\t{}\n\t{}", k, file);
+                //eprintln!("added edge between\n\t{}\n\t{}", k, file);
                 self.graph.borrow_mut().add_edge(
                     v.idx,
                     idx.unwrap(),
@@ -198,7 +196,7 @@ impl MinecraftShaderLanguageServer {
             }
         }
 
-        eprint!("finished building project include graph");
+        eprintln!("finished building project include graph");
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
@@ -219,7 +217,7 @@ impl MinecraftShaderLanguageServer {
                     .unwrap()
                     .get(1)
                     .unwrap();
-                //eprint!("{:?}", caps);
+                //eprintln!("{:?}", caps);
 
                 let start = u64::try_from(cap.start()).unwrap();
                 let end = u64::try_from(cap.end()).unwrap();
@@ -234,7 +232,7 @@ impl MinecraftShaderLanguageServer {
                     start,
                     end,
                 });
-                //eprint!("{} includes {}", file, full_include);
+                //eprintln!("{} includes {}", file, full_include);
             });
 
         return includes;
@@ -242,7 +240,7 @@ impl MinecraftShaderLanguageServer {
 
     pub fn lint(&self, source: impl Into<String>) -> Vec<Diagnostic> {
         let source: String = source.into();
-        eprint!("validator bin path: {}", self.config.glslang_validator_path);
+        eprintln!("validator bin path: {}", self.config.glslang_validator_path);
         let cmd = process::Command::new(&self.config.glslang_validator_path)
             .args(&["--stdin", "-S", "frag"])
             .stdin(process::Stdio::piped())
@@ -255,7 +253,7 @@ impl MinecraftShaderLanguageServer {
         
         let output = child.wait_with_output().expect("expected output");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        eprint!("glslangValidator output: {}\n", stdout);
+        eprintln!("glslangValidator output: {}\n", stdout);
 
         let mut diagnostics: Vec<Diagnostic> = vec![];
 
@@ -267,7 +265,7 @@ impl MinecraftShaderLanguageServer {
                 None => return
             };
 
-            eprint!("match {:?}", diagnostic_capture);
+            eprintln!("match {:?}", diagnostic_capture);
             
             let msg = diagnostic_capture.get(4).unwrap().as_str().trim();
 
@@ -397,7 +395,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn shutdown(&mut self, _: (), completable: LSCompletable<()>) {
-        eprint!("shutting down language server...");
+        eprintln!("shutting down language server...");
         completable.complete(Ok(()));
     }
 
@@ -422,13 +420,13 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 .unwrap();
         }
 
-        eprint!("{:?}", params.settings.as_object().unwrap());
+        eprintln!("{:?}", params.settings.as_object().unwrap());
 
         self.wait.done();
     }
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
-        eprint!("opened doc {}", params.text_document.uri);
+        eprintln!("opened doc {}", params.text_document.uri);
         let diagnostics = self.lint(params.text_document.text);
         self.publish_diagnostic(diagnostics, params.text_document.uri, Some(params.text_document.version));
     }
@@ -438,7 +436,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         #[allow(unused_variables)]
         let text_change = params.content_changes[0].clone();
-        //eprint!("changed {} changes: {}", text_change., params.text_document.uri);
+        //eprintln!("changed {} changes: {}", text_change., params.text_document.uri);
     }
 
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
@@ -485,7 +483,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             .execute(params.command.as_ref(), params.arguments)
         {
             Ok(_) => {
-                eprint!("executed {} successfully", params.command);
+                eprintln!("executed {} successfully", params.command);
                 self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
                     typ: MessageType::Info,
                     message: format!("Command {} executed successfully.", params.command),
@@ -500,7 +498,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                     typ: MessageType::Error,
                     message: format!("Failed to execute command '{}'", params.command),
                 }).expect("failed to send popup/show message notification");
-                eprint!("failed to execute {}: {}", params.command, err);
+                eprintln!("failed to execute {}: {}", params.command, err);
                 completable.complete(Err(MethodError::new(32420, err, ())))
             },
         }
@@ -543,7 +541,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn document_link(&mut self, params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
-        eprint!("document link file: {:?}", params.text_document.uri.to_file_path().unwrap());
+        eprintln!("document link file: {:?}", params.text_document.uri.to_file_path().unwrap());
         // node for current document
         let curr_doc = params
             .text_document
@@ -572,7 +570,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 let url = match Url::from_file_path(path) {
                     Ok(url) => url,
                     Err(e) => {
-                        eprint!("error converting {:?} into url: {:?}", path, e);
+                        eprintln!("error converting {:?} into url: {:?}", path, e);
                         return None;
                     }
                 };
@@ -589,7 +587,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 })
             })
             .collect();
-        eprint!("links: {:?}", edges);
+        eprintln!("links: {:?}", edges);
         completable.complete(Ok(edges));
     }
 

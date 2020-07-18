@@ -1,5 +1,7 @@
-import { inspect } from 'util'
-import * as vscode from 'vscode'
+import { inspect } from 'util';
+import * as vscode from 'vscode';
+
+export const lspOutputChannel = vscode.window.createOutputChannel('Minecraft Shaders Language Server')
 
 // from rust-analyzer https://github.com/rust-analyzer/rust-analyzer/blob/ef223b9e6439c228e0be49861efd2067c0b22af4/editors/code/src/util.ts
 export const log = new class {
@@ -37,30 +39,3 @@ export const log = new class {
   }
 }
 
-export const lspExceptionLogger = new class implements vscode.OutputChannel {
-  name: string
-
-  append(value: string): void {
-    log.write('LSP-F', value)
-  }
-
-  appendLine(value: string): void {
-    log.write('LSP-F', value)
-  }
-  
-  clear(): void {
-    log.output.clear()
-  }
-  
-  show(column?: any, preserveFocus?: any) {
-    log.output.show(column, preserveFocus)
-  }
-
-  hide(): void {
-    log.output.hide()
-  }
-
-  dispose(): void {
-    log.output.dispose()
-  }
-}

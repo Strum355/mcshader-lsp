@@ -1,23 +1,20 @@
 import * as vscode from 'vscode'
 import * as lsp from 'vscode-languageclient'
 import * as commands from './commands'
-import { promptDownload, testExecutable } from './glslangValidator'
+import { bootstrapGLSLangValidator } from './glslangValidator'
 import { log } from './log'
 import { LanguageClient } from './lspClient'
 
-export const glslConfigParam = 'mcglsl.glslangValidatorPath'
-
-export let statusBarItem: vscode.StatusBarItem | null = null
-
 export class Extension {
+  private statusBarItem: vscode.StatusBarItem | null = null
   private extensionContext: vscode.ExtensionContext | null = null
   private client: lsp.LanguageClient
   
-  public get context() : vscode.ExtensionContext {
+  public get context(): vscode.ExtensionContext {
     return this.extensionContext
   }
 
-  public get lspClient() : lsp.LanguageClient {
+  public get lspClient(): lsp.LanguageClient {
     return this.client
   }
   
@@ -26,17 +23,14 @@ export class Extension {
 
     this.registerCommand('graphDot', commands.generateGraphDot)
     this.registerCommand('restart', commands.restartExtension)
-    
-    if (!testExecutable(vscode.workspace.getConfiguration().get(glslConfigParam) as string)) {
-      if(!await promptDownload(this)) return
-    }
+
+    if(!await bootstrapGLSLangValidator(this)) return
   
     log.info('starting language server...')
   
     this.client = await new LanguageClient(this).startServer()
   
     log.info('language server started!')
-  
   }
 
   registerCommand = (name: string, f: (e: Extension) => commands.Command) => {
@@ -52,17 +46,16 @@ export class Extension {
   }
   
   public updateStatus = (icon: string, text: string) => {
-    statusBarItem?.dispose()
-    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
-    statusBarItem.text = icon + ' [mc-shader] ' + text
-    statusBarItem.show()
-    this.context.subscriptions.push(statusBarItem)
+    this.statusBarItem?.dispose()
+    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
+    this.statusBarItem.text = icon + ' [mc-shader] ' + text
+    this.statusBarItem.show()
+    this.context.subscriptions.push(this.statusBarItem)
   }
   
   public clearStatus = () => {
-    statusBarItem?.dispose()
+    this.statusBarItem?.dispose()
   }
 }
-
 
 export const activate = new Extension().activate

@@ -44,7 +44,7 @@ impl<'a> Invokeable for GraphDotCommand {
         let rootpath = params.get(0).unwrap().to_string();
         let rootpath = String::from(rootpath.trim_start_matches('"').trim_end_matches('"'));
         let filepath = rootpath + "/graph.dot";
-        eprint!("generating dot file at {}", filepath);
+        eprintln!("generating dot file at {}", filepath);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
