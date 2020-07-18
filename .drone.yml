@@ -2,15 +2,15 @@ kind: pipeline
 name: default
 
 steps:
-- name: test server
-  image: rust:1.43
+- name: unit test server
+  image: rust:1.45
   commands:
     - cd server
     - cargo test
 
-- name: lint
+- name: lint client
   image: node:14
   commands:
-    - npm i
+    - npm i --unsafe-perm
     - npm run compile                                                    
     - npm run lint
