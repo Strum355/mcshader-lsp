@@ -1,22 +1,19 @@
-use rust_lsp::jsonrpc::method_types::*;
-use rust_lsp::jsonrpc::*;
+use rust_lsp::jsonrpc::{*, method_types::*};
 use rust_lsp::lsp::*;
-use rust_lsp::lsp_types::*;
-use rust_lsp::lsp_types::notification::*;
+use rust_lsp::lsp_types::{*, notification::*};
 
 use walkdir;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::io;
-use std::io::Write;
-use std::io::{BufRead, BufReader};
+use std::fmt::{Display, Formatter};
+use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use std::ops::Add;
 use std::process;
 use std::rc::Rc;
+
+use anyhow::Result;
 
 use chan::WaitGroup;
 
@@ -45,9 +42,9 @@ static INCLUDE_STR: &'static str = "#extension GL_GOOGLE_include_directive : req
 static SOURCE: &'static str = "mc-glsl";
 
 fn main() {
-    let stdin = std::io::stdin();
+    let stdin = stdin();
 
-    let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| io::stdout());
+    let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| stdout());
 
     let cache_graph = graph::CachedStableGraph::new();
 
@@ -238,21 +235,11 @@ impl MinecraftShaderLanguageServer {
         return includes;
     }
 
-    pub fn lint(&self, source: impl Into<String>) -> Vec<Diagnostic> {
-        let source: String = source.into();
-        eprintln!("validator bin path: {}", self.config.glslang_validator_path);
-        let cmd = process::Command::new(&self.config.glslang_validator_path)
-            .args(&["--stdin", "-S", "frag"])
-            .stdin(process::Stdio::piped())
-            .stdout(process::Stdio::piped())
-            .spawn();
+    pub fn lint(&self, source: impl Into<String>) -> Result<Vec<Diagnostic>> {
+        let source: Rc<String> = Rc::new(source.into());
 
-        let mut child = cmd.expect("glslangValidator failed to spawn");
-        let stdin = child.stdin.as_mut().expect("no stdin handle found");
-        stdin.write(source.as_bytes()).expect("failed to write to stdin");
-        
-        let output = child.wait_with_output().expect("expected output");
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let stdout = self.invoke_validator(source.as_ref())?;
+
         eprintln!("glslangValidator output: {}\n", stdout);
 
         let mut diagnostics: Vec<Diagnostic> = vec![];
@@ -273,22 +260,23 @@ impl MinecraftShaderLanguageServer {
                 return
             }
 
-            let line = match diagnostic_capture
-                .get(3)
-                .expect("third capture group was None")
-                .as_str()
-                .parse::<u64>() {
-                    Ok(line) => line,
-                    Err(_) => return,
+            let line = match diagnostic_capture.get(3) {
+                Some(c) => match c.as_str().parse::<u64>() {
+                    Ok(i) => i,
+                    Err(_) => 0,
+                },
+                None => 0,
             } - 1;
-            
 
             let line_text = source_lines[line as usize];
             let leading_whitespace = line_text.len() - line_text.trim_start().len();
 
-            let severity = match diagnostic_capture.get(0).unwrap().as_str() {
-                "ERROR" => DiagnosticSeverity::Error,
-                "WARNING" => DiagnosticSeverity::Warning,
+            let severity = match diagnostic_capture.get(1) {
+                Some(c) => match c.as_str() {
+                    "ERROR" => DiagnosticSeverity::Error,
+                    "WARNING" => DiagnosticSeverity::Warning,
+                    _ => DiagnosticSeverity::Information,
+                }
                 _ => DiagnosticSeverity::Information,
             };
 
@@ -308,7 +296,25 @@ impl MinecraftShaderLanguageServer {
 
             diagnostics.push(diagnostic);
         });
-        diagnostics
+        Ok(diagnostics)
+    }
+
+    fn invoke_validator(&self, source: impl Into<String>) -> Result<String> {
+        let source: String = source.into();
+        eprintln!("validator bin path: {}", self.config.glslang_validator_path);
+        let cmd = process::Command::new(&self.config.glslang_validator_path)
+            .args(&["--stdin", "-S", "frag"])
+            .stdin(process::Stdio::piped())
+            .stdout(process::Stdio::piped())
+            .spawn();
+
+        let mut child = cmd?;//.expect("glslangValidator failed to spawn");
+        let stdin = child.stdin.as_mut().expect("no stdin handle found");
+        stdin.write(source.as_bytes())?;//.expect("failed to write to stdin");
+        
+        let output = child.wait_with_output()?;//.expect("expected output");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        Ok(stdout)
     }
 
     pub fn publish_diagnostic(&self, diagnostics: Vec<Diagnostic>, uri: impl Into<Url>, document_version: Option<i64>) {
@@ -427,8 +433,10 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         eprintln!("opened doc {}", params.text_document.uri);
-        let diagnostics = self.lint(params.text_document.text);
-        self.publish_diagnostic(diagnostics, params.text_document.uri, Some(params.text_document.version));
+        match self.lint(params.text_document.text) {
+            Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, Some(params.text_document.version)),
+            _ => return
+        }
     }
 
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
@@ -447,8 +455,10 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
         
         let file_content = std::fs::read(path).unwrap();
-        let diagnostics = self.lint(String::from_utf8(file_content).unwrap());
-        self.publish_diagnostic(diagnostics, params.text_document.uri, None);
+        match self.lint(String::from_utf8(file_content).unwrap()) {
+            Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
+            _ => return
+        }
     }
 
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
