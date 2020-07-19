@@ -2,16 +2,20 @@ use rust_lsp::jsonrpc::{*, method_types::*};
 use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::{*, notification::*};
 
-use walkdir;
+use petgraph::stable_graph::NodeIndex;
+
+use walkdir::WalkDir;
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, LinkedList};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use std::ops::Add;
 use std::process;
 use std::rc::Rc;
+
+use core::cmp::{Ordering, PartialOrd, PartialEq, Ord, Eq};
 
 use anyhow::Result;
 
@@ -37,14 +41,14 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-static INCLUDE_STR: &'static str = "#extension GL_GOOGLE_include_directive : require";
+static INCLUDE_STR: &str = "#extension GL_GOOGLE_include_directive : require";
 
-static SOURCE: &'static str = "mc-glsl";
+static SOURCE: &str = "mc-glsl";
 
 fn main() {
     let stdin = stdin();
 
-    let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(|| stdout());
+    let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(stdout);
 
     let cache_graph = graph::CachedStableGraph::new();
 
@@ -97,11 +101,11 @@ impl Configuration {
             return false;
         }
 
-        return true;
+        true
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct IncludePosition {
     filepath: String,
     line: u64,
@@ -113,6 +117,26 @@ impl Display for IncludePosition {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{{{}, l {}, s, {}, e {}}}", self.filepath, self.line, self.start, self.end)
     }
+}
+
+impl PartialOrd for IncludePosition {
+    #[allow(clippy::comparison_chain)]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.line < other.line { Some(Ordering::Less) }
+        else if self.line > other.line { Some(Ordering::Greater) }
+        else { Some(Ordering::Equal) }
+    }
+}
+
+impl Ord for IncludePosition {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+struct GLSLFile {
+    idx: petgraph::graph::NodeIndex,
+    includes: Vec<IncludePosition>,
 }
 
 impl MinecraftShaderLanguageServer {
@@ -131,10 +155,10 @@ impl MinecraftShaderLanguageServer {
         eprintln!("root of project is {}", root);
 
         // filter directories and files not ending in any of the 3 extensions
-        let file_iter = walkdir::WalkDir::new(root)
+        let file_iter = WalkDir::new(root)
             .into_iter()
             .filter_map(|entry| {
-                if !entry.is_ok() {
+                if entry.is_err() {
                     return None;
                 }
 
@@ -165,10 +189,7 @@ impl MinecraftShaderLanguageServer {
             let idx = self.graph.borrow_mut().add_node(path.clone());
 
             //eprintln!("adding {} with\n{:?}", path.clone(), includes);
-            struct GLSLFile {
-                idx: petgraph::graph::NodeIndex,
-                includes: Vec<IncludePosition>,
-            }
+
             files.insert(path, GLSLFile { idx, includes });
         }
 
@@ -219,12 +240,12 @@ impl MinecraftShaderLanguageServer {
                 let start = u64::try_from(cap.start()).unwrap();
                 let end = u64::try_from(cap.end()).unwrap();
                 let mut path: String = cap.as_str().into();
-                if !path.starts_with("/") {
+                if !path.starts_with('/') {
                     path.insert(0, '/');
                 }
                 let full_include = String::from(root).add("/shaders").add(path.as_str());
                 includes.push(IncludePosition {
-                    filepath: full_include.clone(),
+                    filepath: full_include,
                     line: u64::try_from(line.0).unwrap(),
                     start,
                     end,
@@ -232,13 +253,38 @@ impl MinecraftShaderLanguageServer {
                 //eprintln!("{} includes {}", file, full_include);
             });
 
-        return includes;
+        includes
     }
 
-    pub fn lint(&self, source: impl Into<String>) -> Result<Vec<Diagnostic>> {
+    pub fn lint(&self, uri: &str, source: impl Into<String>) -> Result<Vec<Diagnostic>> {
+        // get all top level ancestors of this file
+        let file_ancestors = match self.get_file_toplevel_ancestors(uri) {
+            Ok(opt) => match opt {
+                Some(ancestors) => ancestors,
+                None => vec![],
+            },
+            Err(e) => return Err(e),
+        };
+
         let source: Rc<String> = Rc::new(source.into());
 
+        eprintln!("ancestors for {}:\n{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
+
+        let merge_list: LinkedList<Box<&str>> = if file_ancestors.is_empty() {
+            let mut list = LinkedList::new();
+            list.push_back(Box::new(source.as_str()));
+            list
+        } else {
+            for root in file_ancestors {
+                self.generate_merge_list(root);
+            }
+            LinkedList::new()
+        };
+
+
+        // run merged source through validator
         let stdout = self.invoke_validator(source.as_ref())?;
+        let stdout = stdout.trim();
 
         eprintln!("glslangValidator output: {}\n", stdout);
 
@@ -246,7 +292,7 @@ impl MinecraftShaderLanguageServer {
 
         let source_lines: Vec<&str> = source.split('\n').collect();
 
-        stdout.split('\n').into_iter().for_each(|line| {
+        stdout.split('\n').for_each(|line| {
             let diagnostic_capture = match RE_DIAGNOSTIC.captures(line) {
                 Some(d) => d,
                 None => return
@@ -299,7 +345,32 @@ impl MinecraftShaderLanguageServer {
         Ok(diagnostics)
     }
 
-    fn invoke_validator(&self, source: impl Into<String>) -> Result<String> {
+    fn get_file_toplevel_ancestors(&self, uri: &str) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
+        let curr_node = match self.graph.borrow_mut().find_node(uri) {
+            Some(n) => n,
+            None => return Err(anyhow::format_err!("node not found")),
+        };
+        let roots = self.graph.borrow().collect_root_ancestors(curr_node);
+        if roots.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(roots))
+    }
+
+    fn generate_merge_list(&self, root: NodeIndex) -> LinkedList<Box<&str>> {
+        let mut merge_list = LinkedList::new();
+
+        let children = self.graph.borrow().child_node_indexes(root);
+
+        // include positions sorted by earliest in file
+        let mut all_edges: Vec<IncludePosition> = self.graph.borrow().edge_weights(root);
+        all_edges.sort();
+        eprintln!("include positions for {:?}: {:?} {:?}", self.graph.borrow().graph.node_weight(root).unwrap(), all_edges, children);
+
+        merge_list
+    }
+    
+    fn invoke_validator(&self, source: &str) -> Result<String> {
         let source: String = source.into();
         eprintln!("validator bin path: {}", self.config.glslang_validator_path);
         let cmd = process::Command::new(&self.config.glslang_validator_path)
@@ -310,7 +381,7 @@ impl MinecraftShaderLanguageServer {
 
         let mut child = cmd?;//.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
-        stdin.write(source.as_bytes())?;//.expect("failed to write to stdin");
+        stdin.write_all(source.as_bytes())?;//.expect("failed to write to stdin");
         
         let output = child.wait_with_output()?;//.expect("expected output");
         let stdout = String::from_utf8(output.stdout).unwrap();
@@ -364,8 +435,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             },
         ));
 
-        let root_path = match params.root_uri {
-            Some(uri) => String::from(uri.path()),
+        let root_path: String = match params.root_uri {
+            Some(uri) => uri.path().into(),
             None => {
                 completable.complete(Err(MethodError {
                     code: 42069,
@@ -385,7 +456,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         self.set_status("loading", "Building dependency graph...", "$(loading~spin)");
 
-        let root: String = match percent_decode_str(root_path.as_str()).decode_utf8() {
+        let root: String = match percent_decode_str(root_path.as_ref()).decode_utf8() {
             Ok(s) => s.into(),
             Err(e) => {
                 self.set_status("failed", format!("{}", e), "$(close)");
@@ -433,9 +504,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         eprintln!("opened doc {}", params.text_document.uri);
-        match self.lint(params.text_document.text) {
-            Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, Some(params.text_document.version)),
-            _ => return
+        match self.lint(params.text_document.uri.path(), params.text_document.text) {
+            Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
+            Err(e) => eprintln!("error linting: {}", e),
         }
     }
 
@@ -450,14 +521,14 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
 
     fn did_save_text_document(&mut self, params: DidSaveTextDocumentParams) {
-        self.wait.wait();
+        eprintln!("saved doc {}", params.text_document.uri);
 
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
         
         let file_content = std::fs::read(path).unwrap();
-        match self.lint(String::from_utf8(file_content).unwrap()) {
+        match self.lint(params.text_document.uri.path(), String::from_utf8(file_content).unwrap()) {
             Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
-            _ => return
+            Err(e) => eprintln!("error linting: {}", e),
         }
     }
 
@@ -485,7 +556,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
         params
             .arguments
-            .push(serde_json::Value::String(self.root.clone().unwrap()));
+            .push(serde_json::Value::String(self.root.as_ref().unwrap().into()));
         match self
             .command_provider
             .as_ref()
@@ -590,7 +661,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                         Position::new(value.line, value.start),
                         Position::new(value.line, value.end),
                     ),
-                    target: Some(url.clone()),
+                    target: Some(url),
                     //tooltip: Some(url.path().to_string().strip_prefix(self.root.clone().unwrap().as_str()).unwrap().to_string()),
                     tooltip: None,
                     data: None,

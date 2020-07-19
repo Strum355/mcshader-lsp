@@ -4,7 +4,7 @@ use std::io::Result;
 use tempdir::TempDir;
 use std::fs;
 
-use fs_extra;
+use fs_extra::{dir, copy_items};
 
 use jsonrpc_common::*;
 use jsonrpc_response::*;
@@ -16,9 +16,9 @@ struct StdoutNewline {
 impl io::Write for StdoutNewline {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let res = self.s.write(buf);
-        if buf[buf.len()-1] == "}".as_bytes()[0] {
+        if buf[buf.len()-1] == b"}"[0] {
             #[allow(unused_variables)]
-            let res = self.s.write("\n\n".as_bytes());
+            let res = self.s.write(b"\n\n");
         }
         res
     }
@@ -42,9 +42,9 @@ fn new_temp_server() -> MinecraftShaderLanguageServer {
 }
 
 fn copy_files(files: &str, dest: &TempDir) {
-    let opts = &fs_extra::dir::CopyOptions::new();
+    let opts = &dir::CopyOptions::new();
     let files = fs::read_dir(files).unwrap().map(|e| String::from(e.unwrap().path().as_os_str().to_str().unwrap())).collect::<Vec<String>>();
-    fs_extra::copy_items(&files, dest.path().join("shaders"), opts).unwrap();
+    copy_items(&files, dest.path().join("shaders"), opts).unwrap();
 }
 
 #[allow(deprecated)]
@@ -167,6 +167,13 @@ fn test_graph_two_connected_nodes() {
     let parents = graph.parent_node_indexes(idx2);
     assert_eq!(parents.len(), 1);
     assert_eq!(parents[0], idx1);
+
+    let ancestors = graph.collect_root_ancestors(idx2);
+    assert_eq!(ancestors.len(), 1);
+    assert_eq!(ancestors[0], idx1);
+
+    let ancestors = graph.collect_root_ancestors(idx1);
+    assert_eq!(ancestors.len(), 0);
 
     graph.remove_node("sample");
     assert_eq!(graph.graph.node_count(), 1);

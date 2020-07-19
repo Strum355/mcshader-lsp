@@ -2,7 +2,10 @@ use petgraph::stable_graph::StableDiGraph;
 use petgraph::stable_graph::NodeIndex;
 use petgraph::Direction;
 use petgraph::stable_graph::EdgeIndex;
-use std::collections::HashMap;
+
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+
 use super::IncludePosition;
 
 /// Wraps a `StableDiGraph` with caching behaviour for node search by maintaining
@@ -39,18 +42,22 @@ impl CachedStableGraph {
                 // If the string is not in cache, O(n) search the graph (i know...) and then cache the NodeIndex
                 // for later
                 let n = self.graph.node_indices().find(|n| self.graph[*n] == name_str);
-                if n.is_some() {
-                    self.cache.insert(name_str, n.unwrap());
+                if let Some(n) = n {
+                    self.cache.insert(name_str, n);
                 }
                 n
             }
         }
     }
 
+    /* pub fn get_node(&self, node: NodeIndex) -> &IncludePosition {
+        self.graph.node_weight(node).expect("node index not found in graph")
+    } */
+
     pub fn remove_node(&mut self, name: impl Into<String>) {
         let idx = self.cache.remove(&name.into());
-        if idx.is_some() {
-            self.graph.remove_node(idx.unwrap());
+        if let Some(idx) = idx {
+            self.graph.remove_node(idx);
         }
     }
 
@@ -65,6 +72,10 @@ impl CachedStableGraph {
     pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, line: u64, start: u64, end: u64) -> EdgeIndex {
         let child_path = self.reverse_index.get(&child).unwrap().clone();
         self.graph.add_edge(parent, child, IncludePosition{filepath: child_path, line, start, end})
+    }
+
+    pub fn edge_weights(&self, node: NodeIndex) -> Vec<IncludePosition> {
+        self.graph.edges(node).map(|e| e.weight().clone()).collect()
     }
 
     pub fn child_node_names(&self, node: NodeIndex) -> Vec<String> {
@@ -84,6 +95,38 @@ impl CachedStableGraph {
     }
 
     pub fn get_include_meta(&self, node: NodeIndex) -> Vec<IncludePosition> {
-        self.graph.edges(node).into_iter().map(|e| e.weight().clone()).collect()
+        self.graph.edges(node).map(|e| e.weight().clone()).collect()
+    }
+
+    pub fn collect_root_ancestors(&self, node: NodeIndex) -> Vec<NodeIndex> {
+        let mut visited = HashSet::new();
+        //visited.insert(node);
+        self.get_root_ancestors(node, node, &mut visited)
+    }
+
+    fn get_root_ancestors(&self, initial: NodeIndex, node: NodeIndex, visited: &mut HashSet<NodeIndex>) -> Vec<NodeIndex> {
+        if visited.contains(&node) {
+            return vec![node];
+        } else if node == initial && !visited.is_empty() {
+            return vec![];
+        }
+        
+        let parents = Rc::new(self.parent_node_indexes(node));
+        let mut collection = Vec::with_capacity(parents.len());
+
+        for ancestor in parents.as_ref() {
+            visited.insert(*ancestor);
+        }
+
+        for ancestor in parents.as_ref() {
+            let ancestors = self.parent_node_indexes(*ancestor);
+            if !ancestors.is_empty() {
+                collection.extend(self.get_root_ancestors(initial, *ancestor, visited));
+            } else {
+                collection.push(*ancestor);
+            }
+        }
+
+        collection
     }
 }

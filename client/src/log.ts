@@ -1,5 +1,5 @@
-import { inspect } from 'util';
-import * as vscode from 'vscode';
+import { inspect } from 'util'
+import * as vscode from 'vscode'
 
 export const lspOutputChannel = vscode.window.createOutputChannel('Minecraft Shaders Language Server')
 
