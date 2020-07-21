@@ -30,6 +30,8 @@ use lazy_static::lazy_static;
 mod graph;
 mod provider;
 mod lsp_ext;
+mod dfs;
+
 #[cfg(test)]
 mod test;
 
@@ -270,15 +272,17 @@ impl MinecraftShaderLanguageServer {
 
         eprintln!("ancestors for {}:\n{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
 
-        let merge_list: LinkedList<Box<&str>> = if file_ancestors.is_empty() {
+        let merge_list: Vec<LinkedList<&str>> = if file_ancestors.is_empty() {
             let mut list = LinkedList::new();
-            list.push_back(Box::new(source.as_str()));
-            list
+            list.push_back(source.as_str());
+            vec![list]
         } else {
+            let mut lists = Vec::with_capacity(file_ancestors.len());
             for root in file_ancestors {
-                self.generate_merge_list(root);
+                let (_, views) = self.generate_merge_list(root);
+                lists.push(views);
             }
-            LinkedList::new()
+            lists
         };
 
 
@@ -357,17 +361,19 @@ impl MinecraftShaderLanguageServer {
         Ok(Some(roots))
     }
 
-    fn generate_merge_list(&self, root: NodeIndex) -> LinkedList<Box<&str>> {
+    fn generate_merge_list(&self, root: NodeIndex) -> (LinkedList<String>, LinkedList<&str>) {
         let mut merge_list = LinkedList::new();
+        // need to return all sources along with the views to appease the lifetime god
+        let mut all_sources = LinkedList::new();
 
-        let children = self.graph.borrow().child_node_indexes(root);
+        /* let children = self.graph.borrow().child_node_indexes(root);
 
         // include positions sorted by earliest in file
         let mut all_edges: Vec<IncludePosition> = self.graph.borrow().edge_weights(root);
         all_edges.sort();
-        eprintln!("include positions for {:?}: {:?} {:?}", self.graph.borrow().graph.node_weight(root).unwrap(), all_edges, children);
+        eprintln!("include positions for {:?}: {:?} {:?}", self.graph.borrow().graph.node_weight(root).unwrap(), all_edges, children); */
 
-        merge_list
+        (all_sources, merge_list)
     }
     
     fn invoke_validator(&self, source: &str) -> Result<String> {
