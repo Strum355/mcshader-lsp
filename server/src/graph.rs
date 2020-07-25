@@ -50,9 +50,9 @@ impl CachedStableGraph {
         }
     }
 
-    /* pub fn get_node(&self, node: NodeIndex) -> &IncludePosition {
-        self.graph.node_weight(node).expect("node index not found in graph")
-    } */
+    pub fn get_node(&self, node: NodeIndex) -> &String {
+        &self.graph[node]
+    }
 
     pub fn remove_node(&mut self, name: impl Into<String>) {
         let idx = self.cache.remove(&name.into());
@@ -100,7 +100,6 @@ impl CachedStableGraph {
 
     pub fn collect_root_ancestors(&self, node: NodeIndex) -> Vec<NodeIndex> {
         let mut visited = HashSet::new();
-        //visited.insert(node);
         self.get_root_ancestors(node, node, &mut visited)
     }
 

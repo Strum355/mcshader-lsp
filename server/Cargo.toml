@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 rust_lsp = { git = "https://github.com/Strum355/RustLSP", branch = "master" }
-serde_json = "1.0.55"
-serde = "1.0.111"
+serde_json = "1.0.56"
+serde = "1.0.114"
 walkdir = "2.3.1"
 petgraph = "0.5.1"
 lazy_static = "1.4.0"
@@ -16,6 +16,8 @@ chan = "0.1.23"
 url = "2.1.1"
 percent-encoding = "2.1.0"
 anyhow = "1.0.31"
+bit-set = "0.5.2"
+thiserror = "1.0.20"
 
 [dev-dependencies]
 tempdir = "0.3.7"

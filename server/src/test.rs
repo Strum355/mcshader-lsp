@@ -143,10 +143,8 @@ fn test_01_initialize() {
 fn test_graph_two_connected_nodes() {
     let mut graph = graph::CachedStableGraph::new();
 
-    graph.add_node("sample");
-    graph.add_node("banana");
-    let idx1 = graph.find_node("sample").unwrap();
-    let idx2 = graph.find_node("banana").unwrap();
+    let idx1 = graph.add_node("sample");
+    let idx2 = graph.add_node("banana");
     graph.add_edge(idx1, idx2, 3, 10, 50);
 
     let children = graph.child_node_names(idx1);
@@ -180,4 +178,136 @@ fn test_graph_two_connected_nodes() {
     assert!(graph.find_node("sample").is_none());
     let neighbors = graph.child_node_names(idx2);
     assert_eq!(neighbors.len(), 0);
+}
+
+#[test]
+fn test_collect_root_ancestors() {
+    let mut graph = graph::CachedStableGraph::new();
+
+    let idx0 = graph.add_node("0");
+    let idx1 = graph.add_node("1");
+    let idx2 = graph.add_node("2");
+
+    graph.add_edge(idx0, idx1, 2, 0, 0);
+    graph.add_edge(idx1, idx2, 3, 0, 0);
+    graph.add_edge(idx2, idx0, 5, 0, 0);
+
+    let roots = graph.collect_root_ancestors(idx0);
+    assert_eq!(roots, vec![idx2]);
+}
+
+#[test]
+fn test_graph_dfs() {
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
+        let idx4 = graph.add_node("4");
+        let idx5 = graph.add_node("5");
+        let idx6 = graph.add_node("6");
+        let idx7 = graph.add_node("7");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx0, idx2, 3, 0, 0);
+        graph.add_edge(idx1, idx3, 5, 0, 0);
+        graph.add_edge(idx1, idx4, 6, 0, 0);
+        graph.add_edge(idx2, idx4, 5, 0, 0);
+        graph.add_edge(idx2, idx5, 4, 0, 0);
+        graph.add_edge(idx3, idx6, 4, 0, 0);
+        graph.add_edge(idx4, idx6, 4, 0, 0);
+        graph.add_edge(idx6, idx7, 4, 0, 0);
+
+        let mut dfs = dfs::Dfs::new(&graph, idx0);
+
+        let mut collection = Vec::new();
+
+        while let Some(i) = dfs.next() {
+            assert_eq!(i.is_ok(), true);
+            collection.push(i.unwrap());
+        }
+
+        //          0
+        //        /  \
+        //      1     2
+        //     / \   / \
+        //    3    4    5
+        //     \ /  
+        //      6 - 7
+        let expected = vec![idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7];
+        println!("{:?}\n{:?}", expected, collection);
+        
+        collection.reverse();
+        for i in expected {
+            assert_eq!(i, collection.pop().unwrap());
+        }
+
+        assert!(!is_cyclic_directed(&graph.graph));
+    }
+}
+
+#[test]
+fn test_graph_dfs_cycle() {
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
+        let idx4 = graph.add_node("4");
+        let idx5 = graph.add_node("5");
+        let idx6 = graph.add_node("6");
+        let idx7 = graph.add_node("7");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx0, idx2, 3, 0, 0);
+        graph.add_edge(idx1, idx3, 5, 0, 0);
+        graph.add_edge(idx1, idx4, 6, 0, 0);
+        graph.add_edge(idx2, idx4, 5, 0, 0);
+        graph.add_edge(idx2, idx5, 4, 0, 0);
+        graph.add_edge(idx3, idx6, 4, 0, 0);
+        graph.add_edge(idx4, idx6, 4, 0, 0);
+        graph.add_edge(idx6, idx7, 4, 0, 0);
+        graph.add_edge(idx7, idx4, 4, 0, 0);
+
+        let mut dfs = dfs::Dfs::new(&graph, idx0);
+
+        for _ in 0..5 {
+            if let Some(i) = dfs.next() {
+                assert_eq!(i.is_ok(), true);
+            }
+        }
+        
+        //          0
+        //        /  \
+        //      1     2
+        //     / \   / \
+        //    3    4    5
+        //     \ /  \
+        //      6 - 7
+
+        assert!(is_cyclic_directed(&graph.graph));
+
+        let next = dfs.next().unwrap();
+        assert_eq!(next.is_err(), true);
+    }
+
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx1, idx0, 2, 0, 0);
+
+        let mut dfs = dfs::Dfs::new(&graph, idx1);
+
+        println!("{:?}", dfs.next());
+        println!("{:?}", dfs.next());
+        println!("{:?}", dfs.next());
+    }
 }

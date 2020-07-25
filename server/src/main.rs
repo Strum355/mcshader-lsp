@@ -15,8 +15,6 @@ use std::ops::Add;
 use std::process;
 use std::rc::Rc;
 
-use core::cmp::{Ordering, PartialOrd, PartialEq, Ord, Eq};
-
 use anyhow::Result;
 
 use chan::WaitGroup;
@@ -84,26 +82,13 @@ struct MinecraftShaderLanguageServer {
 
 struct Configuration {
     glslang_validator_path: String,
-    shaderpacks_path: String,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
-        let shaderpacks_path = std::env::var("HOME").unwrap() + "/.minecraft/shaderpacks";
         Configuration{
             glslang_validator_path: "glslangValidator".into(),
-            shaderpacks_path
         }
-    }
-}
-
-impl Configuration {
-    fn validate(&self) -> bool {
-        if self.glslang_validator_path == "" || self.shaderpacks_path == "" {
-            return false;
-        }
-
-        true
     }
 }
 
@@ -121,24 +106,14 @@ impl Display for IncludePosition {
     }
 }
 
-impl PartialOrd for IncludePosition {
-    #[allow(clippy::comparison_chain)]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.line < other.line { Some(Ordering::Less) }
-        else if self.line > other.line { Some(Ordering::Greater) }
-        else { Some(Ordering::Equal) }
-    }
-}
-
-impl Ord for IncludePosition {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
 struct GLSLFile {
     idx: petgraph::graph::NodeIndex,
     includes: Vec<IncludePosition>,
+}
+
+struct MergeMeta {
+    node: NodeIndex,
+    last_slice: u64
 }
 
 impl MinecraftShaderLanguageServer {
@@ -279,8 +254,22 @@ impl MinecraftShaderLanguageServer {
         } else {
             let mut lists = Vec::with_capacity(file_ancestors.len());
             for root in file_ancestors {
-                let (_, views) = self.generate_merge_list(root);
-                lists.push(views);
+                match self.generate_merge_list(root) {
+                    Ok((sources, views)) => lists.push(views),
+                    Err(e) => {
+                        eprintln!("cycle detected");
+                        let e = e.downcast::<dfs::CycleError>().unwrap();
+                        return Ok(vec![Diagnostic{
+                            severity: Some(DiagnosticSeverity::Error),
+                            range: Range::new(Position::new(0, 0), Position::new(0, 500)),
+                            source: Some(SOURCE.into()),
+                            message: e.into(),
+                            code: None,
+                            tags: None,
+                            related_information: None,
+                        }])
+                    }
+                }
             }
             lists
         };
@@ -361,10 +350,24 @@ impl MinecraftShaderLanguageServer {
         Ok(Some(roots))
     }
 
-    fn generate_merge_list(&self, root: NodeIndex) -> (LinkedList<String>, LinkedList<&str>) {
+    fn generate_merge_list(&self, root: NodeIndex) -> Result<(LinkedList<String>, LinkedList<&str>)> {
         let mut merge_list = LinkedList::new();
         // need to return all sources along with the views to appease the lifetime god
         let mut all_sources = LinkedList::new();
+
+        let graph_ref = self.graph.borrow();
+
+        let mut dfs = dfs::Dfs::new(&graph_ref, root);
+
+        //let slice_stack = Vec::new();
+        
+        while let Some(n) = dfs.next() {
+            if n.is_err() {
+                return Err(n.err().unwrap());
+            }
+            /* let path = self.graph.borrow().get_node(n);
+            let file_content = String::from_utf8(std::fs::read(path).unwrap()); */
+        }
 
         /* let children = self.graph.borrow().child_node_indexes(root);
 
@@ -373,7 +376,7 @@ impl MinecraftShaderLanguageServer {
         all_edges.sort();
         eprintln!("include positions for {:?}: {:?} {:?}", self.graph.borrow().graph.node_weight(root).unwrap(), all_edges, children); */
 
-        (all_sources, merge_list)
+        Ok((all_sources, merge_list))
     }
     
     fn invoke_validator(&self, source: &str) -> Result<String> {
@@ -495,13 +498,6 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 .as_str()
                 .unwrap()
                 .into();
-        self.config.shaderpacks_path = config.get("shaderpacksPath").unwrap().as_str().unwrap().into();
-
-        if !self.config.validate() {
-            self.endpoint
-                .send_notification("badConfig", None::<()>)
-                .unwrap();
-        }
 
         eprintln!("{:?}", params.settings.as_object().unwrap());
 
