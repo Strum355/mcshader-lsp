@@ -36,7 +36,7 @@ async function promptDownload(e: Extension, glslangValidatorPath: string): Promi
   return await tryInstallExecutable(e)
 }
 
-async function tryInstallExecutable(e: Extension): Promise<boolean> {
+export async function tryInstallExecutable(e: Extension): Promise<boolean> {
   try {
     await installExecutable(e)
   } catch (e) {

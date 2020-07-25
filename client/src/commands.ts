@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import * as lsp from 'vscode-languageclient'
 import { Extension } from './extension'
+import { tryInstallExecutable } from './glslangValidator'
 import { log } from './log'
 
 export type Command = (...args: any[]) => unknown
@@ -19,5 +20,11 @@ export function restartExtension(e: Extension): Command {
     vscode.window.showInformationMessage('Reloading Minecraft GLSL language server...')
     await e.deactivate()
     await e.activate(e.context).catch(log.error)
+  }
+}
+
+export function downloadValidator(e: Extension): Command {
+  return async () => {
+    await tryInstallExecutable(e)
   }
 }

@@ -39,6 +39,10 @@
         "command": "mcshader.restart",
         "title": "Reload Language Server",
         "category": "Minecraft Shader"
+      },{
+        "command": "mcshader.download",
+        "title": "Download glslangValidator",
+        "category": "Minecraft Shader"
       }
     ],
     "languages": [

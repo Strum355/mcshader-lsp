@@ -23,6 +23,7 @@ export class Extension {
 
     this.registerCommand('graphDot', commands.generateGraphDot)
     this.registerCommand('restart', commands.restartExtension)
+    this.registerCommand('downlaod', commands.downloadValidator)
 
     if(!await bootstrapGLSLangValidator(this)) return
   
