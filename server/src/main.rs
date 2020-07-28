@@ -357,11 +357,14 @@ impl MinecraftShaderLanguageServer {
 
         let graph_ref = self.graph.borrow();
 
-        let mut dfs = dfs::Dfs::new(&graph_ref, root);
+        let dfs = dfs::Dfs::new(&graph_ref, root);
 
         //let slice_stack = Vec::new();
+
+        let iteration_order: Vec<_> = dfs.collect::<Result<Vec<_>, _>>()?;
+
         
-        while let Some(n) = dfs.next() {
+        for n in dfs {
             if n.is_err() {
                 return Err(n.err().unwrap());
             }

@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::graph::CachedStableGraph;
 
-use anyhow::{Result, Context, format_err};
+use anyhow::{Result, Error};
 use std::fmt::{Debug, Display};
 
 /// Performs a depth-first search with duplicates 
@@ -23,7 +23,35 @@ impl <'a> Dfs<'a> {
         }
     }
 
-    pub fn next(&mut self) -> Option<Result<NodeIndex>> {
+    fn reset_path_to_branch(&mut self) {
+        while let Some(par) = self.cycle.pop() {
+            if self.graph.graph.edges(par).count() > 0 {
+                self.cycle.pop();
+                break;
+            }
+        }
+    }
+
+    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<()> {
+        for prev in &self.cycle {
+            for child in children {
+                if *prev == *child {
+                    return Err(
+                        Error::new(
+                            CycleError::new(&self.cycle, *child, self.graph)
+                        )
+                    );
+                }
+            }
+        }
+        Ok(())
+    }   
+}
+
+impl <'a> Iterator for Dfs<'a> {
+    type Item = Result<NodeIndex>;
+
+    fn next(&mut self) -> Option<Result<NodeIndex>> {
         if let Some(node) = self.stack.pop() {
             self.cycle.push(node);
 
@@ -48,28 +76,12 @@ impl <'a> Dfs<'a> {
                     self.stack.push(child);
                 }
             } else {
-                self.cycle.pop();
+                self.reset_path_to_branch();
             }
             return Some(Ok(node));
         }
         None
     }
-
-    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<()> {
-        for prev in &self.cycle {
-            for child in children {
-                if *prev == *child {
-                    return Err(
-                        format_err!("cycle detected")
-                    ).with_context(|| 
-                        CycleError::new(&self.cycle, *child, self.graph)
-                    );
-                }
-            }
-        }
-        Ok(())
-    }
-    
 }
 
 #[derive(Debug, Error)]

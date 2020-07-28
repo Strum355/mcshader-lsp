@@ -1,8 +1,13 @@
 use super::*;
 use std::io;
 use std::io::Result;
-use tempdir::TempDir;
 use std::fs;
+
+use hamcrest2::prelude::*;
+
+use tempdir::TempDir;
+
+use petgraph::algo::is_cyclic_directed;
 
 use fs_extra::{dir, copy_items};
 
@@ -220,12 +225,12 @@ fn test_graph_dfs() {
         graph.add_edge(idx4, idx6, 4, 0, 0);
         graph.add_edge(idx6, idx7, 4, 0, 0);
 
-        let mut dfs = dfs::Dfs::new(&graph, idx0);
+        let dfs = dfs::Dfs::new(&graph, idx0);
 
         let mut collection = Vec::new();
 
-        while let Some(i) = dfs.next() {
-            assert_eq!(i.is_ok(), true);
+        for i in dfs {
+            assert_that!(&i, ok());
             collection.push(i.unwrap());
         }
 
@@ -237,12 +242,8 @@ fn test_graph_dfs() {
         //     \ /  
         //      6 - 7
         let expected = vec![idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7];
-        println!("{:?}\n{:?}", expected, collection);
         
-        collection.reverse();
-        for i in expected {
-            assert_eq!(i, collection.pop().unwrap());
-        }
+        assert_eq!(expected, collection);
 
         assert!(!is_cyclic_directed(&graph.graph));
     }
@@ -277,7 +278,7 @@ fn test_graph_dfs_cycle() {
 
         for _ in 0..5 {
             if let Some(i) = dfs.next() {
-                assert_eq!(i.is_ok(), true);
+                assert_that!(&i, ok());
             }
         }
         
@@ -292,7 +293,7 @@ fn test_graph_dfs_cycle() {
         assert!(is_cyclic_directed(&graph.graph));
 
         let next = dfs.next().unwrap();
-        assert_eq!(next.is_err(), true);
+        assert_that!(next, err());
     }
 
     {
