@@ -210,6 +210,44 @@ fn test_graph_dfs() {
         let idx1 = graph.add_node("1");
         let idx2 = graph.add_node("2");
         let idx3 = graph.add_node("3");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx0, idx2, 3, 0, 0);
+        graph.add_edge(idx1, idx3, 5, 0, 0);
+
+        let dfs = dfs::Dfs::new(&graph, idx0);
+
+        let mut collection = Vec::new();
+
+        for i in dfs {
+            assert_that!(&i, ok());
+            collection.push(i.unwrap());
+        }
+        
+        let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.0).collect();
+        let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.1).collect();
+        //          0
+        //        /  \
+        //      1     2
+        //     /
+        //    3 
+        let expected_nodes = vec![idx0, idx1, idx3, idx2];
+        
+        assert_eq!(expected_nodes, nodes);
+
+        let expected_parents = vec![None, Some(idx0), Some(idx1), Some(idx0)];
+
+        assert_eq!(expected_parents, parents);
+
+        assert!(!is_cyclic_directed(&graph.graph));
+    }
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
         let idx4 = graph.add_node("4");
         let idx5 = graph.add_node("5");
         let idx6 = graph.add_node("6");
@@ -233,7 +271,9 @@ fn test_graph_dfs() {
             assert_that!(&i, ok());
             collection.push(i.unwrap());
         }
-
+        
+        let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.0).collect();
+        let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.1).collect();
         //          0
         //        /  \
         //      1     2
@@ -241,9 +281,13 @@ fn test_graph_dfs() {
         //    3    4    5
         //     \ /  
         //      6 - 7
-        let expected = vec![idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7];
+        let expected_nodes = vec![idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7];
         
-        assert_eq!(expected, collection);
+        assert_eq!(expected_nodes, nodes);
+
+        let expected_parents = vec![None, Some(idx0), Some(idx1), Some(idx3), Some(idx6), Some(idx1), Some(idx4), Some(idx6), Some(idx0), Some(idx2), Some(idx2), Some(idx4), Some(idx6)];
+
+        assert_eq!(expected_parents, parents);
 
         assert!(!is_cyclic_directed(&graph.graph));
     }
@@ -311,4 +355,43 @@ fn test_graph_dfs_cycle() {
         println!("{:?}", dfs.next());
         println!("{:?}", dfs.next());
     }
+}
+
+#[test]
+fn test_generate_merge_list() {
+    let mut server = new_temp_server();
+
+    let tmp_dir = TempDir::new("mcshader").unwrap();
+    fs::create_dir(tmp_dir.path().join("shaders")).unwrap();
+
+    copy_files("./testdata/01", &tmp_dir);
+
+    let tmp_path = tmp_dir.path().as_os_str().to_str().unwrap();
+    let tmp_uri = format!("{}{}/shaders", "file://", tmp_path);
+
+    server.root = Some(tmp_uri);
+
+    let final_idx = server.graph.borrow_mut().add_node(format!("{}/{}", tmp_path, "final.fsh"));
+    let common_idx = server.graph.borrow_mut().add_node(format!("{}/{}", tmp_path, "common.glsl"));
+
+    server.graph.borrow_mut().add_edge(final_idx, common_idx, 2, 0, 0);
+
+    let result = server.generate_merge_list(final_idx);
+
+    assert_that!(&result, ok());
+
+    let total: String = result
+        .unwrap().1
+        .iter()
+        .map(|s| &**s)
+        .collect::<Vec<&str>>()
+        .join("");
+
+    let merge_file = String::from(tmp_path) + "/shaders/final.fsh.merge";
+
+    let truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+
+    assert_that!(total, eq(truth));
+
+    server.endpoint.request_shutdown();
 }

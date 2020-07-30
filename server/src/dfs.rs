@@ -7,11 +7,17 @@ use crate::graph::CachedStableGraph;
 use anyhow::{Result, Error};
 use std::fmt::{Debug, Display};
 
+struct VisitCount {
+    node: NodeIndex,
+    touch: usize,
+    children: usize,
+}
+
 /// Performs a depth-first search with duplicates 
 pub struct Dfs<'a> {
     stack: Vec<NodeIndex>,
     graph: &'a CachedStableGraph,
-    cycle: Vec<NodeIndex>
+    cycle: Vec<VisitCount>
 }
 
 impl <'a> Dfs<'a> {
@@ -24,9 +30,11 @@ impl <'a> Dfs<'a> {
     }
 
     fn reset_path_to_branch(&mut self) {
-        while let Some(par) = self.cycle.pop() {
-            if self.graph.graph.edges(par).count() > 0 {
+        while let Some(par) = self.cycle.last_mut() {
+            par.touch += 1;
+            if par.touch > par.children {
                 self.cycle.pop();
+            } else {
                 break;
             }
         }
@@ -35,10 +43,11 @@ impl <'a> Dfs<'a> {
     fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<()> {
         for prev in &self.cycle {
             for child in children {
-                if *prev == *child {
+                if prev.node == *child {
+                    let cycle_nodes: Vec<NodeIndex> = self.cycle.iter().map(|n| n.node).collect();
                     return Err(
                         Error::new(
-                            CycleError::new(&self.cycle, *child, self.graph)
+                            CycleError::new(&cycle_nodes, *child, self.graph)
                         )
                     );
                 }
@@ -49,11 +58,20 @@ impl <'a> Dfs<'a> {
 }
 
 impl <'a> Iterator for Dfs<'a> {
-    type Item = Result<NodeIndex>;
+    type Item = Result<(NodeIndex, Option<NodeIndex>)>;
 
-    fn next(&mut self) -> Option<Result<NodeIndex>> {
+    fn next(&mut self) -> Option<Result<(NodeIndex, Option<NodeIndex>)>> {
+        let parent = match self.cycle.last() {
+            Some(p) => Some(p.node),
+            None => None,
+        };
+
         if let Some(node) = self.stack.pop() {
-            self.cycle.push(node);
+            self.cycle.push(VisitCount{
+                node,
+                children: self.graph.graph.edges(node).count(),
+                touch: 1,
+            });
 
             let mut children = self.graph.child_node_indexes(node);
             
@@ -78,7 +96,8 @@ impl <'a> Iterator for Dfs<'a> {
             } else {
                 self.reset_path_to_branch();
             }
-            return Some(Ok(node));
+
+            return Some(Ok((node, parent)));
         }
         None
     }
@@ -97,7 +116,6 @@ impl CycleError {
 
 impl Display for CycleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        eprintln!("cycle path {:?}", self.0);
         let mut disp = String::new();
         disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0]).as_str());
         for p in &self.0[1..self.0.len()-1] {
@@ -112,5 +130,4 @@ impl Into<String> for CycleError {
     fn into(self) -> String {
         format!("{}", self)
     }
-    
 }

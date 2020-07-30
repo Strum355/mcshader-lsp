@@ -14,6 +14,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use std::ops::Add;
 use std::process;
 use std::rc::Rc;
+use std::fs;
 
 use anyhow::Result;
 
@@ -257,7 +258,6 @@ impl MinecraftShaderLanguageServer {
                 match self.generate_merge_list(root) {
                     Ok((sources, views)) => lists.push(views),
                     Err(e) => {
-                        eprintln!("cycle detected");
                         let e = e.downcast::<dfs::CycleError>().unwrap();
                         return Ok(vec![Diagnostic{
                             severity: Some(DiagnosticSeverity::Error),
@@ -350,7 +350,7 @@ impl MinecraftShaderLanguageServer {
         Ok(Some(roots))
     }
 
-    fn generate_merge_list(&self, root: NodeIndex) -> Result<(LinkedList<String>, LinkedList<&str>)> {
+    pub fn generate_merge_list(&self, root: NodeIndex) -> Result<(LinkedList<String>, LinkedList<&str>)> {
         let mut merge_list = LinkedList::new();
         // need to return all sources along with the views to appease the lifetime god
         let mut all_sources = LinkedList::new();
@@ -362,15 +362,16 @@ impl MinecraftShaderLanguageServer {
         //let slice_stack = Vec::new();
 
         let iteration_order: Vec<_> = dfs.collect::<Result<Vec<_>, _>>()?;
-
         
-        for n in dfs {
+        
+        
+        /* for n in dfs {
             if n.is_err() {
                 return Err(n.err().unwrap());
             }
             /* let path = self.graph.borrow().get_node(n);
             let file_content = String::from_utf8(std::fs::read(path).unwrap()); */
-        }
+        } */
 
         /* let children = self.graph.borrow().child_node_indexes(root);
 
@@ -530,7 +531,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
         
-        let file_content = std::fs::read(path).unwrap();
+        let file_content = fs::read(path).unwrap();
         match self.lint(params.text_document.uri.path(), String::from_utf8(file_content).unwrap()) {
             Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
             Err(e) => eprintln!("error linting: {}", e),
