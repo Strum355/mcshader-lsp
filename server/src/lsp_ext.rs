@@ -14,21 +14,3 @@ pub struct StatusParams {
     pub message: Option<String>,
     pub icon: Option<String>,
 }
-
-pub enum ConfigUpdate {}
-
-impl Notification for ConfigUpdate {
-    type Params = ConfigUpdateParams;
-    const METHOD: &'static str = "mc-glsl/updateConfig";
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub struct ConfigUpdateParams {
-    pub kv: Vec<KV>,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub struct KV {
-    key: String,
-    value: String
-}

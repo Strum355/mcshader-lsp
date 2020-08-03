@@ -1,0 +1,3 @@
+void burger() {
+	// sample text
+}
