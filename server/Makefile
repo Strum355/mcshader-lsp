@@ -7,4 +7,7 @@ test:
 	RUST_LIB_BACKTRACE=0 RUST_BACKTRACE=0 cargo test
 
 build:
+	cargo build
+
+build-release:
 	cargo build --release

@@ -54,6 +54,10 @@ impl CachedStableGraph {
         &self.graph[node]
     }
 
+    pub fn get_edge_meta(&self, parent: NodeIndex, child: NodeIndex) -> &IncludePosition {
+        self.graph.edge_weight(self.graph.find_edge(parent, child).unwrap()).unwrap()
+    }
+
     pub fn remove_node(&mut self, name: impl Into<String>) {
         let idx = self.cache.remove(&name.into());
         if let Some(idx) = idx {
@@ -69,7 +73,7 @@ impl CachedStableGraph {
         idx
     }
 
-    pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, line: u64, start: u64, end: u64) -> EdgeIndex {
+    pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, line: usize, start: usize, end: usize) -> EdgeIndex {
         let child_path = self.reverse_index.get(&child).unwrap().clone();
         self.graph.add_edge(parent, child, IncludePosition{filepath: child_path, line, start, end})
     }

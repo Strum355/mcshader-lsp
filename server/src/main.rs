@@ -1,3 +1,6 @@
+#![feature(write_all_vectored)]
+#![feature(iter_map_while)]
+
 use rust_lsp::jsonrpc::{*, method_types::*};
 use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::{*, notification::*};
@@ -15,6 +18,7 @@ use std::ops::Add;
 use std::process;
 use std::rc::Rc;
 use std::fs;
+use std::iter::Extend;
 
 use anyhow::Result;
 
@@ -30,6 +34,7 @@ mod graph;
 mod provider;
 mod lsp_ext;
 mod dfs;
+mod merge_views;
 
 #[cfg(test)]
 mod test;
@@ -65,7 +70,7 @@ fn main() {
     langserver.command_provider = Some(provider::CustomCommandProvider::new(vec![(
         "graphDot",
         Box::new(provider::GraphDotCommand {
-            graph: langserver.graph.clone(),
+            graph: Rc::clone(&langserver.graph),
         }),
     )]));
 
@@ -96,9 +101,9 @@ impl Default for Configuration {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct IncludePosition {
     filepath: String,
-    line: u64,
-    start: u64,
-    end: u64,
+    line: usize,
+    start: usize,
+    end: usize,
 }
 
 impl Display for IncludePosition {
@@ -110,11 +115,6 @@ impl Display for IncludePosition {
 struct GLSLFile {
     idx: petgraph::graph::NodeIndex,
     includes: Vec<IncludePosition>,
-}
-
-struct MergeMeta {
-    node: NodeIndex,
-    last_slice: u64
 }
 
 impl MinecraftShaderLanguageServer {
@@ -215,8 +215,8 @@ impl MinecraftShaderLanguageServer {
                     .unwrap();
                 //eprintln!("{:?}", caps);
 
-                let start = u64::try_from(cap.start()).unwrap();
-                let end = u64::try_from(cap.end()).unwrap();
+                let start = cap.start();
+                let end = cap.end();
                 let mut path: String = cap.as_str().into();
                 if !path.starts_with('/') {
                     path.insert(0, '/');
@@ -224,7 +224,7 @@ impl MinecraftShaderLanguageServer {
                 let full_include = String::from(root).add("/shaders").add(path.as_str());
                 includes.push(IncludePosition {
                     filepath: full_include,
-                    line: u64::try_from(line.0).unwrap(),
+                    line: line.0,
                     start,
                     end,
                 });
@@ -234,7 +234,7 @@ impl MinecraftShaderLanguageServer {
         includes
     }
 
-    pub fn lint(&self, uri: &str, source: impl Into<String>) -> Result<Vec<Diagnostic>> {
+    pub fn lint(&self, uri: &str) -> Result<Vec<Diagnostic>> {
         // get all top level ancestors of this file
         let file_ancestors = match self.get_file_toplevel_ancestors(uri) {
             Ok(opt) => match opt {
@@ -244,19 +244,22 @@ impl MinecraftShaderLanguageServer {
             Err(e) => return Err(e),
         };
 
-        let source: Rc<String> = Rc::new(source.into());
+        let mut all_sources: HashMap<String, String> = HashMap::new();
 
         eprintln!("ancestors for {}:\n{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
 
         let merge_list: Vec<LinkedList<&str>> = if file_ancestors.is_empty() {
+            let source = String::from_utf8(fs::read(uri)?)?;
             let mut list = LinkedList::new();
-            list.push_back(source.as_str());
+            all_sources.insert(String::from(uri), source);
+            list.push_back(&all_sources.iter().next().unwrap().1.as_str()[..]);
             vec![list]
         } else {
             let mut lists = Vec::with_capacity(file_ancestors.len());
-            for root in file_ancestors {
-                match self.generate_merge_list(root) {
-                    Ok((sources, views)) => lists.push(views),
+            let mut all_trees = Vec::new();
+            for root in &file_ancestors {
+                let nodes = match self.get_dfs_for_node(*root) {
+                    Ok(nodes) => nodes,
                     Err(e) => {
                         let e = e.downcast::<dfs::CycleError>().unwrap();
                         return Ok(vec![Diagnostic{
@@ -269,22 +272,34 @@ impl MinecraftShaderLanguageServer {
                             related_information: None,
                         }])
                     }
-                }
+                };
+                let sources = self.load_sources(&nodes)?;
+                all_trees.push(nodes);
+                all_sources.extend(sources);
+            }
+
+            for (i, root) in file_ancestors.iter().enumerate() {
+                //self.generate_merge_list(*root, all_trees.get(i).unwrap(), RefCell::new(&all_sources));
             }
             lists
         };
 
+        let mut diagnostics = Vec::new();
 
-        // run merged source through validator
-        let stdout = self.invoke_validator(source.as_ref())?;
-        let stdout = stdout.trim();
+        // run merged sources through validator
+        for root in merge_list {
+            let stdout = self.invoke_validator(root)?;
+            let stdout = stdout.trim();
+            eprintln!("glslangValidator output: {}\n", stdout);
+            diagnostics.extend(self.parse_validator_stdout(stdout, ""));
+        }
 
-        eprintln!("glslangValidator output: {}\n", stdout);
+        Ok(diagnostics)
+    }
 
+    fn parse_validator_stdout(&self, stdout: &str, source: &str) -> Vec<Diagnostic> {
         let mut diagnostics: Vec<Diagnostic> = vec![];
-
         let source_lines: Vec<&str> = source.split('\n').collect();
-
         stdout.split('\n').for_each(|line| {
             let diagnostic_capture = match RE_DIAGNOSTIC.captures(line) {
                 Some(d) => d,
@@ -335,7 +350,33 @@ impl MinecraftShaderLanguageServer {
 
             diagnostics.push(diagnostic);
         });
-        Ok(diagnostics)
+        diagnostics
+    }
+
+    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<(NodeIndex, Option<NodeIndex>)>> {
+        let graph_ref = self.graph.borrow();
+
+        let dfs = dfs::Dfs::new(&graph_ref, root);
+
+        dfs.collect::<Result<Vec<_>, _>>()
+    }
+
+    pub fn load_sources(&self, nodes: &[(NodeIndex, Option<NodeIndex>)]) -> Result<HashMap<String, String>> {
+        let mut sources = HashMap::new();
+
+        for node in nodes {
+            let graph = self.graph.borrow();
+            let path = graph.get_node(node.0);
+
+            if sources.contains_key(path) {
+                continue;
+            }
+
+            let source = String::from_utf8(fs::read(path)?)?;
+            sources.insert(path.clone(), source);
+        }
+
+        Ok(sources)
     }
 
     fn get_file_toplevel_ancestors(&self, uri: &str) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
@@ -350,41 +391,7 @@ impl MinecraftShaderLanguageServer {
         Ok(Some(roots))
     }
 
-    pub fn generate_merge_list(&self, root: NodeIndex) -> Result<(LinkedList<String>, LinkedList<&str>)> {
-        let mut merge_list = LinkedList::new();
-        // need to return all sources along with the views to appease the lifetime god
-        let mut all_sources = LinkedList::new();
-
-        let graph_ref = self.graph.borrow();
-
-        let dfs = dfs::Dfs::new(&graph_ref, root);
-
-        //let slice_stack = Vec::new();
-
-        let iteration_order: Vec<_> = dfs.collect::<Result<Vec<_>, _>>()?;
-        
-        
-        
-        /* for n in dfs {
-            if n.is_err() {
-                return Err(n.err().unwrap());
-            }
-            /* let path = self.graph.borrow().get_node(n);
-            let file_content = String::from_utf8(std::fs::read(path).unwrap()); */
-        } */
-
-        /* let children = self.graph.borrow().child_node_indexes(root);
-
-        // include positions sorted by earliest in file
-        let mut all_edges: Vec<IncludePosition> = self.graph.borrow().edge_weights(root);
-        all_edges.sort();
-        eprintln!("include positions for {:?}: {:?} {:?}", self.graph.borrow().graph.node_weight(root).unwrap(), all_edges, children); */
-
-        Ok((all_sources, merge_list))
-    }
-    
-    fn invoke_validator(&self, source: &str) -> Result<String> {
-        let source: String = source.into();
+    fn invoke_validator(&self, source: LinkedList<&str>) -> Result<String> {
         eprintln!("validator bin path: {}", self.config.glslang_validator_path);
         let cmd = process::Command::new(&self.config.glslang_validator_path)
             .args(&["--stdin", "-S", "frag"])
@@ -394,7 +401,10 @@ impl MinecraftShaderLanguageServer {
 
         let mut child = cmd?;//.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
-        stdin.write_all(source.as_bytes())?;//.expect("failed to write to stdin");
+        
+        let mut io_slices: Vec<std::io::IoSlice> = source.iter().map(|s| std::io::IoSlice::new(s.as_bytes())).collect();
+
+        stdin.write_all_vectored(&mut io_slices[..])?;//.expect("failed to write to stdin");
         
         let output = child.wait_with_output()?;//.expect("expected output");
         let stdout = String::from_utf8(output.stdout).unwrap();
@@ -510,7 +520,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         eprintln!("opened doc {}", params.text_document.uri);
-        match self.lint(params.text_document.uri.path(), params.text_document.text) {
+        match self.lint(params.text_document.uri.path()/* , params.text_document.text */) {
             Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
             Err(e) => eprintln!("error linting: {}", e),
         }
@@ -531,8 +541,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
         
-        let file_content = fs::read(path).unwrap();
-        match self.lint(params.text_document.uri.path(), String::from_utf8(file_content).unwrap()) {
+        /*let file_content = fs::read(path).unwrap(); */
+        match self.lint(path.as_str()/* , String::from_utf8(file_content).unwrap() */) {
             Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
             Err(e) => eprintln!("error linting: {}", e),
         }
@@ -664,8 +674,12 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
                 Some(DocumentLink {
                     range: Range::new(
-                        Position::new(value.line, value.start),
-                        Position::new(value.line, value.end),
+                        Position::new(
+                            u64::try_from(value.line).unwrap(),
+                            u64::try_from(value.start).unwrap()),
+                        Position::new(
+                            u64::try_from(value.line).unwrap(),
+                            u64::try_from(value.end).unwrap()),
                     ),
                     target: Some(url),
                     //tooltip: Some(url.path().to_string().strip_prefix(self.root.clone().unwrap().as_str()).unwrap().to_string()),
