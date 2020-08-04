@@ -442,3 +442,41 @@ fn test_generate_merge_list_02() {
 
     server.endpoint.request_shutdown();
 }
+
+#[test]
+fn test_generate_merge_list_03() {
+    let mut server = new_temp_server();
+
+    let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/03", &mut server);
+
+    let final_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/{}", tmp_path, "final.fsh"));
+    let test_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
+    let burger_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
+    let sample_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
+
+    server.graph.borrow_mut().add_edge(final_idx, sample_idx, 2, 0, 0);
+    server.graph.borrow_mut().add_edge(sample_idx, burger_idx, 4, 0, 0);
+    server.graph.borrow_mut().add_edge(sample_idx, test_idx, 6, 0, 0);
+    
+    let nodes = server.get_dfs_for_node(final_idx).unwrap();
+    let mut sources = server.load_sources(&nodes).unwrap();
+
+    let graph_borrow = server.graph.borrow();
+    let mut merger = merge_views::MergeViewGenerator::new(&mut sources, &graph_borrow);
+
+    let result = merger.generate_merge_list(&nodes);
+
+    let total: String = result
+        .iter()
+        .map(|s| &**s)
+        .collect::<Vec<&str>>()
+        .join("");
+
+    let merge_file = tmp_path + "/shaders/final.fsh.merge";
+
+    let truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+
+    assert_that!(total, eq(truth));
+
+    server.endpoint.request_shutdown();
+}
