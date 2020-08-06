@@ -108,20 +108,18 @@ impl CachedStableGraph {
     }
 
     fn get_root_ancestors(&self, initial: NodeIndex, node: NodeIndex, visited: &mut HashSet<NodeIndex>) -> Vec<NodeIndex> {
-        if visited.contains(&node) {
-            return vec![node];
-        } else if node == initial && !visited.is_empty() {
+        if node == initial && !visited.is_empty() {
             return vec![];
         }
         
-        let parents = Rc::new(self.parent_node_indexes(node));
+        let parents = self.parent_node_indexes(node);
         let mut collection = Vec::with_capacity(parents.len());
 
-        for ancestor in parents.as_ref() {
+        for ancestor in &parents {
             visited.insert(*ancestor);
         }
 
-        for ancestor in parents.as_ref() {
+        for ancestor in &parents {
             let ancestors = self.parent_node_indexes(*ancestor);
             if !ancestors.is_empty() {
                 collection.extend(self.get_root_ancestors(initial, *ancestor, visited));

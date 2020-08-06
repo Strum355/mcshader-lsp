@@ -41,7 +41,6 @@ VSCode-mc-shader is a [Visual Studio Code](https://code.visualstudio.com/) exten
 | Option Name | Data Type | Description | Default Value |
 | ----------- | --------- | ----------- | ------------- |
 | `mcglsl.glslangValidatorPath` | string |  The path to the glslangValidator executable. | In your `PATH`.|
-| `mcglsl.shaderpacksPath` | string | The path to the shaderpacks folder in your Minecraft installation folder. | None |
 
 ## Contributing
 

@@ -202,18 +202,49 @@ fn test_graph_two_connected_nodes() {
 
 #[test]
 fn test_collect_root_ancestors() {
-    let mut graph = graph::CachedStableGraph::new();
+    {
+        let mut graph = graph::CachedStableGraph::new();
 
-    let idx0 = graph.add_node("0");
-    let idx1 = graph.add_node("1");
-    let idx2 = graph.add_node("2");
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
 
-    graph.add_edge(idx0, idx1, 2, 0, 0);
-    graph.add_edge(idx1, idx2, 3, 0, 0);
-    graph.add_edge(idx2, idx0, 5, 0, 0);
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx1, idx2, 3, 0, 0);
 
-    let roots = graph.collect_root_ancestors(idx0);
-    assert_eq!(roots, vec![idx2]);
+        let roots = graph.collect_root_ancestors(idx2);
+        assert_eq!(roots, vec![idx0]);
+    }
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx0, idx2, 3, 0, 0);
+        graph.add_edge(idx1, idx3, 5, 0, 0);
+
+        let roots = graph.collect_root_ancestors(idx3);
+        assert_eq!(roots, vec![idx0]);
+    }
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx2, idx3, 3, 0, 0);
+        graph.add_edge(idx1, idx3, 5, 0, 0);
+
+        let roots = graph.collect_root_ancestors(idx3);
+        assert_eq!(roots, vec![idx0, idx2]);
+    }
 }
 
 #[test]

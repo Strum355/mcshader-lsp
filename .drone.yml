@@ -3,7 +3,7 @@ name: default
 
 steps:
 - name: unit test server
-  image: rust:1.45
+  image: instrumentisto/rust:nightly-stretch-slim
   commands:
     - cd server
     - cargo test
