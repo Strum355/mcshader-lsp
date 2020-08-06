@@ -46,6 +46,7 @@ impl<'a> Invokeable for GraphDotCommand {
         let filepath = rootpath + "/graph.dot";
         eprintln!("generating dot file at {}", filepath);
         let mut file = OpenOptions::new()
+            .truncate(true)
             .write(true)
             .create(true)
             .open(filepath)
@@ -53,6 +54,7 @@ impl<'a> Invokeable for GraphDotCommand {
 
         let mut write_data_closure = || -> Result<(), std::io::Error> {
             let graph = self.graph.as_ref();
+
             file.seek(std::io::SeekFrom::Start(0))?;
             file.write_all(dot::Dot::new(&(graph.borrow().graph)).to_string().as_bytes())?;
             file.flush()?;
