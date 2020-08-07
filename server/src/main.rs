@@ -46,9 +46,6 @@ lazy_static! {
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
 }
 
-#[allow(dead_code)]
-static INCLUDE_STR: &str = "#extension GL_GOOGLE_include_directive : require";
-
 static SOURCE: &str = "mc-glsl";
 
 fn main() {
@@ -248,15 +245,41 @@ impl MinecraftShaderLanguageServer {
 
         eprintln!("ancestors for {}:\n{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
 
-        let merge_list: Vec<LinkedList<&str>> = if file_ancestors.is_empty() {
-            let source = String::from_utf8(fs::read(uri)?)?;
-            let mut list = LinkedList::new();
-            all_sources.insert(String::from(uri), source);
-            list.push_back(&all_sources.iter().next().unwrap().1.as_str()[..]);
-            vec![list]
+        let mut diagnostics = Vec::new();
+
+        if file_ancestors.is_empty() {
+            let root = self.graph.borrow_mut().find_node(uri).unwrap();
+
+            let tree = match self.get_dfs_for_node(root) {
+                Ok(tree) => tree,
+                Err(e) => {
+                    let e = e.downcast::<dfs::CycleError>().unwrap();
+                    return Ok(vec![Diagnostic{
+                        severity: Some(DiagnosticSeverity::Error),
+                        range: Range::new(Position::new(0, 0), Position::new(0, 500)),
+                        source: Some(SOURCE.into()),
+                        message: e.into(),
+                        code: None,
+                        tags: None,
+                        related_information: None,
+                    }])
+                }
+            };
+
+            all_sources.extend( self.load_sources(&tree)?);
+
+            let graph = self.graph.borrow();
+            let mut merger = merge_views::MergeViewGenerator::new(&mut all_sources, &graph);
+        
+            let views = merger.generate_merge_list(&tree);
+
+            let stdout = self.invoke_validator(views)?;
+            let stdout = stdout.trim();
+            eprintln!("glslangValidator output: {}\n", stdout);
+            diagnostics.extend(self.parse_validator_stdout(stdout, ""));
         } else {
-            let mut lists = Vec::with_capacity(file_ancestors.len());
             let mut all_trees = Vec::new();
+
             for root in &file_ancestors {
                 let nodes = match self.get_dfs_for_node(*root) {
                     Ok(nodes) => nodes,
@@ -277,22 +300,19 @@ impl MinecraftShaderLanguageServer {
                 all_trees.push(nodes);
                 all_sources.extend(sources);
             }
+            
+            for tree in all_trees {
+                let graph = self.graph.borrow();
+                let mut merger = merge_views::MergeViewGenerator::new(&mut all_sources, &graph);
+            
+                let views = merger.generate_merge_list(&tree);
 
-            for (i, root) in file_ancestors.iter().enumerate() {
-                //self.generate_merge_list(*root, all_trees.get(i).unwrap(), RefCell::new(&all_sources));
+                let stdout = self.invoke_validator(views)?;
+                let stdout = stdout.trim();
+                eprintln!("glslangValidator output: {}\n", stdout);
+                diagnostics.extend(self.parse_validator_stdout(stdout, ""));
             }
-            lists
         };
-
-        let mut diagnostics = Vec::new();
-
-        // run merged sources through validator
-        for root in merge_list {
-            let stdout = self.invoke_validator(root)?;
-            let stdout = stdout.trim();
-            eprintln!("glslangValidator output: {}\n", stdout);
-            diagnostics.extend(self.parse_validator_stdout(stdout, ""));
-        }
 
         Ok(diagnostics)
     }
@@ -322,8 +342,9 @@ impl MinecraftShaderLanguageServer {
                 None => 0,
             } - 1;
 
-            let line_text = source_lines[line as usize];
-            let leading_whitespace = line_text.len() - line_text.trim_start().len();
+            // TODO: line matching maybe
+            /* let line_text = source_lines[line as usize];
+            let leading_whitespace = line_text.len() - line_text.trim_start().len(); */
 
             let severity = match diagnostic_capture.get(1) {
                 Some(c) => match c.as_str() {
@@ -337,8 +358,10 @@ impl MinecraftShaderLanguageServer {
 
             let diagnostic = Diagnostic {
                 range: Range::new(
-                    Position::new(line, leading_whitespace as u64),
-                    Position::new(line, line_text.len() as u64)
+                    /* Position::new(line, leading_whitespace as u64),
+                    Position::new(line, line_text.len() as u64) */
+                    Position::new(line, 0),
+                    Position::new(line, 1000)
                 ),
                 code: None,
                 severity: Some(severity),
@@ -399,13 +422,20 @@ impl MinecraftShaderLanguageServer {
             .stdout(process::Stdio::piped())
             .spawn();
 
+        eprintln!("invoking validator");
+
         let mut child = cmd?;//.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
+
+        eprintln!("MERGED FILE:");
+        for s in &source {
+            eprint!("{}", s);
+        }
         
         let mut io_slices: Vec<std::io::IoSlice> = source.iter().map(|s| std::io::IoSlice::new(s.as_bytes())).collect();
 
         stdin.write_all_vectored(&mut io_slices[..])?;//.expect("failed to write to stdin");
-        
+        stdin.flush()?;
         let output = child.wait_with_output()?;//.expect("expected output");
         let stdout = String::from_utf8(output.stdout).unwrap();
         Ok(stdout)
