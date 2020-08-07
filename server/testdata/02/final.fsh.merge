@@ -1,26 +1,26 @@
 #version 120
 
-#line 1
+#line 1 !!
 int sample() {
 	return 5;
 }
 
-#line 1
+#line 1 !!
 void burger() {
 	// sample text
 }
-#line 6
+#line 6 !!
 
-#line 1
+#line 1 !!
 float test() {
 	return 3.0;
 }
-#line 8
+#line 8 !!
 
 int sample_more() {
 	return 5;
 }
-#line 4
+#line 4 !!
 
 void main() {
 	gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);

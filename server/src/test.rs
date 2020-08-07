@@ -427,10 +427,12 @@ fn test_generate_merge_list_01() {
         .collect::<Vec<&str>>()
         .join("");
 
-    let merge_file = tmp_path + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
-    let truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
-
+    let mut truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+    truth = truth.replacen("!!", &(tmp_path.clone()+"/shaders/"+"common.glsl"), 1);
+    truth = truth.replace("!!", &(tmp_path+"/shaders/"+"final.fsh"));
+    
     assert_that!(total, eq(truth));
 
     server.endpoint.request_shutdown();
@@ -465,9 +467,15 @@ fn test_generate_merge_list_02() {
         .collect::<Vec<&str>>()
         .join("");
 
-    let merge_file = tmp_path + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
-    let truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+    let mut truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+    
+    for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
+        let path = tmp_path.clone();
+        truth = truth.replacen("!!", &format!("{}/shaders/utils/{}", path, file), 1);
+    }
+    truth = truth.replacen("!!", &(tmp_path+"/shaders/final.fsh"), 1);
 
     assert_that!(total, eq(truth));
 
@@ -503,9 +511,15 @@ fn test_generate_merge_list_03() {
         .collect::<Vec<&str>>()
         .join("");
 
-    let merge_file = tmp_path + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
-    let truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+    let mut truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+    
+    for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
+        let path = tmp_path.clone();
+        truth = truth.replacen("!!", &format!("{}/shaders/utils/{}", path, file), 1);
+    }
+    truth = truth.replacen("!!", &(tmp_path+"/shaders/final.fsh"), 1);
 
     assert_that!(total, eq(truth));
 
