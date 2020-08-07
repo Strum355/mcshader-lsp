@@ -8,6 +8,11 @@ use petgraph::stable_graph::NodeIndex;
 
 use crate::graph::CachedStableGraph;
 
+#[allow(dead_code)]
+static INCLUDE_DIRECTIVE: &str = "#extension GL_GOOGLE_include_directive : require";
+#[allow(dead_code)]
+static CPP_LINE_DIRECTIVE: &str = "#extension GL_GOOGLE_cpp_style_line_directive : require";
+
 pub struct MergeViewGenerator<'a> {
     sources: &'a mut HashMap<String, String>,
     graph: &'a CachedStableGraph,
@@ -26,14 +31,15 @@ impl <'a> MergeViewGenerator<'a> {
         self.line_directives.borrow_mut().reserve(nodes.len() * 2);
 
         let mut last_offset_set: HashMap<String, usize> = HashMap::new();
-        let mut last_offset: Vec<String> = Vec::new();
 
         let mut nodes_iter = nodes.iter().peekable();
 
         let first = nodes_iter.next().unwrap().0;
         let first_path = self.graph.get_node(first).clone();
+
+        last_offset_set.insert(first_path.clone(), 0);
         
-        self.create_merge_views(nodes_iter, &mut merge_list, &mut last_offset_set, &mut last_offset);
+        self.create_merge_views(nodes_iter, &mut merge_list, &mut last_offset_set);
 
         // now we add a view of the remainder of the root file
         let offset = *last_offset_set.get(&first_path).unwrap();
@@ -47,7 +53,6 @@ impl <'a> MergeViewGenerator<'a> {
         mut nodes: Peekable<Iter<(NodeIndex, Option<NodeIndex>)>>,
         merge_list: &mut LinkedList<&'a str>,
         last_offset_set: &mut HashMap<String, usize>,
-        last_offset: &mut Vec<String>,
     ) {
         let n = match nodes.next() {
             Some(n) => n,
@@ -59,10 +64,6 @@ impl <'a> MergeViewGenerator<'a> {
         let edge = self.graph.get_edge_meta(parent, child);
         let parent_path = self.graph.get_node(parent).clone();
         let child_path = self.graph.get_node(child).clone();
-
-        if !last_offset_set.contains_key(&parent_path) {
-            last_offset.push(parent_path.clone());
-        }
 
         let source = self.sources.get(&parent_path).unwrap();
         let mut char_for_line: usize = 0;
@@ -78,7 +79,7 @@ impl <'a> MergeViewGenerator<'a> {
         
         let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
         merge_list.push_back(&source.as_str()[offset..char_for_line]);
-        merge_list.push_back(&"#line 1\n"[..]);
+        self.add_opening_line_directive(&child_path, merge_list);
 
         match nodes.peek() {
             Some(next) => {
@@ -88,9 +89,9 @@ impl <'a> MergeViewGenerator<'a> {
                     let source = self.sources.get(&child_path).unwrap();
                     merge_list.push_back(&source.as_str()[..]);
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                    self.add_line_directive(edge.line+2, merge_list);
+                    self.add_closing_line_directive(edge.line+2, &parent_path, merge_list);
                 }
-                self.create_merge_views(nodes, merge_list, last_offset_set, last_offset);
+                self.create_merge_views(nodes, merge_list, last_offset_set);
 
                 if next.1.unwrap() == child {
                     let offset = *last_offset_set.get(&child_path).unwrap();
@@ -100,29 +101,37 @@ impl <'a> MergeViewGenerator<'a> {
                     }
 
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                    self.add_line_directive(edge.line+2, merge_list);
+                    self.add_closing_line_directive(edge.line+2, &parent_path, merge_list);
                 }
             },
             None => {
                 let source = self.sources.get(&child_path).unwrap();
                 merge_list.push_back(&source.as_str()[..]);
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                self.add_line_directive(edge.line+2, merge_list);
+                self.add_closing_line_directive(edge.line+2, &parent_path, merge_list);
             }
         }
     }
 
-    fn add_line_directive(&self, line: usize, merge_list: &mut LinkedList<&str>) {
+    fn add_opening_line_directive(&self, path: &str, merge_list: &mut LinkedList<&str>)  {
+        let line_directive = format!("#line 1 {}\n", path);
+        self.line_directives.borrow_mut().push(line_directive);
+        unsafe {
+            self.unsafe_get_and_insert(merge_list);
+        }
+    }
+
+    fn add_closing_line_directive(&self, line: usize, path: &str, merge_list: &mut LinkedList<&str>) {
         // Optifine doesn't seem to add a leading newline if the previous line was
         // a #line directive
         let line_directive = if let Some(l) = merge_list.back() {
             if l.starts_with("\n#line") {
-                format!("#line {}\n", line)
+                format!("#line {} {}\n", line, path)
             } else {
-                format!("\n#line {}\n", line)
+                format!("\n#line {} {}\n", line, path)
             }
         } else {
-            format!("\n#line {}\n", line)
+            format!("\n#line {} {}\n", line, path)
         };
         
         self.line_directives.borrow_mut().push(line_directive);
