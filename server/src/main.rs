@@ -13,6 +13,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
+use std::cmp::max;
 use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use std::ops::Add;
 use std::process;
@@ -35,6 +36,7 @@ mod provider;
 mod lsp_ext;
 mod dfs;
 mod merge_views;
+mod consts;
 
 #[cfg(test)]
 mod test;
@@ -46,7 +48,6 @@ lazy_static! {
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
 }
 
-static SOURCE: &str = "mc-glsl";
 
 fn main() {
     let stdin = stdin();
@@ -105,7 +106,7 @@ pub struct IncludePosition {
 
 impl Display for IncludePosition {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{{{}, l {}, s, {}, e {}}}", self.filepath, self.line, self.start, self.end)
+        write!(f, "{{path: '{}', line: {}}}", self.filepath, self.line)
     }
 }
 
@@ -161,7 +162,7 @@ impl MinecraftShaderLanguageServer {
         for path in file_iter {
             let includes = self.find_includes(root, path.as_str());
 
-            let idx = self.graph.borrow_mut().add_node(path.clone());
+            let idx = self.graph.borrow_mut().add_node(&path);
 
             //eprintln!("adding {} with\n{:?}", path.clone(), includes);
 
@@ -231,7 +232,7 @@ impl MinecraftShaderLanguageServer {
         includes
     }
 
-    pub fn lint(&self, uri: &str) -> Result<Vec<Diagnostic>> {
+    pub fn lint(&self, uri: &str) -> Result<HashMap<Url, Vec<Diagnostic>>> {
         // get all top level ancestors of this file
         let file_ancestors = match self.get_file_toplevel_ancestors(uri) {
             Ok(opt) => match opt {
@@ -240,12 +241,11 @@ impl MinecraftShaderLanguageServer {
             },
             Err(e) => return Err(e),
         };
-
-        let mut all_sources: HashMap<String, String> = HashMap::new();
-
+        
         eprintln!("ancestors for {}:\n{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
-
-        let mut diagnostics = Vec::new();
+        
+        let mut all_sources: HashMap<String, String> = HashMap::new();
+        let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();//Vec::new();
 
         if file_ancestors.is_empty() {
             let root = self.graph.borrow_mut().find_node(uri).unwrap();
@@ -253,16 +253,9 @@ impl MinecraftShaderLanguageServer {
             let tree = match self.get_dfs_for_node(root) {
                 Ok(tree) => tree,
                 Err(e) => {
-                    let e = e.downcast::<dfs::CycleError>().unwrap();
-                    return Ok(vec![Diagnostic{
-                        severity: Some(DiagnosticSeverity::Error),
-                        range: Range::new(Position::new(0, 0), Position::new(0, 500)),
-                        source: Some(SOURCE.into()),
-                        message: e.into(),
-                        code: None,
-                        tags: None,
-                        related_information: None,
-                    }])
+                    let e = e.downcast::<dfs::error::CycleError>().unwrap();
+                    diagnostics.insert(Url::from_file_path(uri).unwrap(), vec![e.into()]);
+                    return Ok(diagnostics);
                 }
             };
 
@@ -284,22 +277,17 @@ impl MinecraftShaderLanguageServer {
                 let nodes = match self.get_dfs_for_node(*root) {
                     Ok(nodes) => nodes,
                     Err(e) => {
-                        let e = e.downcast::<dfs::CycleError>().unwrap();
-                        return Ok(vec![Diagnostic{
-                            severity: Some(DiagnosticSeverity::Error),
-                            range: Range::new(Position::new(0, 0), Position::new(0, 500)),
-                            source: Some(SOURCE.into()),
-                            message: e.into(),
-                            code: None,
-                            tags: None,
-                            related_information: None,
-                        }])
+                        let e = e.downcast::<dfs::error::CycleError>().unwrap();
+                        diagnostics.insert(Url::from_file_path(uri).unwrap(), vec![e.into()]);
+                        return Ok(diagnostics);
                     }
                 };
                 let sources = self.load_sources(&nodes)?;
                 all_trees.push(nodes);
                 all_sources.extend(sources);
             }
+
+            //self.graph.borrow().
             
             for tree in all_trees {
                 let graph = self.graph.borrow();
@@ -314,16 +302,22 @@ impl MinecraftShaderLanguageServer {
             }
         };
 
+        for (path, _) in all_sources {
+            diagnostics.entry(Url::from_file_path(path).unwrap()).or_default();
+        }
+
         Ok(diagnostics)
     }
 
-    fn parse_validator_stdout(&self, stdout: &str, source: &str) -> Vec<Diagnostic> {
-        let mut diagnostics: Vec<Diagnostic> = vec![];
-        let source_lines: Vec<&str> = source.split('\n').collect();
-        stdout.split('\n').for_each(|line| {
+    fn parse_validator_stdout(&self, stdout: &str, source: &str) -> HashMap<Url, Vec<Diagnostic>> {
+        let stdout_lines = stdout.split('\n');
+        let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::with_capacity(stdout_lines.count());
+        let stdout_lines = stdout.split('\n');
+        
+        for line in stdout_lines {
             let diagnostic_capture = match RE_DIAGNOSTIC.captures(line) {
                 Some(d) => d,
-                None => return
+                None => continue
             };
 
             eprintln!("match {:?}", diagnostic_capture);
@@ -331,16 +325,16 @@ impl MinecraftShaderLanguageServer {
             let msg = diagnostic_capture.get(4).unwrap().as_str().trim();
 
             if msg.starts_with("compilation terminated") {
-                return
+                continue;
             }
 
-            let line = match diagnostic_capture.get(3) {
+            let line = max(match diagnostic_capture.get(3) {
                 Some(c) => match c.as_str().parse::<u64>() {
                     Ok(i) => i,
                     Err(_) => 0,
                 },
                 None => 0,
-            } - 1;
+            }, 2) - 2;
 
             // TODO: line matching maybe
             /* let line_text = source_lines[line as usize];
@@ -355,6 +349,10 @@ impl MinecraftShaderLanguageServer {
                 _ => DiagnosticSeverity::Information,
             };
 
+            let origin = match diagnostic_capture.get(2) {
+                Some(o) => o.as_str().to_string(),
+                None => "".to_string(),
+            };
 
             let diagnostic = Diagnostic {
                 range: Range::new(
@@ -365,14 +363,20 @@ impl MinecraftShaderLanguageServer {
                 ),
                 code: None,
                 severity: Some(severity),
-                source: Some(SOURCE.into()),
+                source: Some(consts::SOURCE.into()),
                 message: msg.into(),
                 related_information: None,
                 tags: None,
             };
 
-            diagnostics.push(diagnostic);
-        });
+            let origin_url = Url::from_file_path(origin).unwrap();
+            match diagnostics.get_mut(&origin_url) {//.get_or_insert(Vec::new());
+                Some(d) => d.push(diagnostic),
+                None => {
+                    diagnostics.insert(origin_url, vec![diagnostic]);
+                },
+            };
+        }
         diagnostics
     }
 
@@ -415,14 +419,11 @@ impl MinecraftShaderLanguageServer {
     }
 
     fn invoke_validator(&self, source: LinkedList<&str>) -> Result<String> {
-        eprintln!("validator bin path: {}", self.config.glslang_validator_path);
         let cmd = process::Command::new(&self.config.glslang_validator_path)
             .args(&["--stdin", "-S", "frag"])
             .stdin(process::Stdio::piped())
             .stdout(process::Stdio::piped())
             .spawn();
-
-        eprintln!("invoking validator");
 
         let mut child = cmd?;//.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
@@ -441,12 +442,15 @@ impl MinecraftShaderLanguageServer {
         Ok(stdout)
     }
 
-    pub fn publish_diagnostic(&self, diagnostics: Vec<Diagnostic>, uri: impl Into<Url>, document_version: Option<i64>) {
-        self.endpoint.send_notification(PublishDiagnostics::METHOD, PublishDiagnosticsParams {
-            uri: uri.into(),
-            diagnostics,
-            version: document_version,
-        }).expect("failed to publish diagnostics");
+    pub fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i64>) {
+        eprintln!("DIAGNOSTICS:\n{:?}", diagnostics);
+        for (uri, diagnostics) in diagnostics {
+            self.endpoint.send_notification(PublishDiagnostics::METHOD, PublishDiagnosticsParams {
+                uri,
+                diagnostics,
+                version: document_version,
+            }).expect("failed to publish diagnostics");
+        }
     }
 
     fn set_status(&self, status: impl Into<String>, message: impl Into<String>, icon: impl Into<String>) {
@@ -551,7 +555,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         eprintln!("opened doc {}", params.text_document.uri);
         match self.lint(params.text_document.uri.path()/* , params.text_document.text */) {
-            Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
+            Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
             Err(e) => eprintln!("error linting: {}", e),
         }
     }
@@ -573,7 +577,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         
         /*let file_content = fs::read(path).unwrap(); */
         match self.lint(path.as_str()/* , String::from_utf8(file_content).unwrap() */) {
-            Ok(diagnostics) => self.publish_diagnostic(diagnostics, params.text_document.uri, None),
+            Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
             Err(e) => eprintln!("error linting: {}", e),
         }
     }
@@ -679,7 +683,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             .to_str()
             .unwrap()
             .to_string();
-        let node = match self.graph.borrow_mut().find_node(curr_doc) {
+        let node = match self.graph.borrow_mut().find_node(&curr_doc) {
             Some(n) => n,
             None => {
                 completable.complete(Ok(vec![]));

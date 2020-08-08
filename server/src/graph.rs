@@ -4,7 +4,6 @@ use petgraph::Direction;
 use petgraph::stable_graph::EdgeIndex;
 
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 
 use super::IncludePosition;
 
@@ -34,16 +33,15 @@ impl CachedStableGraph {
     /// and caches the result in the `HashMap`. Complexity is **O(1)** if the value
     /// is cached (which should always be the case), else **O(n)** where **n** is
     /// the number of node indices, as an exhaustive search must be done.
-    pub fn find_node(&mut self, name: impl Into<String>) -> Option<NodeIndex> {
-        let name_str = name.into();
-        match self.cache.get(&name_str) {
+    pub fn find_node(&mut self, name: &str) -> Option<NodeIndex> {
+        match self.cache.get(name) {
             Some(n) => Some(*n),
             None => {
                 // If the string is not in cache, O(n) search the graph (i know...) and then cache the NodeIndex
                 // for later
-                let n = self.graph.node_indices().find(|n| self.graph[*n] == name_str);
+                let n = self.graph.node_indices().find(|n| self.graph[*n] == name);
                 if let Some(n) = n {
-                    self.cache.insert(name_str, n);
+                    self.cache.insert(name.to_string(), n);
                 }
                 n
             }
@@ -58,15 +56,16 @@ impl CachedStableGraph {
         self.graph.edge_weight(self.graph.find_edge(parent, child).unwrap()).unwrap()
     }
 
-    pub fn remove_node(&mut self, name: impl Into<String>) {
-        let idx = self.cache.remove(&name.into());
+    #[allow(dead_code)]
+    pub fn remove_node(&mut self, name: &str) {
+        let idx = self.cache.remove(name);
         if let Some(idx) = idx {
             self.graph.remove_node(idx);
         }
     }
 
-    pub fn add_node(&mut self, name: impl Into<String>) -> NodeIndex {
-        let name_str = name.into();
+    pub fn add_node(&mut self, name: &str) -> NodeIndex {
+        let name_str = name.to_string();
         let idx = self.graph.add_node(name_str.clone());
         self.cache.insert(name_str.clone(), idx);
         self.reverse_index.insert(idx, name_str);
@@ -78,10 +77,12 @@ impl CachedStableGraph {
         self.graph.add_edge(parent, child, IncludePosition{filepath: child_path, line, start, end})
     }
 
+    #[allow(dead_code)]
     pub fn edge_weights(&self, node: NodeIndex) -> Vec<IncludePosition> {
         self.graph.edges(node).map(|e| e.weight().clone()).collect()
     }
 
+    #[allow(dead_code)]
     pub fn child_node_names(&self, node: NodeIndex) -> Vec<String> {
         self.graph.neighbors(node).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
     }
@@ -90,6 +91,7 @@ impl CachedStableGraph {
         self.graph.neighbors(node).collect()
     }
 
+    #[allow(dead_code)]
     pub fn parent_node_names(&self, node: NodeIndex) -> Vec<String> {
         self.graph.neighbors_directed(node, Direction::Incoming).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
     }

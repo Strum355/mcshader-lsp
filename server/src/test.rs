@@ -208,12 +208,29 @@ fn test_collect_root_ancestors() {
         let idx0 = graph.add_node("0");
         let idx1 = graph.add_node("1");
         let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
 
         graph.add_edge(idx0, idx1, 2, 0, 0);
         graph.add_edge(idx1, idx2, 3, 0, 0);
+        graph.add_edge(idx3, idx1, 4, 0, 0);
+
+        //       0  3
+        //       |/   
+        //       1 
+        //       |
+        //       2
 
         let roots = graph.collect_root_ancestors(idx2);
-        assert_eq!(roots, vec![idx0]);
+        assert_eq!(roots, vec![idx3, idx0]);
+
+        let roots = graph.collect_root_ancestors(idx1);
+        assert_eq!(roots, vec![idx3, idx0]);
+
+        let roots = graph.collect_root_ancestors(idx0);
+        assert_eq!(roots, vec![]);
+
+        let roots = graph.collect_root_ancestors(idx3);
+        assert_eq!(roots, vec![]);
     }
     {
         let mut graph = graph::CachedStableGraph::new();
@@ -227,8 +244,23 @@ fn test_collect_root_ancestors() {
         graph.add_edge(idx0, idx2, 3, 0, 0);
         graph.add_edge(idx1, idx3, 5, 0, 0);
 
+        //       0
+        //      / \   
+        //     1   2
+        //    / 
+        //   3
+
         let roots = graph.collect_root_ancestors(idx3);
         assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx2);
+        assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx1);
+        assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx0);
+        assert_eq!(roots, vec![]);
     }
     {
         let mut graph = graph::CachedStableGraph::new();
@@ -242,8 +274,55 @@ fn test_collect_root_ancestors() {
         graph.add_edge(idx2, idx3, 3, 0, 0);
         graph.add_edge(idx1, idx3, 5, 0, 0);
 
+        //       0
+        //       |    
+        //       1     
+        //       \
+        //     2  \ 
+        //      \ /
+        //       3
+
         let roots = graph.collect_root_ancestors(idx3);
         assert_eq!(roots, vec![idx0, idx2]);
+
+        let roots = graph.collect_root_ancestors(idx2);
+        assert_eq!(roots, vec![]);
+
+        let roots = graph.collect_root_ancestors(idx1);
+        assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx0);
+        assert_eq!(roots, vec![]);
+    }
+    {
+        let mut graph = graph::CachedStableGraph::new();
+
+        let idx0 = graph.add_node("0");
+        let idx1 = graph.add_node("1");
+        let idx2 = graph.add_node("2");
+        let idx3 = graph.add_node("3");
+
+        graph.add_edge(idx0, idx1, 2, 0, 0);
+        graph.add_edge(idx1, idx2, 4, 0, 0);
+        graph.add_edge(idx1, idx3, 6, 0, 0);
+
+        //       0
+        //       |    
+        //       1     
+        //      / \
+        //     2   3
+
+        let roots = graph.collect_root_ancestors(idx3);
+        assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx2);
+        assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx1);
+        assert_eq!(roots, vec![idx0]);
+
+        let roots = graph.collect_root_ancestors(idx0);
+        assert_eq!(roots, vec![]);
     }
 }
 
@@ -408,8 +487,8 @@ fn test_generate_merge_list_01() {
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/01", &mut server);
 
-    let final_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/{}", tmp_path, "final.fsh"));
-    let common_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/{}", tmp_path, "common.glsl"));
+    let final_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+    let common_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/{}", tmp_path, "common.glsl"));
 
     server.graph.borrow_mut().add_edge(final_idx, common_idx, 2, 0, 0);
     
@@ -430,6 +509,7 @@ fn test_generate_merge_list_01() {
     let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
     let mut truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
+    truth = truth.replacen("!!", &(tmp_path.clone()+"/shaders/final.fsh"), 1);
     truth = truth.replacen("!!", &(tmp_path.clone()+"/shaders/"+"common.glsl"), 1);
     truth = truth.replace("!!", &(tmp_path+"/shaders/"+"final.fsh"));
     
@@ -444,10 +524,10 @@ fn test_generate_merge_list_02() {
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/02", &mut server);
 
-    let final_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/{}", tmp_path, "final.fsh"));
-    let test_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
-    let burger_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
-    let sample_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
+    let final_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+    let test_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
+    let burger_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
+    let sample_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
 
     server.graph.borrow_mut().add_edge(final_idx, sample_idx, 2, 0, 0);
     server.graph.borrow_mut().add_edge(sample_idx, burger_idx, 4, 0, 0);
@@ -471,6 +551,7 @@ fn test_generate_merge_list_02() {
 
     let mut truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
     
+    truth = truth.replacen("!!", &(tmp_path.clone()+"/shaders/final.fsh"), 1);
     for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
         let path = tmp_path.clone();
         truth = truth.replacen("!!", &format!("{}/shaders/utils/{}", path, file), 1);
@@ -488,10 +569,10 @@ fn test_generate_merge_list_03() {
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/03", &mut server);
 
-    let final_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/{}", tmp_path, "final.fsh"));
-    let test_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
-    let burger_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
-    let sample_idx = server.graph.borrow_mut().add_node(format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
+    let final_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+    let test_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
+    let burger_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
+    let sample_idx = server.graph.borrow_mut().add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
 
     server.graph.borrow_mut().add_edge(final_idx, sample_idx, 2, 0, 0);
     server.graph.borrow_mut().add_edge(sample_idx, burger_idx, 4, 0, 0);
@@ -515,6 +596,7 @@ fn test_generate_merge_list_03() {
 
     let mut truth = String::from_utf8(fs::read::<String>(merge_file).unwrap()).unwrap();
     
+    truth = truth.replacen("!!", &(tmp_path.clone()+"/shaders/final.fsh"), 1);
     for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
         let path = tmp_path.clone();
         truth = truth.replacen("!!", &format!("{}/shaders/utils/{}", path, file), 1);

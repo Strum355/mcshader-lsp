@@ -1,11 +1,8 @@
 use petgraph::stable_graph::NodeIndex;
 
-use thiserror::Error;
-
 use crate::graph::CachedStableGraph;
 
 use anyhow::{Result, Error};
-use std::fmt::{Debug, Display};
 
 struct VisitCount {
     node: NodeIndex,
@@ -47,7 +44,7 @@ impl <'a> Dfs<'a> {
                     let cycle_nodes: Vec<NodeIndex> = self.cycle.iter().map(|n| n.node).collect();
                     return Err(
                         Error::new(
-                            CycleError::new(&cycle_nodes, *child, self.graph)
+                            error::CycleError::new(&cycle_nodes, *child, self.graph)
                         )
                     );
                 }
@@ -103,31 +100,57 @@ impl <'a> Iterator for Dfs<'a> {
     }
 }
 
-#[derive(Debug, Error)]
-pub struct CycleError(Vec<String>);
+pub mod error {
+    use petgraph::stable_graph::NodeIndex;
 
-impl CycleError {
-    fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph) -> Self {
-        let mut resolved_nodes: Vec<String> = nodes.iter().map(|i| graph.get_node(*i).clone()).collect();
-        resolved_nodes.push(graph.get_node(current_node).clone());
-        CycleError(resolved_nodes)
-    }
-}
+    use thiserror::Error;
 
-impl Display for CycleError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut disp = String::new();
-        disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0]).as_str());
-        for p in &self.0[1..self.0.len()-1] {
-            disp.push_str(format!("\n{}, which imports ", *p).as_str());
+    use std::fmt::{Debug, Display};
+
+    use crate::{graph::CachedStableGraph, consts};
+
+    use rust_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+
+    #[derive(Debug, Error)]
+    pub struct CycleError(Vec<String>);
+    
+    impl CycleError {
+        pub fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph) -> Self {
+            let mut resolved_nodes: Vec<String> = nodes.iter().map(|i| graph.get_node(*i).clone()).collect();
+            resolved_nodes.push(graph.get_node(current_node).clone());
+            CycleError(resolved_nodes)
         }
-        disp.push_str(format!("\n{}", self.0[self.0.len()-1]).as_str());
-        f.write_str(disp.as_str())
     }
-}
+    
+    impl Display for CycleError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let mut disp = String::new();
+            disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0]).as_str());
+            for p in &self.0[1..self.0.len()-1] {
+                disp.push_str(format!("\n{}, which imports ", *p).as_str());
+            }
+            disp.push_str(format!("\n{}", self.0[self.0.len()-1]).as_str());
+            f.write_str(disp.as_str())
+        }
+    }
 
-impl Into<String> for CycleError {
-    fn into(self) -> String {
-        format!("{}", self)
+    impl Into<Diagnostic> for CycleError {
+        fn into(self) -> Diagnostic {
+            Diagnostic{
+                severity: Some(DiagnosticSeverity::Error),
+                range: Range::new(Position::new(0, 0), Position::new(0, 500)),
+                source: Some(consts::SOURCE.into()),
+                message: self.into(),
+                code: None,
+                tags: None,
+                related_information: None,
+            }
+        }
+    }
+    
+    impl Into<String> for CycleError {
+        fn into(self) -> String {
+            format!("{}", self)
+        }
     }
 }

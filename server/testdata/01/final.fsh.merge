@@ -1,10 +1,12 @@
 #version 120
+#extension GL_GOOGLE_cpp_style_line_directive : require
+#line 2 "!!"
 
-#line 1 !!
+#line 1 "!!"
 float test() {
 	return 0.5;
 }
-#line 4 !!
+#line 4 "!!"
 
 void main() {
 	gl_FragColor[0] = vec4(0.0);
