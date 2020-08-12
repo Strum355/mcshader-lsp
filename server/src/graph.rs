@@ -65,6 +65,9 @@ impl CachedStableGraph {
     }
 
     pub fn add_node(&mut self, name: &str) -> NodeIndex {
+        if let Some(idx) = self.cache.get(name) {
+            return *idx;
+        }
         let name_str = name.to_string();
         let idx = self.graph.add_node(name_str.clone());
         self.cache.insert(name_str.clone(), idx);
@@ -72,9 +75,8 @@ impl CachedStableGraph {
         idx
     }
 
-    pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, line: usize, start: usize, end: usize) -> EdgeIndex {
-        let child_path = self.reverse_index.get(&child).unwrap().clone();
-        self.graph.add_edge(parent, child, IncludePosition{filepath: child_path, line, start, end})
+    pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, meta: IncludePosition) -> EdgeIndex {
+        self.graph.add_edge(parent, child, meta)
     }
 
     #[allow(dead_code)]
@@ -100,6 +102,7 @@ impl CachedStableGraph {
         self.graph.neighbors_directed(node, Direction::Incoming).collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_include_meta(&self, node: NodeIndex) -> Vec<IncludePosition> {
         self.graph.edges(node).map(|e| e.weight().clone()).collect()
     }

@@ -11,8 +11,8 @@ use walkdir::WalkDir;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
-use std::convert::TryFrom;
-use std::fmt::{Display, Formatter};
+use std::convert::{TryFrom, TryInto};
+use std::fmt::{Display, Formatter, Debug};
 use std::cmp::max;
 use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use std::ops::Add;
@@ -21,7 +21,7 @@ use std::rc::Rc;
 use std::fs;
 use std::iter::Extend;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 use chan::WaitGroup;
 
@@ -61,7 +61,7 @@ fn main() {
         graph: Rc::new(RefCell::new(cache_graph)),
         config: Configuration::default(),
         wait: WaitGroup::new(),
-        root: None,
+        root: "".to_string(),
         command_provider: None,
     };
 
@@ -80,7 +80,7 @@ struct MinecraftShaderLanguageServer {
     graph: Rc<RefCell<graph::CachedStableGraph>>,
     config: Configuration,
     wait: WaitGroup,
-    root: Option<String>,
+    root: String,
     command_provider: Option<provider::CustomCommandProvider>,
 }
 
@@ -96,24 +96,25 @@ impl Default for Configuration {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct IncludePosition {
-    filepath: String,
     line: usize,
     start: usize,
     end: usize,
 }
 
-impl Display for IncludePosition {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{{path: '{}', line: {}}}", self.filepath, self.line)
+impl Debug for IncludePosition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{line: {}}}", self.line)
     }
 }
 
-struct GLSLFile {
-    idx: petgraph::graph::NodeIndex,
-    includes: Vec<IncludePosition>,
+impl Display for IncludePosition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{{line: {}}}", self.line)
+    }
 }
+
 
 impl MinecraftShaderLanguageServer {
     pub fn error_not_available<DATA>(data: DATA) -> MethodError<DATA> {
@@ -125,13 +126,11 @@ impl MinecraftShaderLanguageServer {
         }
     }
 
-    pub fn gen_initial_graph(&self, root: &str) {
-        let mut files = HashMap::new();
-
-        eprintln!("root of project is {}", root);
+    pub fn gen_initial_graph(&self) {
+        eprintln!("root of project is {}", self.root);
 
         // filter directories and files not ending in any of the 3 extensions
-        let file_iter = WalkDir::new(root)
+        let file_iter = WalkDir::new(&self.root)
             .into_iter()
             .filter_map(|entry| {
                 if entry.is_err() {
@@ -160,33 +159,18 @@ impl MinecraftShaderLanguageServer {
         // iterate all valid found files, search for includes, add a node into the graph for each
         // file and add a file->includes KV into the map
         for path in file_iter {
-            let includes = self.find_includes(root, path.as_str());
+            let includes = self.find_includes(path.as_str());
 
             let idx = self.graph.borrow_mut().add_node(&path);
 
             //eprintln!("adding {} with\n{:?}", path.clone(), includes);
-
-            files.insert(path, GLSLFile { idx, includes });
-        }
-
-        // Add edges between nodes, finding target nodes on weight (value)
-        for (_, v) in files.into_iter() {
-            for file in v.includes {
-                //eprintln!("searching for {}", file);
-                let idx = self.graph.borrow_mut().find_node(file.filepath.as_str());
-                if idx.is_none() {
-                    eprintln!("couldn't find {} in graph for {}", file, self.graph.borrow().graph[v.idx]);
-                    continue;
-                }
-                //eprintln!("added edge between\n\t{}\n\t{}", k, file);
+            for include in includes {
+                let child = self.graph.borrow_mut().add_node(&include.0);
                 self.graph.borrow_mut().add_edge(
-                    v.idx,
-                    idx.unwrap(),
-                    file.line,
-                    file.start,
-                    file.end,
+                    idx, 
+                    child,
+                    include.1,
                 );
-                //self.graph.borrow_mut().graph.add_edge(v.idx, idx.unwrap(), String::from("includes"));
             }
         }
 
@@ -194,7 +178,7 @@ impl MinecraftShaderLanguageServer {
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
-    pub fn find_includes(&self, root: &str, file: &str) -> Vec<IncludePosition> {
+    pub fn find_includes(&self, file: &str) -> Vec<(String, IncludePosition)> {
         let mut includes = Vec::default();
 
         let buf = BufReader::new(std::fs::File::open(file).unwrap());
@@ -219,18 +203,22 @@ impl MinecraftShaderLanguageServer {
                 if !path.starts_with('/') {
                     path.insert(0, '/');
                 }
-                let full_include = String::from(root).add("/shaders").add(path.as_str());
-                includes.push(IncludePosition {
-                    filepath: full_include,
-                    line: line.0,
-                    start,
-                    end,
-                });
+                let full_include = String::from(&self.root).add("/shaders").add(path.as_str());
+                includes.push((
+                    full_include,
+                    IncludePosition {
+                        line: line.0,
+                        start,
+                        end,
+                    }
+                ));
                 //eprintln!("{} includes {}", file, full_include);
             });
 
         includes
     }
+
+    //fn update_includes_for_node(&self, )
 
     pub fn lint(&self, uri: &str) -> Result<HashMap<Url, Vec<Diagnostic>>> {
         // get all top level ancestors of this file
@@ -399,7 +387,7 @@ impl MinecraftShaderLanguageServer {
                 continue;
             }
 
-            let source = String::from_utf8(fs::read(path)?)?;
+            let source = fs::read_to_string(path)?;
             sources.insert(path.clone(), source);
         }
 
@@ -409,7 +397,7 @@ impl MinecraftShaderLanguageServer {
     fn get_file_toplevel_ancestors(&self, uri: &str) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
-            None => return Err(anyhow::format_err!("node not found")),
+            None => return Err(anyhow!("node not found")),
         };
         let roots = self.graph.borrow().collect_root_ancestors(curr_node);
         if roots.is_empty() {
@@ -521,9 +509,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             },
         };
 
-        self.root = Some(root);
+        self.root = root;
 
-        self.gen_initial_graph(self.root.as_ref().unwrap());
+        self.gen_initial_graph();
 
         self.set_status("ready", "Project initialized", "$(check)");
     }
@@ -606,7 +594,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
         params
             .arguments
-            .push(serde_json::Value::String(self.root.as_ref().unwrap().into()));
+            .push(serde_json::Value::String(self.root.clone()));
         match self
             .command_provider
             .as_ref()
@@ -694,10 +682,13 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         let edges: Vec<DocumentLink> = self
             .graph
             .borrow()
-            .get_include_meta(node)
+            .child_node_indexes(node)
             .into_iter()
-            .filter_map(|value| {
-                let path = std::path::Path::new(&value.filepath);
+            .filter_map(|child| {
+                let graph = self.graph.borrow();
+                let value = graph.get_edge_meta(node, child);
+                let path: std::ffi::OsString = graph.get_node(child).try_into().unwrap();
+                let path = std::path::Path::new(&path);
                 let url = match Url::from_file_path(path) {
                     Ok(url) => url,
                     Err(e) => {
