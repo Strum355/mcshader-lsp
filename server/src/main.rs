@@ -241,7 +241,6 @@ impl MinecraftShaderLanguageServer {
             let tree = match self.get_dfs_for_node(root) {
                 Ok(tree) => tree,
                 Err(e) => {
-                    let e = e.downcast::<dfs::error::CycleError>().unwrap();
                     diagnostics.insert(Url::from_file_path(uri).unwrap(), vec![e.into()]);
                     return Ok(diagnostics);
                 }
@@ -255,9 +254,8 @@ impl MinecraftShaderLanguageServer {
             let views = merger.generate_merge_list(&tree);
 
             let stdout = self.invoke_validator(views)?;
-            let stdout = stdout.trim();
             eprintln!("glslangValidator output: {}\n", stdout);
-            diagnostics.extend(self.parse_validator_stdout(stdout, ""));
+            diagnostics.extend(self.parse_validator_stdout(&stdout, ""));
         } else {
             let mut all_trees = Vec::new();
 
@@ -265,7 +263,6 @@ impl MinecraftShaderLanguageServer {
                 let nodes = match self.get_dfs_for_node(*root) {
                     Ok(nodes) => nodes,
                     Err(e) => {
-                        let e = e.downcast::<dfs::error::CycleError>().unwrap();
                         diagnostics.insert(Url::from_file_path(uri).unwrap(), vec![e.into()]);
                         return Ok(diagnostics);
                     }
@@ -275,8 +272,6 @@ impl MinecraftShaderLanguageServer {
                 all_sources.extend(sources);
             }
 
-            //self.graph.borrow().
-            
             for tree in all_trees {
                 let graph = self.graph.borrow();
                 let mut merger = merge_views::MergeViewGenerator::new(&mut all_sources, &graph);
@@ -284,9 +279,8 @@ impl MinecraftShaderLanguageServer {
                 let views = merger.generate_merge_list(&tree);
 
                 let stdout = self.invoke_validator(views)?;
-                let stdout = stdout.trim();
                 eprintln!("glslangValidator output: {}\n", stdout);
-                diagnostics.extend(self.parse_validator_stdout(stdout, ""));
+                diagnostics.extend(self.parse_validator_stdout(&stdout, ""));
             }
         };
 
@@ -358,7 +352,7 @@ impl MinecraftShaderLanguageServer {
             };
 
             let origin_url = Url::from_file_path(origin).unwrap();
-            match diagnostics.get_mut(&origin_url) {//.get_or_insert(Vec::new());
+            match diagnostics.get_mut(&origin_url) {
                 Some(d) => d.push(diagnostic),
                 None => {
                     diagnostics.insert(origin_url, vec![diagnostic]);
@@ -368,7 +362,7 @@ impl MinecraftShaderLanguageServer {
         diagnostics
     }
 
-    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<(NodeIndex, Option<NodeIndex>)>> {
+    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<(NodeIndex, Option<NodeIndex>)>, dfs::error::CycleError> {
         let graph_ref = self.graph.borrow();
 
         let dfs = dfs::Dfs::new(&graph_ref, root);
@@ -427,7 +421,7 @@ impl MinecraftShaderLanguageServer {
         stdin.flush()?;
         let output = child.wait_with_output()?;//.expect("expected output");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        Ok(stdout)
+        Ok(stdout.trim().to_string())
     }
 
     pub fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i64>) {
@@ -551,8 +545,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
         self.wait.wait();
 
-        #[allow(unused_variables)]
-        let text_change = params.content_changes[0].clone();
+        /* #[allow(unused_variables)]
+        let text_change = params.content_changes[0]; */
         //eprintln!("changed {} changes: {}", text_change., params.text_document.uri);
     }
 

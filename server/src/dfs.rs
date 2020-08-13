@@ -37,15 +37,13 @@ impl <'a> Dfs<'a> {
         }
     }
 
-    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<()> {
+    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<(), error::CycleError> {
         for prev in &self.cycle {
             for child in children {
                 if prev.node == *child {
                     let cycle_nodes: Vec<NodeIndex> = self.cycle.iter().map(|n| n.node).collect();
                     return Err(
-                        Error::new(
-                            error::CycleError::new(&cycle_nodes, *child, self.graph)
-                        )
+                        error::CycleError::new(&cycle_nodes, *child, self.graph)
                     );
                 }
             }
@@ -55,9 +53,9 @@ impl <'a> Dfs<'a> {
 }
 
 impl <'a> Iterator for Dfs<'a> {
-    type Item = Result<(NodeIndex, Option<NodeIndex>)>;
+    type Item = Result<(NodeIndex, Option<NodeIndex>), error::CycleError>;
 
-    fn next(&mut self) -> Option<Result<(NodeIndex, Option<NodeIndex>)>> {
+    fn next(&mut self) -> Option<Result<(NodeIndex, Option<NodeIndex>), error::CycleError>> {
         let parent = match self.cycle.last() {
             Some(p) => Some(p.node),
             None => None,
