@@ -7,11 +7,8 @@
         "**/client",
         "**/server"
     ],
-    "python.pythonPath": "/usr/bin/python3",
     "search.exclude": {
         "out": true
     },
-    "typescript.tsc.autoDetect": "off",
-    "typescript.tsdk": "./node_modules/typescript/lib",
     "eslint.enable": true
 }

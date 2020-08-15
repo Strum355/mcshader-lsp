@@ -135,7 +135,7 @@ dependencies = [
 [[package]]
 name = "lsp-types"
 version = "0.77.0"
-source = "git+https://github.com/gluon-lang/lsp-types?branch=master#b0f0274b192f69fdd2ac1932a0c0b46ef1d588a1"
+source = "git+https://github.com/gluon-lang/lsp-types#b0f0274b192f69fdd2ac1932a0c0b46ef1d588a1"
 dependencies = [
  "base64 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -324,10 +324,10 @@ dependencies = [
 [[package]]
 name = "rust_lsp"
 version = "0.6.0"
-source = "git+https://github.com/Strum355/RustLSP?branch=master#41fadb86f4b8fd2f08f6e60cd453f52a0acc534f"
+source = "git+https://github.com/Strum355/RustLSP#41fadb86f4b8fd2f08f6e60cd453f52a0acc534f"
 dependencies = [
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "lsp-types 0.77.0 (git+https://github.com/gluon-lang/lsp-types?branch=master)",
+ "lsp-types 0.77.0 (git+https://github.com/gluon-lang/lsp-types)",
  "rustdt-json_rpc 0.3.0 (git+https://github.com/strager/rustdt-json_rpc?branch=serde-1.0)",
  "rustdt_util 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.114 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -497,7 +497,7 @@ dependencies = [
  "percent-encoding 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "petgraph 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "rust_lsp 0.6.0 (git+https://github.com/Strum355/RustLSP?branch=master)",
+ "rust_lsp 0.6.0 (git+https://github.com/Strum355/RustLSP)",
  "serde 1.0.114 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.56 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempdir 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -565,7 +565,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum libc 0.2.72 (registry+https://github.com/rust-lang/crates.io-index)" = "a9f8082297d534141b30c8d39e9b1773713ab50fdbe4ff30f750d063b3bfd701"
 "checksum log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "e19e8d5c34a3e0e2223db8e060f9e8264aeeb5c5fc64a4ee9965c062211c024b"
 "checksum log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)" = "14b6052be84e6b71ab17edffc2eeabf5c2c3ae1fdb464aae35ac50c67a44e1f7"
-"checksum lsp-types 0.77.0 (git+https://github.com/gluon-lang/lsp-types?branch=master)" = "<none>"
+"checksum lsp-types 0.77.0 (git+https://github.com/gluon-lang/lsp-types)" = "<none>"
 "checksum matches 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)" = "7ffc5c5338469d4d3ea17d269fa8ea3512ad247247c30bd2df69e68309ed0a08"
 "checksum memchr 2.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
 "checksum num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "b8536030f9fea7127f841b45bb6243b27255787fb4eb83958aa1ef9d2fdc0c36"
@@ -587,7 +587,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum regex 1.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "9c3780fcf44b193bc4d09f36d2a3c87b251da4a046c87795a0d35f4f927ad8e6"
 "checksum regex-syntax 0.6.18 (registry+https://github.com/rust-lang/crates.io-index)" = "26412eb97c6b088a6997e05f69403a802a92d520de2f8e63c2b65f9e0f47c4e8"
 "checksum remove_dir_all 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
-"checksum rust_lsp 0.6.0 (git+https://github.com/Strum355/RustLSP?branch=master)" = "<none>"
+"checksum rust_lsp 0.6.0 (git+https://github.com/Strum355/RustLSP)" = "<none>"
 "checksum rustdt-json_rpc 0.3.0 (git+https://github.com/strager/rustdt-json_rpc?branch=serde-1.0)" = "<none>"
 "checksum rustdt_util 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "7cfffa8a89d8758be2dd5605c5fc62bce055af2491ebf3ce953d4d31512c59fd"
 "checksum ryu 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"

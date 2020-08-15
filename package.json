@@ -91,5 +91,16 @@
     "eslint": "^7.4.0",
     "typescript": "^3.9.7",
     "vsce": "^1.77.0"
+  },
+  "eslintConfig": {
+    "parser": "@typescript-eslint/parser",
+    "parserOptions": {
+        "ecmaVersion": 2020,
+        "sourceType": "module"
+    },
+    "rules": {
+      "semi": ["warn", "never"],
+      "quotes": ["warn", "single"]
+    }
   }
 }
