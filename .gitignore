@@ -5,3 +5,7 @@ out
 glslangValidator
 *.vsix
 graph.dot
+bazel-out
+bazel-testlogs
+bazel-bin
+bazel-vscode-mc-shader
