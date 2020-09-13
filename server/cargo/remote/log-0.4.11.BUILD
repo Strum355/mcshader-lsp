@@ -23,14 +23,38 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
 
-# Unsupported target "build-script-build" with type "custom-build" omitted
+cargo_build_script(
+    name = "log_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2015",
+    deps = [
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "0.4.11",
+    visibility = ["//visibility:private"],
+)
+
 # Unsupported target "filters" with type "test" omitted
 
 rust_library(
     name = "log",
     crate_type = "lib",
     deps = [
+        ":log_build_script",
         "@server__cfg_if__0_1_10//:cfg_if",
     ],
     srcs = glob(["**/*.rs"]),

@@ -23,16 +23,42 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
+
+cargo_build_script(
+    name = "num_integer_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2015",
+    deps = [
+        "@server__autocfg__1_0_1//:autocfg",
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+      "std",
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "0.1.43",
+    visibility = ["//visibility:private"],
+)
 
 # Unsupported target "average" with type "bench" omitted
 # Unsupported target "average" with type "test" omitted
-# Unsupported target "build-script-build" with type "custom-build" omitted
 # Unsupported target "gcd" with type "bench" omitted
 
 rust_library(
     name = "num_integer",
     crate_type = "lib",
     deps = [
+        ":num_integer_build_script",
         "@server__num_traits__0_2_12//:num_traits",
     ],
     srcs = glob(["**/*.rs"]),

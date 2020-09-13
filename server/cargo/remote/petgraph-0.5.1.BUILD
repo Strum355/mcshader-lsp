@@ -37,7 +37,7 @@ rust_library(
     crate_type = "lib",
     deps = [
         "@server__fixedbitset__0_2_0//:fixedbitset",
-        "@server__indexmap__1_0_2//:indexmap",
+        "@server__indexmap__1_6_0//:indexmap",
     ],
     srcs = glob(["**/*.rs"]),
     crate_root = "src/lib.rs",

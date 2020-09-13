@@ -18,8 +18,6 @@ percent-encoding = "2.1.0"
 anyhow = "1.0.32"
 bit-set = "0.5.2"
 thiserror = "1.0.20"
-log = "0.4.11"
-indexmap = "=1.0.2"
 
 [dev-dependencies]
 tempdir = "0.3.7"
@@ -34,3 +32,4 @@ path = "src/main.rs"
 workspace_path = "//server/cargo"
 genmode = "Remote"
 gen_workspace_prefix = "server"
+default_gen_buildrs = true

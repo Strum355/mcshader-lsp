@@ -23,9 +23,33 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
+
+cargo_build_script(
+    name = "indexmap_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2018",
+    deps = [
+        "@server__autocfg__1_0_1//:autocfg",
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "1.6.0",
+    visibility = ["//visibility:private"],
+)
 
 # Unsupported target "bench" with type "bench" omitted
-# Unsupported target "build-script-build" with type "custom-build" omitted
 # Unsupported target "equivalent_trait" with type "test" omitted
 # Unsupported target "faststring" with type "bench" omitted
 
@@ -33,6 +57,7 @@ rust_library(
     name = "indexmap",
     crate_type = "lib",
     deps = [
+        ":indexmap_build_script",
         "@server__hashbrown__0_9_0//:hashbrown",
     ],
     srcs = glob(["**/*.rs"]),

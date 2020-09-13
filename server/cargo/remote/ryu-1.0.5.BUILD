@@ -23,9 +23,32 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
+
+cargo_build_script(
+    name = "ryu_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2018",
+    deps = [
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "1.0.5",
+    visibility = ["//visibility:private"],
+)
 
 # Unsupported target "bench" with type "bench" omitted
-# Unsupported target "build-script-build" with type "custom-build" omitted
 # Unsupported target "common_test" with type "test" omitted
 # Unsupported target "d2s_table_test" with type "test" omitted
 # Unsupported target "d2s_test" with type "test" omitted
@@ -36,6 +59,7 @@ rust_library(
     name = "ryu",
     crate_type = "lib",
     deps = [
+        ":ryu_build_script",
     ],
     srcs = glob(["**/*.rs"]),
     crate_root = "src/lib.rs",

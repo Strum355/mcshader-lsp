@@ -35,18 +35,8 @@ alias(
     tags = ["cargo-raze"],
 )
 alias(
-    name = "indexmap",
-    actual = "@server__indexmap__1_0_2//:indexmap",
-    tags = ["cargo-raze"],
-)
-alias(
     name = "lazy_static",
     actual = "@server__lazy_static__1_4_0//:lazy_static",
-    tags = ["cargo-raze"],
-)
-alias(
-    name = "log",
-    actual = "@server__log__0_4_11//:log",
     tags = ["cargo-raze"],
 )
 alias(

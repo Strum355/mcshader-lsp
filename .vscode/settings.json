@@ -10,5 +10,6 @@
     "search.exclude": {
         "out": true
     },
-    "eslint.enable": true
+    "eslint.enable": true,
+    "rust-analyzer.linkedProjects": [ "bazel-bin/server/rust-project.json" ]
 }

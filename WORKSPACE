@@ -16,11 +16,11 @@ bazel_skylib_workspace()
 
 http_archive(
     name = "io_bazel_rules_rust",
-    sha256 = "f50600b8a56de5c70ad00ba7492dbd73262fadcf83354e69d10f8109e657324a",
-    strip_prefix = "rules_rust-67dbb8939be30245bb33cb7a56335101dfc71e17",
+    sha256 = "ceee3ecc1bc134f42f448b88907649f1ab3930c52772d63d63e3f504b92cf8e9",
+    strip_prefix = "rules_rust-6865219d2ddf7849bd8c98d8dc44715660452bde",
     urls = [
         # Master branch as of 2020-09-12
-        "https://github.com/Strum355/rules_rust/archive/67dbb8939be30245bb33cb7a56335101dfc71e17.tar.gz",
+        "https://github.com/Strum355/rules_rust/archive/6865219d2ddf7849bd8c98d8dc44715660452bde.tar.gz",
     ],
 )
 

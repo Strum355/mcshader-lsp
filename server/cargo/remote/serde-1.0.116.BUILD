@@ -23,13 +23,41 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
 
-# Unsupported target "build-script-build" with type "custom-build" omitted
+cargo_build_script(
+    name = "serde_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2015",
+    deps = [
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+      "default",
+      "derive",
+      "serde_derive",
+      "std",
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "1.0.116",
+    visibility = ["//visibility:private"],
+)
+
 
 rust_library(
     name = "serde",
     crate_type = "lib",
     deps = [
+        ":serde_build_script",
     ],
     srcs = glob(["**/*.rs"]),
     crate_root = "src/lib.rs",

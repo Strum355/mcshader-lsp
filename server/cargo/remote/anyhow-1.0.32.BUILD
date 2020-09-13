@@ -23,12 +23,39 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
+
+cargo_build_script(
+    name = "anyhow_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2018",
+    deps = [
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+      "default",
+      "std",
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "1.0.32",
+    visibility = ["//visibility:private"],
+)
 
 
 rust_library(
     name = "anyhow",
     crate_type = "lib",
     deps = [
+        ":anyhow_build_script",
     ],
     srcs = glob(["**/*.rs"]),
     crate_root = "src/lib.rs",
@@ -44,7 +71,6 @@ rust_library(
     ],
 )
 
-# Unsupported target "build-script-build" with type "custom-build" omitted
 # Unsupported target "compiletest" with type "test" omitted
 # Unsupported target "test_autotrait" with type "test" omitted
 # Unsupported target "test_backtrace" with type "test" omitted

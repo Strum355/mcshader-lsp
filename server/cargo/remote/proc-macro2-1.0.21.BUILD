@@ -23,8 +23,33 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
 
-# Unsupported target "build-script-build" with type "custom-build" omitted
+cargo_build_script(
+    name = "proc_macro2_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2018",
+    deps = [
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+      "default",
+      "proc-macro",
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "1.0.21",
+    visibility = ["//visibility:private"],
+)
+
 # Unsupported target "comments" with type "test" omitted
 # Unsupported target "features" with type "test" omitted
 # Unsupported target "marker" with type "test" omitted
@@ -33,6 +58,7 @@ rust_library(
     name = "proc_macro2",
     crate_type = "lib",
     deps = [
+        ":proc_macro2_build_script",
         "@server__unicode_xid__0_2_1//:unicode_xid",
     ],
     srcs = glob(["**/*.rs"]),

@@ -5,8 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_analyzer(
     name = "mcshader-lsp-ra",
-    targets = ["//server"],
-    exec_root = "bazel-rules_rust"
+    targets = [":mcshader-lsp"],
 )
 
 rust_binary(
@@ -29,6 +28,5 @@ rust_binary(
         "//server/cargo:thiserror",
         "//server/cargo:url",
         "//server/cargo:walkdir",
-        "//server/cargo:log"
     ],
 )

@@ -23,8 +23,39 @@ load(
     "rust_test",
 )
 
+load(
+    "@io_bazel_rules_rust//cargo:cargo_build_script.bzl",
+    "cargo_build_script",
+)
 
-# Unsupported target "build-script-build" with type "custom-build" omitted
+cargo_build_script(
+    name = "syn_build_script",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "build.rs",
+    edition = "2018",
+    deps = [
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    crate_features = [
+      "clone-impls",
+      "default",
+      "derive",
+      "parsing",
+      "printing",
+      "proc-macro",
+      "quote",
+      "visit",
+    ],
+    build_script_env = {
+    },
+    data = glob(["**"]),
+    tags = ["cargo-raze"],
+    version = "1.0.40",
+    visibility = ["//visibility:private"],
+)
+
 # Unsupported target "file" with type "bench" omitted
 # Unsupported target "rust" with type "bench" omitted
 
@@ -32,6 +63,7 @@ rust_library(
     name = "syn",
     crate_type = "lib",
     deps = [
+        ":syn_build_script",
         "@server__proc_macro2__1_0_21//:proc_macro2",
         "@server__quote__1_0_7//:quote",
         "@server__unicode_xid__0_2_1//:unicode_xid",
