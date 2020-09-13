@@ -79,6 +79,11 @@ impl CachedStableGraph {
         self.graph.add_edge(parent, child, meta)
     }
 
+    pub fn remove_edge(&mut self, parent: NodeIndex, child: NodeIndex) {
+        let edge = self.graph.find_edge(parent, child).unwrap();
+        self.graph.remove_edge(edge);
+    }
+
     #[allow(dead_code)]
     pub fn edge_weights(&self, node: NodeIndex) -> Vec<IncludePosition> {
         self.graph.edges(node).map(|e| e.weight().clone()).collect()
@@ -87,6 +92,14 @@ impl CachedStableGraph {
     #[allow(dead_code)]
     pub fn child_node_names(&self, node: NodeIndex) -> Vec<String> {
         self.graph.neighbors(node).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
+    }
+
+    pub fn child_node_meta(&self, node: NodeIndex) -> Vec<(String, IncludePosition)> {
+        self.graph.neighbors(node).map(|n| {
+            let edge = self.graph.find_edge(node, n).unwrap();
+            let edge_meta = self.graph.edge_weight(edge).unwrap();
+            return (self.reverse_index.get(&n).unwrap().clone(), edge_meta.clone())
+        }).collect()
     }
 
     pub fn child_node_indexes(&self, node: NodeIndex) -> Vec<NodeIndex> {

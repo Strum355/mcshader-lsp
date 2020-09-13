@@ -10,7 +10,8 @@ use petgraph::stable_graph::NodeIndex;
 use walkdir::WalkDir;
 
 use std::cell::RefCell;
-use std::collections::{HashMap, LinkedList};
+use std::collections::{HashMap, LinkedList, HashSet};
+use std::collections::hash_map::RandomState;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter, Debug};
 use std::cmp::max;
@@ -19,7 +20,7 @@ use std::ops::Add;
 use std::process;
 use std::rc::Rc;
 use std::fs;
-use std::iter::Extend;
+use std::iter::{Extend, FromIterator};
 
 use anyhow::{Result, anyhow};
 
@@ -96,7 +97,7 @@ impl Default for Configuration {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct IncludePosition {
     line: usize,
     start: usize,
@@ -159,23 +160,27 @@ impl MinecraftShaderLanguageServer {
         // iterate all valid found files, search for includes, add a node into the graph for each
         // file and add a file->includes KV into the map
         for path in file_iter {
-            let includes = self.find_includes(path.as_str());
+            let includes = self.find_includes(&path);
 
             let idx = self.graph.borrow_mut().add_node(&path);
 
             //eprintln!("adding {} with\n{:?}", path.clone(), includes);
             for include in includes {
-                let child = self.graph.borrow_mut().add_node(&include.0);
-                self.graph.borrow_mut().add_edge(
-                    idx, 
-                    child,
-                    include.1,
-                );
+                self.add_include(include, idx);
             }
         }
 
         eprintln!("finished building project include graph");
         std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    fn add_include(&self, include: (String, IncludePosition), node: NodeIndex) {
+        let child = self.graph.borrow_mut().add_node(&include.0);
+        self.graph.borrow_mut().add_edge(
+            node,
+            child,
+            include.1,
+        );
     }
 
     pub fn find_includes(&self, file: &str) -> Vec<(String, IncludePosition)> {
@@ -216,6 +221,32 @@ impl MinecraftShaderLanguageServer {
             });
 
         includes
+    }
+
+    fn update_includes(&self, file: &str) {
+        let includes = self.find_includes(file);
+
+        let idx = match self.graph.borrow_mut().find_node(file) {
+            None => {
+                return
+            },
+            Some(n) => n,
+        };
+
+        let prev_children: HashSet<(std::string::String, IncludePosition), RandomState> = HashSet::from_iter(self.graph.borrow().child_node_meta(idx));
+        let new_children: HashSet<(std::string::String, IncludePosition), RandomState> = HashSet::from_iter(includes.iter().map(|e| e.clone()));
+
+        let to_be_added = new_children.difference(&prev_children);
+        let to_be_removed = prev_children.difference(&new_children);
+
+        for removal in to_be_removed {
+            let child = self.graph.borrow_mut().find_node(&removal.0).unwrap();
+            self.graph.borrow_mut().remove_edge(idx, child);
+        }
+
+        for insertion in to_be_added {
+            self.add_include(includes.iter().find(|f| f.0 == *insertion.0).unwrap().clone(), idx);
+        }
     }
 
     //fn update_includes_for_node(&self, )
@@ -556,9 +587,10 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         eprintln!("saved doc {}", params.text_document.uri);
 
         let path: String = percent_encoding::percent_decode_str(params.text_document.uri.path()).decode_utf8().unwrap().into();
+
+        self.update_includes(&path);
         
-        /*let file_content = fs::read(path).unwrap(); */
-        match self.lint(path.as_str()/* , String::from_utf8(file_content).unwrap() */) {
+        match self.lint(path.as_str()) {
             Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
             Err(e) => eprintln!("error linting: {}", e),
         }
