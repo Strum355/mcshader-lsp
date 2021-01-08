@@ -100,9 +100,11 @@ fn test_empty_initialize() {
             text_document: None,
             experimental: None,
             window: None,
+            general: Option::None,
         },
         trace: None,
         workspace_folders: None,
+        locale: Option::None,
     };
 
     let on_response = |resp: Option<Response>| {
@@ -150,9 +152,11 @@ fn test_01_initialize() {
             text_document: None,
             experimental: None,
             window: None,
+            general: Option::None,
         },
         trace: None,
         workspace_folders: None,
+        locale: Option::None,
     };
 
     let on_response = |resp: Option<Response>| {

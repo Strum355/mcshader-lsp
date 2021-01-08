@@ -18,6 +18,8 @@ percent-encoding = "2.1.0"
 anyhow = "1.0.31"
 bit-set = "0.5.2"
 thiserror = "1.0.20"
+glutin = "0.26.0"
+gl = "0.14.0"
 
 [dev-dependencies]
 tempdir = "0.3.7"

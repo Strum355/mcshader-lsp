@@ -142,6 +142,8 @@ pub mod error {
                 code: None,
                 tags: None,
                 related_information: None,
+                code_description: Option::None,
+                data: Option::None,
             }
         }
     }

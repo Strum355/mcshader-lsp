@@ -15,9 +15,8 @@ use std::collections::hash_map::RandomState;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter, Debug};
 use std::cmp::max;
-use std::io::{stdin, stdout, BufRead, BufReader, Write};
+use std::io::{stdin, stdout, BufRead, BufReader};
 use std::ops::Add;
-use std::process;
 use std::rc::Rc;
 use std::fs;
 use std::iter::{Extend, FromIterator};
@@ -38,6 +37,7 @@ mod lsp_ext;
 mod dfs;
 mod merge_views;
 mod consts;
+mod opengl;
 
 #[cfg(test)]
 mod test;
@@ -48,7 +48,6 @@ lazy_static! {
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
 }
-
 
 fn main() {
     let stdin = stdin();
@@ -335,14 +334,14 @@ impl MinecraftShaderLanguageServer {
 
             eprintln!("match {:?}", diagnostic_capture);
             
-            let msg = diagnostic_capture.get(4).unwrap().as_str().trim();
+            let msg = diagnostic_capture.get(4).unwrap().as_str().replace("'' : ", "");
 
             if msg.starts_with("compilation terminated") {
                 continue;
             }
 
             let line = max(match diagnostic_capture.get(3) {
-                Some(c) => match c.as_str().parse::<u64>() {
+                Some(c) => match c.as_str().parse::<u32>() {
                     Ok(i) => i,
                     Err(_) => 0,
                 },
@@ -372,14 +371,16 @@ impl MinecraftShaderLanguageServer {
                     /* Position::new(line, leading_whitespace as u64),
                     Position::new(line, line_text.len() as u64) */
                     Position::new(line, 0),
-                    Position::new(line, 1000)
+                    Position::new(line, 1000),
                 ),
                 code: None,
                 severity: Some(severity),
                 source: Some(consts::SOURCE.into()),
-                message: msg.into(),
+                message: msg.trim().into(),
                 related_information: None,
                 tags: None,
+                code_description: Option::None,
+                data: Option::None,
             };
 
             let origin_url = Url::from_file_path(origin).unwrap();
@@ -431,20 +432,24 @@ impl MinecraftShaderLanguageServer {
         Ok(Some(roots))
     }
 
-    fn invoke_validator(&self, source: LinkedList<&str>) -> Result<String> {
+    fn invoke_validator(&self, tree_type: TreeType, source: LinkedList<&str>) -> Result<String> {
+        /* let mut eventloop = glutin::event_loop::EventLoop::new();
+        let context = glutin::ContextBuilder::new().build_headless(&eventloop, glutin::dpi::PhysicalSize::new(1920, 1080)); */
+
+        
+            
+        Ok("".to_string())
+    }
+
+    /* fn invoke_validator(&self, tree_type: TreeType, source: LinkedList<&str>) -> Result<String> {
         let cmd = process::Command::new(&self.config.glslang_validator_path)
-            .args(&["--stdin", "-S", "frag"])
+            .args(&["--stdin", "-S", tree_type.into()])
             .stdin(process::Stdio::piped())
             .stdout(process::Stdio::piped())
             .spawn();
 
         let mut child = cmd?;//.expect("glslangValidator failed to spawn");
         let stdin = child.stdin.as_mut().expect("no stdin handle found");
-
-        eprintln!("MERGED FILE:");
-        for s in &source {
-            eprint!("{}", s);
-        }
         
         let mut io_slices: Vec<std::io::IoSlice> = source.iter().map(|s| std::io::IoSlice::new(s.as_bytes())).collect();
 
@@ -453,9 +458,9 @@ impl MinecraftShaderLanguageServer {
         let output = child.wait_with_output()?;//.expect("expected output");
         let stdout = String::from_utf8(output.stdout).unwrap();
         Ok(stdout.trim().to_string())
-    }
+    } */
 
-    pub fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i64>) {
+    pub fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
         eprintln!("DIAGNOSTICS:\n{:?}", diagnostics);
         for (uri, diagnostics) in diagnostics {
             self.endpoint.send_notification(PublishDiagnostics::METHOD, PublishDiagnosticsParams {
@@ -636,6 +641,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 completable.complete(Ok(WorkspaceEdit {
                     changes: None,
                     document_changes: None,
+                    change_annotations: Option::None,
                 }))
             },
             Err(err) => {
@@ -726,11 +732,11 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 Some(DocumentLink {
                     range: Range::new(
                         Position::new(
-                            u64::try_from(value.line).unwrap(),
-                            u64::try_from(value.start).unwrap()),
+                            u32::try_from(value.line).unwrap(),
+                            u32::try_from(value.start).unwrap()),
                         Position::new(
-                            u64::try_from(value.line).unwrap(),
-                            u64::try_from(value.end).unwrap()),
+                            u32::try_from(value.line).unwrap(),
+                            u32::try_from(value.end).unwrap()),
                     ),
                     target: Some(url),
                     //tooltip: Some(url.path().to_string().strip_prefix(self.root.clone().unwrap().as_str()).unwrap().to_string()),
