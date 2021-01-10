@@ -107,6 +107,18 @@ impl Display for IncludePosition {
     }
 }
 
+pub enum TreeType {
+    Fragment, Vertex
+}
+
+impl Into<&'static str> for TreeType {
+    fn into(self) -> &'static str {
+        match self {
+            TreeType::Vertex => "vert",
+            _ => "frag"
+        }
+    }
+}
 
 impl MinecraftShaderLanguageServer {
     pub fn error_not_available<DATA>(data: DATA) -> MethodError<DATA> {
@@ -252,14 +264,24 @@ impl MinecraftShaderLanguageServer {
             Err(e) => return Err(e),
         };
         
-        eprintln!("ancestors for {}:\n{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
+        eprintln!("ancestors for {}:\n\t{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
         
+        // the set of all filepath->content. TODO: change to Url?
         let mut all_sources: HashMap<String, String> = HashMap::new();
-        let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();//Vec::new();
+        // the set of filepath->list of diagnostics to report
+        let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
 
+        // we want to backfill the diagnostics map with all linked sources 
+        let back_fill = |all_sources: &HashMap<String, String>, diagnostics: &mut HashMap<Url, Vec<Diagnostic>>| {
+            for (path, _) in all_sources {
+                diagnostics.entry(Url::from_file_path(path).unwrap()).or_default();
+            }
+        };
+
+        // if we are a top-level file (this has to be one of the set defined by Optifine, right?)
         if file_ancestors.is_empty() {
+            // gather the list of all descendants 
             let root = self.graph.borrow_mut().find_node(uri).unwrap();
-
             let tree = match self.get_dfs_for_node(root) {
                 Ok(tree) => tree,
                 Err(e) => {
@@ -273,24 +295,42 @@ impl MinecraftShaderLanguageServer {
             let graph = self.graph.borrow();
             let views = merge_views::generate_merge_list(&tree, &all_sources, &graph);
         
-            let views = merger.generate_merge_list(&tree);
+            let tree_type = if uri.ends_with(".fsh") {
+                TreeType::Fragment
+            } else {
+                TreeType::Vertex
+            };
 
-            let stdout = self.invoke_validator(views)?;
+            let stdout = match opengl::validate(tree_type, views) {
+                Some(s) => s,
+                None => {
+                    back_fill(&all_sources, &mut diagnostics);
+                    return Ok(diagnostics)
+                },
+            };
             eprintln!("glslangValidator output: {}\n", stdout);
-            diagnostics.extend(self.parse_validator_stdout(&stdout, ""));
+            diagnostics.extend(self.parse_validator_stdout(stdout, ""));
         } else {
-            let mut all_trees = Vec::new();
+            let mut all_trees: Vec<(TreeType, Vec<(NodeIndex, Option<_>)>)> = Vec::new();
 
             for root in &file_ancestors {
                 let nodes = match self.get_dfs_for_node(*root) {
                     Ok(nodes) => nodes,
                     Err(e) => {
                         diagnostics.insert(Url::from_file_path(uri).unwrap(), vec![e.into()]);
+                        back_fill(&all_sources, &mut diagnostics); // TODO: confirm
                         return Ok(diagnostics);
                     }
                 };
+
+                let tree_type = if uri.ends_with(".fsh") {
+                    TreeType::Fragment
+                } else {
+                    TreeType::Vertex
+                };
+
                 let sources = self.load_sources(&nodes)?;
-                all_trees.push(nodes);
+                all_trees.push((tree_type, nodes));
                 all_sources.extend(sources);
             }
 
@@ -298,20 +338,20 @@ impl MinecraftShaderLanguageServer {
                 let graph = self.graph.borrow();
                 let views = merge_views::generate_merge_list(&tree.1, &all_sources, &graph);
 
-                let stdout = self.invoke_validator(views)?;
+                let stdout = match opengl::validate(tree.0, views) {
+                    Some(s) => s,
+                    None => continue,
+                };
                 eprintln!("glslangValidator output: {}\n", stdout);
-                diagnostics.extend(self.parse_validator_stdout(&stdout, ""));
+                diagnostics.extend(self.parse_validator_stdout(stdout, ""));
             }
         };
 
-        for (path, _) in all_sources {
-            diagnostics.entry(Url::from_file_path(path).unwrap()).or_default();
-        }
-
+        back_fill(&all_sources, &mut diagnostics);
         Ok(diagnostics)
     }
 
-    fn parse_validator_stdout(&self, stdout: &str, source: &str) -> HashMap<Url, Vec<Diagnostic>> {
+    fn parse_validator_stdout(&self, stdout: String, source: &str) -> HashMap<Url, Vec<Diagnostic>> {
         let stdout_lines = stdout.split('\n');
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::with_capacity(stdout_lines.count());
         let stdout_lines = stdout.split('\n');
@@ -421,34 +461,6 @@ impl MinecraftShaderLanguageServer {
         }
         Ok(Some(roots))
     }
-
-    fn invoke_validator(&self, tree_type: TreeType, source: LinkedList<&str>) -> Result<String> {
-        /* let mut eventloop = glutin::event_loop::EventLoop::new();
-        let context = glutin::ContextBuilder::new().build_headless(&eventloop, glutin::dpi::PhysicalSize::new(1920, 1080)); */
-
-        
-            
-        Ok("".to_string())
-    }
-
-    /* fn invoke_validator(&self, tree_type: TreeType, source: LinkedList<&str>) -> Result<String> {
-        let cmd = process::Command::new(&self.config.glslang_validator_path)
-            .args(&["--stdin", "-S", tree_type.into()])
-            .stdin(process::Stdio::piped())
-            .stdout(process::Stdio::piped())
-            .spawn();
-
-        let mut child = cmd?;//.expect("glslangValidator failed to spawn");
-        let stdin = child.stdin.as_mut().expect("no stdin handle found");
-        
-        let mut io_slices: Vec<std::io::IoSlice> = source.iter().map(|s| std::io::IoSlice::new(s.as_bytes())).collect();
-
-        stdin.write_all_vectored(&mut io_slices[..])?;//.expect("failed to write to stdin");
-        stdin.flush()?;
-        let output = child.wait_with_output()?;//.expect("expected output");
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        Ok(stdout.trim().to_string())
-    } */
 
     pub fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
         eprintln!("DIAGNOSTICS:\n{:?}", diagnostics);
