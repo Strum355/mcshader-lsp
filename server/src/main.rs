@@ -1,6 +1,3 @@
-#![feature(write_all_vectored)]
-#![feature(iter_map_while)]
-
 use rust_lsp::jsonrpc::{*, method_types::*};
 use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::{*, notification::*};
@@ -10,7 +7,7 @@ use petgraph::stable_graph::NodeIndex;
 use walkdir::WalkDir;
 
 use std::cell::RefCell;
-use std::collections::{HashMap, LinkedList, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter, Debug};
@@ -59,7 +56,6 @@ fn main() {
     let mut langserver = MinecraftShaderLanguageServer {
         endpoint: endpoint_output.clone(),
         graph: Rc::new(RefCell::new(cache_graph)),
-        config: Configuration::default(),
         wait: WaitGroup::new(),
         root: "".to_string(),
         command_provider: None,
@@ -78,22 +74,9 @@ fn main() {
 struct MinecraftShaderLanguageServer {
     endpoint: Endpoint,
     graph: Rc<RefCell<graph::CachedStableGraph>>,
-    config: Configuration,
     wait: WaitGroup,
     root: String,
     command_provider: Option<provider::CustomCommandProvider>,
-}
-
-struct Configuration {
-    glslang_validator_path: String,
-}
-
-impl Default for Configuration {
-    fn default() -> Self {
-        Configuration{
-            glslang_validator_path: "glslangValidator".into(),
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -279,7 +262,7 @@ impl MinecraftShaderLanguageServer {
             all_sources.extend( self.load_sources(&tree)?);
 
             let graph = self.graph.borrow();
-            let mut merger = merge_views::MergeViewGenerator::new(&mut all_sources, &graph);
+            let views = merge_views::generate_merge_list(&tree, &all_sources, &graph);
         
             let views = merger.generate_merge_list(&tree);
 
@@ -304,9 +287,7 @@ impl MinecraftShaderLanguageServer {
 
             for tree in all_trees {
                 let graph = self.graph.borrow();
-                let mut merger = merge_views::MergeViewGenerator::new(&mut all_sources, &graph);
-            
-                let views = merger.generate_merge_list(&tree);
+                let views = merge_views::generate_merge_list(&tree.1, &all_sources, &graph);
 
                 let stdout = self.invoke_validator(views)?;
                 eprintln!("glslangValidator output: {}\n", stdout);
@@ -556,14 +537,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn workspace_change_configuration(&mut self, params: DidChangeConfigurationParams) {
-        let config = params.settings.as_object().unwrap().get("mcglsl").unwrap();
-
-        self.config.glslang_validator_path = config
-                .get("glslangValidatorPath")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .into();
+        //let config = params.settings.as_object().unwrap().get("mcglsl").unwrap();
 
         eprintln!("{:?}", params.settings.as_object().unwrap());
 

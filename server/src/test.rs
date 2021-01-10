@@ -41,7 +41,6 @@ fn new_temp_server() -> MinecraftShaderLanguageServer {
     MinecraftShaderLanguageServer {
         endpoint,
         graph: Rc::new(RefCell::new(graph::CachedStableGraph::new())),
-        config: Configuration::default(),
         wait: WaitGroup::new(),
         root: "".to_string(),
         command_provider: None,
@@ -860,25 +859,20 @@ fn test_generate_merge_list_01() {
     );
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
-    let mut sources = server.load_sources(&nodes).unwrap();
+    let sources = server.load_sources(&nodes).unwrap();
 
     let graph_borrow = server.graph.borrow();
-    let mut merger = merge_views::MergeViewGenerator::new(&mut sources, &graph_borrow);
-
-    let result = merger.generate_merge_list(&nodes);
-
-    let total: String = result.iter().map(|s| &**s).collect::<Vec<&str>>().join("");
+    let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
     let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
     let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
-    truth = truth.replacen("!!", &(tmp_path.clone() + "/shaders/final.fsh"), 1);
     truth = truth.replacen("!!", &(tmp_path.clone() + "/shaders/" + "common.glsl"), 1);
     truth = truth.replace("!!", &(tmp_path + "/shaders/" + "final.fsh"));
 
-    assert_that!(total, eq(truth));
-
     server.endpoint.request_shutdown();
+
+    assert_that!(result, eq(truth));
 }
 
 #[test]
@@ -933,20 +927,15 @@ fn test_generate_merge_list_02() {
     );
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
-    let mut sources = server.load_sources(&nodes).unwrap();
+    let sources = server.load_sources(&nodes).unwrap();
 
     let graph_borrow = server.graph.borrow();
-    let mut merger = merge_views::MergeViewGenerator::new(&mut sources, &graph_borrow);
-
-    let result = merger.generate_merge_list(&nodes);
-
-    let total: String = result.iter().map(|s| &**s).collect::<Vec<&str>>().join("");
+    let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
     let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
     let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
 
-    truth = truth.replacen("!!", &(tmp_path.clone() + "/shaders/final.fsh"), 1);
     for file in &[
         "sample.glsl",
         "burger.glsl",
@@ -959,7 +948,7 @@ fn test_generate_merge_list_02() {
     }
     truth = truth.replacen("!!", &(tmp_path + "/shaders/final.fsh"), 1);
 
-    assert_that!(total, eq(truth));
+    assert_that!(result, eq(truth));
 
     server.endpoint.request_shutdown();
 }
@@ -1016,20 +1005,15 @@ fn test_generate_merge_list_03() {
     );
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
-    let mut sources = server.load_sources(&nodes).unwrap();
+    let sources = server.load_sources(&nodes).unwrap();
 
     let graph_borrow = server.graph.borrow();
-    let mut merger = merge_views::MergeViewGenerator::new(&mut sources, &graph_borrow);
-
-    let result = merger.generate_merge_list(&nodes);
-
-    let total: String = result.iter().map(|s| &**s).collect::<Vec<&str>>().join("");
+    let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
     let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
 
     let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
 
-    truth = truth.replacen("!!", &(tmp_path.clone() + "/shaders/final.fsh"), 1);
     for file in &[
         "sample.glsl",
         "burger.glsl",
@@ -1042,7 +1026,7 @@ fn test_generate_merge_list_03() {
     }
     truth = truth.replacen("!!", &(tmp_path + "/shaders/final.fsh"), 1);
 
-    assert_that!(total, eq(truth));
+    assert_that!(result, eq(truth));
 
     server.endpoint.request_shutdown();
 }
