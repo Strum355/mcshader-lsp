@@ -37,11 +37,12 @@
       },
       {
         "command": "mcshader.restart",
-        "title": "Reload Language Server",
+        "title": "Restart Language Server",
         "category": "Minecraft Shader"
-      },{
-        "command": "mcshader.download",
-        "title": "Download glslangValidator",
+      },
+      {
+        "command": "mcshader.virtualMerge",
+        "title": "Show flattened file",
         "category": "Minecraft Shader"
       }
     ],

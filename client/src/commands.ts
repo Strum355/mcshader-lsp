@@ -1,7 +1,6 @@
 import * as vscode from 'vscode'
 import * as lsp from 'vscode-languageclient'
 import { Extension } from './extension'
-import { tryInstallExecutable } from './glslangValidator'
 import { log } from './log'
 
 export type Command = (...args: any[]) => unknown
@@ -23,8 +22,31 @@ export function restartExtension(e: Extension): Command {
   }
 }
 
-export function downloadValidator(e: Extension): Command {
+export function virtualMergedDocument(e: Extension): Command {
+  const getVirtualDocument = async (path: string): Promise<string> => {
+    const content = await e.lspClient.sendRequest<string>(lsp.ExecuteCommandRequest.type.method, {
+      command: 'virtualMerge',
+      arguments: [path]
+    })
+
+    return content
+  }
+
+  const docProvider = new class implements vscode.TextDocumentContentProvider {
+    onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
+    onDidChange = this.onDidChangeEmitter.event;
+
+    provideTextDocumentContent(uri: vscode.Uri, __: vscode.CancellationToken): vscode.ProviderResult<string> {
+      return getVirtualDocument(uri.path)
+    }
+  }
+
+  e.context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('mcglsl', docProvider))
+
   return async () => {
-    await tryInstallExecutable(e)
+    const uri = vscode.window.activeTextEditor.document.uri
+    const path = vscode.Uri.parse('mcglsl:' + uri.path)
+    const doc = await vscode.workspace.openTextDocument(path)
+    await vscode.window.showTextDocument(doc, {preview: true})
   }
 }

@@ -4,6 +4,7 @@ use rust_lsp::lsp_types::{*, notification::*};
 
 use petgraph::stable_graph::NodeIndex;
 
+use serde_json::Value;
 use walkdir::WalkDir;
 
 use std::cell::RefCell;
@@ -29,7 +30,7 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 mod graph;
-mod provider;
+mod commands;
 mod lsp_ext;
 mod dfs;
 mod merge_views;
@@ -61,12 +62,20 @@ fn main() {
         command_provider: None,
     };
 
-    langserver.command_provider = Some(provider::CustomCommandProvider::new(vec![(
+    langserver.command_provider = Some(commands::CustomCommandProvider::new(vec![
+        (
         "graphDot",
-        Box::new(provider::GraphDotCommand {
+            Box::new(commands::GraphDotCommand {
             graph: Rc::clone(&langserver.graph),
         }),
-    )]));
+        ),
+        (
+            "virtualMerge",
+            Box::new(commands::VirtualMergedDocument{
+                graph: Rc::clone(&langserver.graph)
+            })
+        )
+    ]));
 
     LSPEndpoint::run_server_from_input(&mut stdin.lock(), endpoint_output, langserver);
 }
@@ -76,7 +85,7 @@ struct MinecraftShaderLanguageServer {
     graph: Rc<RefCell<graph::CachedStableGraph>>,
     wait: WaitGroup,
     root: String,
-    command_provider: Option<provider::CustomCommandProvider>,
+    command_provider: Option<commands::CustomCommandProvider>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -596,27 +605,18 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         })); */
     }
 
-    fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<WorkspaceEdit>) {
-        params
-            .arguments
-            .push(serde_json::Value::String(self.root.clone()));
-        match self
-            .command_provider
-            .as_ref()
-            .unwrap()
-            .execute(params.command.as_ref(), params.arguments)
+    fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<Option<Value>>) {
+        params.arguments.push(serde_json::Value::String(self.root.clone()));
+
+        match self.command_provider.as_ref().unwrap().execute(&params.command, params.arguments)
         {
-            Ok(_) => {
+            Ok(resp) => {
                 eprintln!("executed {} successfully", params.command);
                 self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
                     typ: MessageType::Info,
                     message: format!("Command {} executed successfully.", params.command),
                 }).expect("failed to send popup/show message notification");
-                completable.complete(Ok(WorkspaceEdit {
-                    changes: None,
-                    document_changes: None,
-                    change_annotations: Option::None,
-                }))
+                completable.complete(Ok(Some(resp)))
             },
             Err(err) => {
                 self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {

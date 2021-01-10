@@ -2,7 +2,7 @@ use petgraph::stable_graph::NodeIndex;
 
 use crate::graph::CachedStableGraph;
 
-use anyhow::{Result, Error};
+use anyhow::Result;
 
 struct VisitCount {
     node: NodeIndex,

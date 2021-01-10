@@ -1,7 +1,6 @@
 import * as vscode from 'vscode'
 import * as lsp from 'vscode-languageclient'
 import * as commands from './commands'
-import { bootstrapGLSLangValidator } from './glslangValidator'
 import { log } from './log'
 import { LanguageClient } from './lspClient'
 
@@ -23,10 +22,8 @@ export class Extension {
 
     this.registerCommand('graphDot', commands.generateGraphDot)
     this.registerCommand('restart', commands.restartExtension)
-    this.registerCommand('downlaod', commands.downloadValidator)
+    this.registerCommand('virtualMerge', commands.virtualMergedDocument)
 
-    if(!await bootstrapGLSLangValidator(this)) return
-  
     log.info('starting language server...')
   
     this.client = await new LanguageClient(this).startServer()
