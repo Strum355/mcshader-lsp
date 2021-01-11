@@ -64,10 +64,10 @@ fn main() {
 
     langserver.command_provider = Some(commands::CustomCommandProvider::new(vec![
         (
-        "graphDot",
+            "graphDot",
             Box::new(commands::GraphDotCommand {
-            graph: Rc::clone(&langserver.graph),
-        }),
+                graph: Rc::clone(&langserver.graph),
+            }),
         ),
         (
             "virtualMerge",
@@ -265,7 +265,7 @@ impl MinecraftShaderLanguageServer {
         };
         
         eprintln!("ancestors for {}:\n\t{:?}", uri, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
-        
+
         // the set of all filepath->content. TODO: change to Url?
         let mut all_sources: HashMap<String, String> = HashMap::new();
         // the set of filepath->list of diagnostics to report
@@ -294,7 +294,7 @@ impl MinecraftShaderLanguageServer {
 
             let graph = self.graph.borrow();
             let views = merge_views::generate_merge_list(&tree, &all_sources, &graph);
-        
+
             let tree_type = if uri.ends_with(".fsh") {
                 TreeType::Fragment
             } else {
@@ -323,7 +323,7 @@ impl MinecraftShaderLanguageServer {
                     }
                 };
 
-                let tree_type = if uri.ends_with(".fsh") {
+                let tree_type = if self.graph.borrow().get_node(*root).ends_with(".fsh") {
                     TreeType::Fragment
                 } else {
                     TreeType::Vertex
