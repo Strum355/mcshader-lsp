@@ -23,11 +23,14 @@ export function restartExtension(e: Extension): Command {
 }
 
 export function virtualMergedDocument(e: Extension): Command {
-  const getVirtualDocument = async (path: string): Promise<string> => {
-    const content = await e.lspClient.sendRequest<string>(lsp.ExecuteCommandRequest.type.method, {
-      command: 'virtualMerge',
-      arguments: [path]
-    })
+  const getVirtualDocument = async (path: string): Promise<string | null> => {
+    let content: string = ""
+    try {
+      content = await e.lspClient.sendRequest<string>(lsp.ExecuteCommandRequest.type.method, {
+        command: 'virtualMerge',
+        arguments: [path]
+      })
+    } catch(e) {}
 
     return content
   }

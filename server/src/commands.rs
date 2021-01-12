@@ -28,16 +28,16 @@ impl CustomCommandProvider {
         }
     }
 
-    pub fn execute(&self, command: &str, args: Vec<Value>) -> Result<Value, String> {
+    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &str) -> Result<Value, String> {
         if self.commands.contains_key(command) {
-            return self.commands.get(command).unwrap().run_command(args);
+            return self.commands.get(command).unwrap().run_command(root_path, args);
         }
         Err("command doesn't exist".into())
     }
 }
 
 pub trait Invokeable {
-    fn run_command(&self, arguments: Vec<Value>) -> Result<Value, String>;
+    fn run_command(&self, root: &str, arguments: Vec<Value>) -> Result<Value, String>;
 }
 
 pub struct GraphDotCommand {
@@ -45,10 +45,8 @@ pub struct GraphDotCommand {
 }
 
 impl Invokeable for GraphDotCommand {
-    fn run_command(&self, arguments: Vec<Value>) -> Result<Value, String> {
-        let rootpath = arguments.get(0).unwrap().to_string();
-        let rootpath = String::from(rootpath.trim_start_matches('"').trim_end_matches('"'));
-        let filepath = rootpath + "/graph.dot";
+    fn run_command(&self, root: &str, _: Vec<Value>) -> Result<Value, String> {
+        let filepath = String::from(root) + "/graph.dot";
         eprintln!("generating dot file at {}", filepath);
         let mut file = OpenOptions::new()
             .truncate(true)
@@ -120,7 +118,7 @@ impl VirtualMergedDocument {
 }
 
 impl Invokeable for VirtualMergedDocument {
-    fn run_command(&self, arguments: Vec<Value>) -> Result<Value, String> {
+    fn run_command(&self, root: &str, arguments: Vec<Value>) -> Result<Value, String> {
         let path = arguments.get(0).unwrap().to_string();
         let path = String::from(path.trim_start_matches('"').trim_end_matches('"'));
 
@@ -155,11 +153,7 @@ impl Invokeable for VirtualMergedDocument {
             let graph = self.graph.borrow();
             let view = merge_views::generate_merge_list(&tree, &all_sources, &graph);
             return Ok(serde_json::value::Value::String(view));
-        } else {
-            return Err(format!("{} is not a top-level file aka has ancestors", path))
-        };
-
-
-        //Ok(Value::Null)
+        }
+        return Err(format!("{} is not a top-level file aka has ancestors", path.trim_start_matches(&(String::from(root) + "/"))))
     }
 }

@@ -41,7 +41,7 @@ mod opengl;
 mod test;
 
 lazy_static! {
-    static ref RE_DIAGNOSTIC: Regex = Regex::new(r#"^(ERROR|WARNING): ([^?<>*|"]+?):(\d+): (?:'.*?' : )?(.+)\r?"#).unwrap();
+    static ref RE_DIAGNOSTIC: Regex = Regex::new(r#"^(?P<filepath>[^?<>*|"]+?)\((?P<linenum>\d+)\) : (?P<severity>error|warning) [A-C]\d+: (?P<output>.+)"#).unwrap();
     static ref RE_VERSION: Regex = Regex::new(r#"#version [\d]{3}"#).unwrap();
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
@@ -364,13 +364,13 @@ impl MinecraftShaderLanguageServer {
 
             eprintln!("match {:?}", diagnostic_capture);
             
-            let msg = diagnostic_capture.get(4).unwrap().as_str().replace("'' : ", "");
+            let msg = diagnostic_capture.name("output").unwrap().as_str();//.replace("'' : ", "");
 
             if msg.starts_with("compilation terminated") {
                 continue;
             }
 
-            let line = max(match diagnostic_capture.get(3) {
+            let line = max(match diagnostic_capture.name("linenum") {
                 Some(c) => match c.as_str().parse::<u32>() {
                     Ok(i) => i,
                     Err(_) => 0,
@@ -382,16 +382,16 @@ impl MinecraftShaderLanguageServer {
             /* let line_text = source_lines[line as usize];
             let leading_whitespace = line_text.len() - line_text.trim_start().len(); */
 
-            let severity = match diagnostic_capture.get(1) {
+            let severity = match diagnostic_capture.name("severity") {
                 Some(c) => match c.as_str() {
-                    "ERROR" => DiagnosticSeverity::Error,
-                    "WARNING" => DiagnosticSeverity::Warning,
+                    "error" => DiagnosticSeverity::Error,
+                    "warning" => DiagnosticSeverity::Warning,
                     _ => DiagnosticSeverity::Information,
                 }
                 _ => DiagnosticSeverity::Information,
             };
 
-            let origin = match diagnostic_capture.get(2) {
+            let origin = match diagnostic_capture.name("filepath") {
                 Some(o) => o.as_str().to_string(),
                 None => "".to_string(),
             };
@@ -573,12 +573,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         }
     }
 
-    fn did_change_text_document(&mut self, params: DidChangeTextDocumentParams) {
-        self.wait.wait();
-
-        /* #[allow(unused_variables)]
-        let text_change = params.content_changes[0]; */
-        //eprintln!("changed {} changes: {}", text_change., params.text_document.uri);
+    fn did_change_text_document(&mut self, _: DidChangeTextDocumentParams) {
     }
 
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
@@ -617,11 +612,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         })); */
     }
 
-    fn execute_command(&mut self, mut params: ExecuteCommandParams, completable: LSCompletable<Option<Value>>) {
-        params.arguments.push(serde_json::Value::String(self.root.clone()));
-
-        match self.command_provider.as_ref().unwrap().execute(&params.command, params.arguments)
-        {
+    fn execute_command(&mut self, params: ExecuteCommandParams, completable: LSCompletable<Option<Value>>) {
+        match self.command_provider.as_ref().unwrap().execute(&params.command, params.arguments, &self.root) {
             Ok(resp) => {
                 eprintln!("executed {} successfully", params.command);
                 self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
@@ -633,7 +625,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             Err(err) => {
                 self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
                     typ: MessageType::Error,
-                    message: format!("Failed to execute command '{}'", params.command),
+                    message: format!("Failed to execute command '{}'. Reason: {}", params.command, err),
                 }).expect("failed to send popup/show message notification");
                 eprintln!("failed to execute {}: {}", params.command, err);
                 completable.complete(Err(MethodError::new(32420, err, ())))
