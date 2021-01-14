@@ -41,7 +41,7 @@ mod opengl;
 mod test;
 
 lazy_static! {
-    static ref RE_DIAGNOSTIC: Regex = Regex::new(r#"^(?P<filepath>[^?<>*|"]+?)\((?P<linenum>\d+)\) : (?P<severity>error|warning) [A-C]\d+: (?P<output>.+)"#).unwrap();
+    static ref RE_DIAGNOSTIC: Regex = Regex::new(r#"^(?P<filepath>[^?<>*|"]+)\((?P<linenum>\d+)\) : (?P<severity>error|warning) [A-C]\d+: (?P<output>.+)"#).unwrap();
     static ref RE_VERSION: Regex = Regex::new(r#"#version [\d]{3}"#).unwrap();
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
@@ -134,9 +134,7 @@ impl MinecraftShaderLanguageServer {
         eprintln!("root of project is {}", self.root);
 
         // filter directories and files not ending in any of the 3 extensions
-        let file_iter = WalkDir::new(&self.root)
-            .into_iter()
-            .filter_map(|entry| {
+        WalkDir::new(&self.root).into_iter().filter_map(|entry| {
                 if entry.is_err() {
                     return None;
                 }
@@ -149,23 +147,28 @@ impl MinecraftShaderLanguageServer {
 
                 let ext = match path.extension() {
                     Some(e) => e,
-                    None => {
-                        eprintln!("filepath {} had no extension", path.to_str().unwrap());
-                        return None;
-                    }
+                None => return None,
                 };
+
                 if ext != "vsh" && ext != "fsh" && ext != "glsl" && ext != "inc" {
                     return None;
                 }
-                Some(String::from(path.to_str().unwrap()))
-            });
 
+                Some(String::from(path.to_str().unwrap()))
+        }).for_each(|path| {
         // iterate all valid found files, search for includes, add a node into the graph for each
         // file and add a file->includes KV into the map
-        for path in file_iter {
-            let includes = self.find_includes(&path);
+            self.add_file_and_includes_to_graph(&path);
+        });
 
-            let idx = self.graph.borrow_mut().add_node(&path);
+        eprintln!("finished building project include graph");
+        //std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    fn add_file_and_includes_to_graph(&self, path: &str) {
+        let includes = self.find_includes(path);
+
+        let idx = self.graph.borrow_mut().add_node(path);
 
             //eprintln!("adding {} with\n{:?}", path.clone(), includes);
             for include in includes {
@@ -173,17 +176,9 @@ impl MinecraftShaderLanguageServer {
             }
         }
 
-        eprintln!("finished building project include graph");
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-
     fn add_include(&self, include: (String, IncludePosition), node: NodeIndex) {
         let child = self.graph.borrow_mut().add_node(&include.0);
-        self.graph.borrow_mut().add_edge(
-            node,
-            child,
-            include.1,
-        );
+        self.graph.borrow_mut().add_edge(node, child, include.1);
     }
 
     pub fn find_includes(&self, file: &str) -> Vec<(String, IncludePosition)> {
@@ -252,8 +247,6 @@ impl MinecraftShaderLanguageServer {
         }
     }
 
-    //fn update_includes_for_node(&self, )
-
     pub fn lint(&self, uri: &str) -> Result<HashMap<Url, Vec<Diagnostic>>> {
         // get all top level ancestors of this file
         let file_ancestors = match self.get_file_toplevel_ancestors(uri) {
@@ -295,10 +288,15 @@ impl MinecraftShaderLanguageServer {
             let graph = self.graph.borrow();
             let views = merge_views::generate_merge_list(&tree, &all_sources, &graph);
 
-            let tree_type = if uri.ends_with(".fsh") {
+            let root_path = self.graph.borrow().get_node(root).clone();
+            let tree_type = if root_path.ends_with(".fsh") {
                 TreeType::Fragment
-            } else {
+            } else if root_path.ends_with(".vsh") {
                 TreeType::Vertex
+            } else {
+                eprintln!("got a non fsh|vsh as a file root ancestor: {}", root_path);
+                back_fill(&all_sources, &mut diagnostics);
+                return Ok(diagnostics)
             };
 
             let stdout = match opengl::validate(tree_type, views) {
@@ -308,8 +306,7 @@ impl MinecraftShaderLanguageServer {
                     return Ok(diagnostics)
                 },
             };
-            eprintln!("glslangValidator output: {}\n", stdout);
-            diagnostics.extend(self.parse_validator_stdout(stdout, ""));
+            diagnostics.extend(self.parse_validator_stdout(uri, stdout, ""));
         } else {
             let mut all_trees: Vec<(TreeType, Vec<(NodeIndex, Option<_>)>)> = Vec::new();
 
@@ -323,10 +320,14 @@ impl MinecraftShaderLanguageServer {
                     }
                 };
 
-                let tree_type = if self.graph.borrow().get_node(*root).ends_with(".fsh") {
+                let root_path = self.graph.borrow().get_node(*root).clone();
+                let tree_type = if root_path.ends_with(".fsh") {
                     TreeType::Fragment
-                } else {
+                } else if root_path.ends_with(".vsh") {
                     TreeType::Vertex
+                } else {
+                    eprintln!("got a non fsh|vsh as a file root ancestor: {}", root_path);
+                    continue;
                 };
 
                 let sources = self.load_sources(&nodes)?;
@@ -342,8 +343,7 @@ impl MinecraftShaderLanguageServer {
                     Some(s) => s,
                     None => continue,
                 };
-                eprintln!("glslangValidator output: {}\n", stdout);
-                diagnostics.extend(self.parse_validator_stdout(stdout, ""));
+                diagnostics.extend(self.parse_validator_stdout(uri, stdout, ""));
             }
         };
 
@@ -351,7 +351,7 @@ impl MinecraftShaderLanguageServer {
         Ok(diagnostics)
     }
 
-    fn parse_validator_stdout(&self, stdout: String, source: &str) -> HashMap<Url, Vec<Diagnostic>> {
+    fn parse_validator_stdout(&self, uri: &str, stdout: String, _source: &str) -> HashMap<Url, Vec<Diagnostic>> {
         let stdout_lines = stdout.split('\n');
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::with_capacity(stdout_lines.count());
         let stdout_lines = stdout.split('\n');
@@ -392,8 +392,14 @@ impl MinecraftShaderLanguageServer {
             };
 
             let origin = match diagnostic_capture.name("filepath") {
-                Some(o) => o.as_str().to_string(),
-                None => "".to_string(),
+                Some(o) => {
+                    if o.as_str().to_string() == "0" {
+                        uri.to_string()
+                    } else {
+                        o.as_str().to_string()
+                    }
+                },
+                None => uri.to_string(),
             };
 
             let diagnostic = Diagnostic {
@@ -453,7 +459,7 @@ impl MinecraftShaderLanguageServer {
     fn get_file_toplevel_ancestors(&self, uri: &str) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
-            None => return Err(anyhow!("node not found")),
+            None => return Err(anyhow!("node not found {}", uri)),
         };
         let roots = self.graph.borrow().collect_root_ancestors(curr_node);
         if roots.is_empty() {
@@ -573,8 +579,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         }
     }
 
-    fn did_change_text_document(&mut self, _: DidChangeTextDocumentParams) {
-    }
+    fn did_change_text_document(&mut self, _: DidChangeTextDocumentParams) {}
 
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
 
@@ -625,7 +630,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             Err(err) => {
                 self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
                     typ: MessageType::Error,
-                    message: format!("Failed to execute command '{}'. Reason: {}", params.command, err),
+                    message: format!("Failed to execute `{}`. Reason: {}", params.command, err),
                 }).expect("failed to send popup/show message notification");
                 eprintln!("failed to execute {}: {}", params.command, err);
                 completable.complete(Err(MethodError::new(32420, err, ())))

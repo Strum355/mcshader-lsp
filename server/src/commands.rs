@@ -81,7 +81,7 @@ impl VirtualMergedDocument {
     fn get_file_toplevel_ancestors(&self, uri: &str) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
-            None => return Err(anyhow!("node not found")),
+            None => return Err(anyhow!("node not found {}", uri)),
         };
         let roots = self.graph.borrow().collect_root_ancestors(curr_node);
         if roots.is_empty() {
@@ -109,7 +109,10 @@ impl VirtualMergedDocument {
                 continue;
             }
 
-            let source = fs::read_to_string(path)?;
+            let source = match fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => return Err(anyhow!("error reading {}: {}", path, e))
+            };
             sources.insert(path.clone(), source);
         }
 
@@ -130,7 +133,7 @@ impl Invokeable for VirtualMergedDocument {
             Err(e) => return Err(e.to_string()),
         };
         
-        eprintln!("ancestors for {}:\n\t{:?}", path, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
+        //eprintln!("ancestors for {}:\n\t{:?}", path, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
 
         // the set of all filepath->content. TODO: change to Url?
         let mut all_sources: HashMap<String, String> = HashMap::new();

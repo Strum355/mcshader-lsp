@@ -9,7 +9,7 @@ use super::IncludePosition;
 
 /// Wraps a `StableDiGraph` with caching behaviour for node search by maintaining
 /// an index for node value to node index and a reverse index.
-/// This allows for **O(1)** lookup for a value after the initial lookup.
+/// This allows for **O(1)** lookup for a value if it exists, else **O(n)**.
 pub struct CachedStableGraph {
     // StableDiGraph is used as it allows for String node values, essential for
     // generating the GraphViz DOT render.
