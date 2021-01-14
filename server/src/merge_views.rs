@@ -1,4 +1,4 @@
-use std::collections::{HashMap, LinkedList};
+use std::collections::{HashMap, LinkedList, VecDeque};
 use std::iter::Peekable;
 
 use core::slice::Iter;
@@ -28,7 +28,10 @@ pub fn generate_merge_list<'a>(
 
     last_offset_set.insert(first_path.clone(), 0);
 
-    create_merge_views(nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives);
+    // stack to keep track of the depth first traversal
+    let mut stack = VecDeque::<NodeIndex>::new();
+
+    create_merge_views(&mut nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives, &mut stack);
 
     // now we add a view of the remainder of the root file
     let offset = *last_offset_set.get(&first_path).unwrap();
@@ -48,59 +51,73 @@ pub fn generate_merge_list<'a>(
 }
 
 fn create_merge_views<'a>(
-    mut nodes: Peekable<Iter<(NodeIndex, Option<NodeIndex>)>>,
+    nodes: &mut Peekable<Iter<(NodeIndex, Option<NodeIndex>)>>,
     merge_list: &mut LinkedList<&'a str>,
     last_offset_set: &mut HashMap<String, usize>,
     graph: &'a CachedStableGraph,
     sources: &'a HashMap<String, String>,
-    line_directives: &mut Vec<String>
+    line_directives: &mut Vec<String>,
+    stack: &mut VecDeque<NodeIndex>,
 ) {
-    let n = match nodes.next() {
-        Some(n) => n,
-        None => return,
-    };
-
-    let parent = n.1.unwrap();
-    let child = n.0;
-    let edge = graph.get_edge_meta(parent, child);
-    let parent_path = graph.get_node(parent).clone();
-    let child_path = graph.get_node(child).clone();
-
-    let source = sources.get(&parent_path).unwrap();
-    let (char_for_line, char_following_line) = char_offset_for_line(edge.line, source);
     
-    let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
-    merge_list.push_back(&source[offset..char_for_line]);
-    add_opening_line_directive(&child_path, merge_list, line_directives);
+    loop {
+        let n = match nodes.next() {
+            Some(n) => n,
+            None => return,
+        };
+    
+        
+        let parent = n.1.unwrap();
+        let child = n.0;
+        let edge = graph.get_edge_meta(parent, child);
+        let parent_path = graph.get_node(parent).clone();
+        let child_path = graph.get_node(child).clone();
+        
+        let parent_source = sources.get(&parent_path).unwrap();
+        let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source);
+        
+        let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
+        //eprintln!("offset={} char_for_line={} len={} path={}", offset, char_for_line, parent_source.len(), parent_path);
+        merge_list.push_back(&parent_source[offset..char_for_line]);
+        add_opening_line_directive(&child_path, merge_list, line_directives);
 
-    match nodes.peek() {
-        Some(next) => {
-            let next = *next;
-            // if the next element is not a child of this element, we dump the rest of this elements source
-            if next.1.unwrap() != child {
-                let source = sources.get(&child_path).unwrap();
-                merge_list.push_back(&source[..]);
-                // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
-            }
-            create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives);
-
-            if next.1.unwrap() == child {
-                let offset = *last_offset_set.get(&child_path).unwrap();
-                let source = sources.get(&child_path).unwrap();
-                if offset <= source.len() {
-                    merge_list.push_back(&source[offset..]);
+        match nodes.peek() {
+            Some(next) => {
+                let next = *next;
+                // if the next pair's parent is not a child of the current pair, we dump the rest of this childs source
+                if next.1.unwrap() != child {
+                    let child_source = sources.get(&child_path).unwrap();
+                    merge_list.push_back(&child_source[..]);
+                    // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
+                    add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
+                    // if the next pair's parent is not the current pair's parent, we need to bubble up
+                    if stack.contains(&next.1.unwrap()) {
+                        return;
+                    }
+                    continue;
                 }
+                
+                stack.push_back(parent);
+                create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack);
+                stack.pop_back();
 
+                if next.1.unwrap() == child {
+                    let offset = *last_offset_set.get(&child_path).unwrap();
+                    let child_source = sources.get(&child_path).unwrap();
+                    if offset <= child_source.len() {
+                        merge_list.push_back(&child_source[offset..]);
+                    }
+
+                    // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
+                    add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
+                }
+            },
+            None => {
+                let child_source = sources.get(&child_path).unwrap();
+                merge_list.push_back(&child_source[..]);
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                 add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
             }
-        },
-        None => {
-            let source = sources.get(&child_path).unwrap();
-            merge_list.push_back(&source[..]);
-            // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-            add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
         }
     }
 }

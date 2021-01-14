@@ -839,13 +839,9 @@ fn test_generate_merge_list_01() {
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/01", &mut server);
 
-    let final_idx = server
-        .graph
-        .borrow_mut()
+    let final_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
-    let common_idx = server
-        .graph
-        .borrow_mut()
+    let common_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/{}", tmp_path, "common.glsl"));
 
     server.graph.borrow_mut().add_edge(
@@ -881,21 +877,13 @@ fn test_generate_merge_list_02() {
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/02", &mut server);
 
-    let final_idx = server
-        .graph
-        .borrow_mut()
+    let final_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
-    let test_idx = server
-        .graph
-        .borrow_mut()
+    let test_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
-    let burger_idx = server
-        .graph
-        .borrow_mut()
+    let burger_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
-    let sample_idx = server
-        .graph
-        .borrow_mut()
+    let sample_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
 
     server.graph.borrow_mut().add_edge(
@@ -959,21 +947,13 @@ fn test_generate_merge_list_03() {
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/03", &mut server);
 
-    let final_idx = server
-        .graph
-        .borrow_mut()
+    let final_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
-    let test_idx = server
-        .graph
-        .borrow_mut()
+    let test_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
-    let burger_idx = server
-        .graph
-        .borrow_mut()
+    let burger_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
-    let sample_idx = server
-        .graph
-        .borrow_mut()
+    let sample_idx = server.graph.borrow_mut()
         .add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
 
     server.graph.borrow_mut().add_edge(
@@ -1029,4 +1009,87 @@ fn test_generate_merge_list_03() {
     assert_that!(result, eq(truth));
 
     server.endpoint.request_shutdown();
+}
+
+#[test]
+fn test_generate_merge_list_04() {
+    let mut server = new_temp_server();
+
+    let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/04", &mut server);
+
+    let final_idx = server.graph.borrow_mut()
+        .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+    let utilities_idx = server.graph.borrow_mut()
+        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "utilities.glsl"));
+    let stuff1_idx = server.graph.borrow_mut()
+        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff1.glsl"));
+    let stuff2_idx = server.graph.borrow_mut()
+        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff2.glsl"));
+    let matrices_idx = server.graph.borrow_mut()
+        .add_node(&format!("{}/shaders/lib/{}", tmp_path, "matrices.glsl"));
+
+    server.graph.borrow_mut().add_edge(
+        final_idx,
+        utilities_idx,
+        IncludePosition {
+            line: 2,
+            start: 0,
+            end: 0,
+        },
+    );
+    server.graph.borrow_mut().add_edge(
+        utilities_idx,
+        stuff1_idx,
+        IncludePosition {
+            line: 0,
+            start: 0,
+            end: 0,
+        },
+    );
+    server.graph.borrow_mut().add_edge(
+        utilities_idx,
+        stuff2_idx,
+        IncludePosition {
+            line: 1,
+            start: 0,
+            end: 0,
+        },
+    );
+    server.graph.borrow_mut().add_edge(
+        final_idx,
+        matrices_idx,
+        IncludePosition {
+            line: 3,
+            start: 0,
+            end: 0,
+        },
+    );
+
+    let nodes = server.get_dfs_for_node(final_idx).unwrap();
+    let sources = server.load_sources(&nodes).unwrap();
+
+    let graph_borrow = server.graph.borrow();
+    let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
+
+    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
+
+    let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
+
+    for file in &[
+        "utils/utilities.glsl",
+        "utils/stuff1.glsl",
+        "utils/utilities.glsl",
+        "utils/stuff2.glsl",
+        "utils/utilities.glsl",
+        "final.fsh",
+        "lib/matrices.glsl",
+        "final.fsh"
+    ] {
+        let path = tmp_path.clone();
+        truth = truth.replacen("!!", &format!("{}/shaders/{}", path, file), 1);
+    }
+
+    server.endpoint.request_shutdown();
+
+    assert_that!(result, eq(truth));
 }
