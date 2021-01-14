@@ -572,7 +572,10 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
-        eprintln!("opened doc {}", params.text_document.uri);
+        //eprintln!("opened doc {}", params.text_document.uri);
+        if self.graph.borrow_mut().find_node(params.text_document.uri.path()) == None {
+            self.add_file_and_includes_to_graph(params.text_document.uri.path());
+        }
         match self.lint(params.text_document.uri.path()/* , params.text_document.text */) {
             Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
             Err(e) => eprintln!("error linting: {}", e),
