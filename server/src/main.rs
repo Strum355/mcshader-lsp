@@ -109,7 +109,7 @@ impl Display for IncludePosition {
 }
 
 pub enum TreeType {
-    Fragment, Vertex
+    Fragment, Vertex, Geometry
 }
 
 impl Into<&'static str> for TreeType {
@@ -296,6 +296,8 @@ impl MinecraftShaderLanguageServer {
                 TreeType::Fragment
             } else if root_path.ends_with(".vsh") {
                 TreeType::Vertex
+            } else if root_path.ends_with(".gsh") {
+                TreeType::Geometry
             } else {
                 eprintln!("got a non fsh|vsh as a file root ancestor: {}", root_path);
                 back_fill(&all_sources, &mut diagnostics);
@@ -328,6 +330,8 @@ impl MinecraftShaderLanguageServer {
                     TreeType::Fragment
                 } else if root_path.ends_with(".vsh") {
                     TreeType::Vertex
+                } else if root_path.ends_with(".gsh") {
+                    TreeType::Geometry
                 } else {
                     eprintln!("got a non fsh|vsh as a file root ancestor: {}", root_path);
                     continue;

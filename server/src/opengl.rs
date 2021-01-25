@@ -35,57 +35,48 @@ impl OpenGLContext {
             _ctx: gl_window,
         }
     }
+
+    unsafe fn compile_and_get_shader_log(&self, shader: gl::types::GLuint, source: String) -> Option<String> {
+        let mut success = i32::from(gl::FALSE);
+        let c_str_frag = CString::new(source).unwrap();
+        gl::ShaderSource(shader, 1, &c_str_frag.as_ptr(), ptr::null());
+        gl::CompileShader(shader);
+
+        // Check for shader compilation errors
+        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
+        let result = if success != i32::from(gl::TRUE) {
+            let mut info_len: gl::types::GLint = 0;
+            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut info_len);
+            let mut info = vec![0u8; info_len as usize];
+            gl::GetShaderInfoLog(shader, info_len as gl::types::GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut gl::types::GLchar);
+            info.set_len((info_len - 1) as usize); // ignore null for str::from_utf8
+            Some(String::from_utf8(info).unwrap())
+        } else {
+            None
+        };
+        gl::DeleteShader(shader);
+        result
+    }
 }
 
 impl ShaderValidator for OpenGLContext {
     fn validate(&self, tree_type: super::TreeType, source: String) -> Option<String> {
         unsafe {
-            let mut success = i32::from(gl::FALSE);
-    
             match tree_type {
                 crate::TreeType::Fragment => {
                     // Fragment shader
                     let fragment_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
-                    let c_str_frag = CString::new(source).unwrap();
-                    gl::ShaderSource(fragment_shader, 1, &c_str_frag.as_ptr(), ptr::null());
-                    gl::CompileShader(fragment_shader);
-    
-                    // Check for shader compilation errors
-                    gl::GetShaderiv(fragment_shader, gl::COMPILE_STATUS, &mut success);
-                    let result = if success != i32::from(gl::TRUE) {
-                        let mut info_len: gl::types::GLint = 0;
-                        gl::GetShaderiv(fragment_shader, gl::INFO_LOG_LENGTH, &mut info_len);
-                        let mut info = vec![0u8; info_len as usize];
-                        gl::GetShaderInfoLog(fragment_shader, info_len as gl::types::GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut gl::types::GLchar);
-                        info.set_len((info_len - 1) as usize); // ignore null for str::from_utf8
-                        Some(String::from_utf8(info).unwrap())
-                    } else {
-                        None
-                    };
-                    gl::DeleteShader(fragment_shader);
-                    result
+                    self.compile_and_get_shader_log(fragment_shader, source)
                 }
                 crate::TreeType::Vertex => {
                     // Vertex shader
                     let vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
-                    let c_str_vert = CString::new(source).unwrap();
-                    gl::ShaderSource(vertex_shader, 1, &c_str_vert.as_ptr(), ptr::null());
-                    gl::CompileShader(vertex_shader);
-    
-                    // Check for shader compilation errors
-                    gl::GetShaderiv(vertex_shader, gl::COMPILE_STATUS, &mut success);
-                    let result = if success != i32::from(gl::TRUE) {
-                        let mut info_len: gl::types::GLint = 0;
-                        gl::GetShaderiv(vertex_shader, gl::INFO_LOG_LENGTH, &mut info_len);
-                        let mut info = vec![0u8; info_len as usize];
-                        gl::GetShaderInfoLog(vertex_shader, info_len as gl::types::GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut gl::types::GLchar);
-                        info.set_len((info_len - 1) as usize); // ignore null for str::from_utf8
-                        Some(String::from_utf8(info).unwrap())
-                    } else {
-                        None
-                    };
-                    gl::DeleteShader(vertex_shader);
-                    result
+                    self.compile_and_get_shader_log(vertex_shader, source)
+                }
+                crate::TreeType::Geometry => {
+                    // Geometry shader
+                    let geometry_shader = gl::CreateShader(gl::GEOMETRY_SHADER);
+                    self.compile_and_get_shader_log(geometry_shader, source)
                 }
             }
         }
