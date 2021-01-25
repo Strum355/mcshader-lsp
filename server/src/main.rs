@@ -59,6 +59,7 @@ fn main() {
         wait: WaitGroup::new(),
         root: "".to_string(),
         command_provider: None,
+        opengl_context: Rc::new(opengl::OpenGLContext::new())
     };
 
     langserver.command_provider = Some(commands::CustomCommandProvider::new(vec![
@@ -85,6 +86,7 @@ struct MinecraftShaderLanguageServer {
     wait: WaitGroup,
     root: String,
     command_provider: Option<commands::CustomCommandProvider>,
+    opengl_context: Rc<dyn opengl::ShaderValidator>
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -300,7 +302,7 @@ impl MinecraftShaderLanguageServer {
                 return Ok(diagnostics)
             };
 
-            let stdout = match opengl::validate(tree_type, view) {
+            let stdout = match self.opengl_context.clone().validate(tree_type, view) {
                 Some(s) => s,
                 None => {
                     back_fill(&all_sources, &mut diagnostics);
@@ -342,7 +344,7 @@ impl MinecraftShaderLanguageServer {
                     merge_views::generate_merge_list(&tree.1, &all_sources, &graph)
                 };
 
-                let stdout = match opengl::validate(tree.0, view) {
+                let stdout = match self.opengl_context.clone().validate(tree.0, view) {
                     Some(s) => s,
                     None => continue,
                 };

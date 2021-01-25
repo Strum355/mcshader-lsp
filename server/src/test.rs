@@ -44,6 +44,7 @@ fn new_temp_server() -> MinecraftShaderLanguageServer {
         wait: WaitGroup::new(),
         root: "".to_string(),
         command_provider: None,
+        opengl_context: Rc::new(opengl::MockShaderValidator::new()),
     }
 }
 
