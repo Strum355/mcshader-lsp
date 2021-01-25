@@ -1,5 +1,6 @@
 use std::collections::{HashMap, LinkedList, VecDeque};
 use std::iter::Peekable;
+use std::cmp::min;
 
 use core::slice::Iter;
 
@@ -35,11 +36,12 @@ pub fn generate_merge_list<'a>(
 
     // now we add a view of the remainder of the root file
     let offset = *last_offset_set.get(&first_path).unwrap();
-    merge_list.push_back(&sources.get(&first_path).unwrap()[offset..]);
+
+    let len = sources.get(&first_path).unwrap().len();
+    merge_list.push_back(&sources.get(&first_path).unwrap()[min(offset, len) ..]);
 
     let total_len = merge_list.iter().fold(0, |a, b| {
-        let a  = a + (*b).len();
-        a
+       a + b.len()
     });
 
     let mut merged = String::with_capacity(total_len);
@@ -65,19 +67,17 @@ fn create_merge_views<'a>(
             Some(n) => n,
             None => return,
         };
-    
         
         let parent = n.1.unwrap();
         let child = n.0;
         let edge = graph.get_edge_meta(parent, child);
         let parent_path = graph.get_node(parent).clone();
         let child_path = graph.get_node(child).clone();
-        
+
         let parent_source = sources.get(&parent_path).unwrap();
         let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source);
         
         let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
-        //eprintln!("offset={} char_for_line={} len={} path={}", offset, char_for_line, parent_source.len(), parent_path);
         merge_list.push_back(&parent_source[offset..char_for_line]);
         add_opening_line_directive(&child_path, merge_list, line_directives);
 
@@ -87,7 +87,15 @@ fn create_merge_views<'a>(
                 // if the next pair's parent is not a child of the current pair, we dump the rest of this childs source
                 if next.1.unwrap() != child {
                     let child_source = sources.get(&child_path).unwrap();
-                    merge_list.push_back(&child_source[..]);
+                    // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
+                    let offset = {
+                        match child_source.ends_with("\n") {
+                            true => child_source.len()-1,
+                            false => child_source.len(),
+                        }
+                    };
+                    merge_list.push_back(&child_source[..offset]);
+                    last_offset_set.insert(child_path.clone(), 0);
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                     add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
                     // if the next pair's parent is not the current pair's parent, we need to bubble up
@@ -101,20 +109,40 @@ fn create_merge_views<'a>(
                 create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack);
                 stack.pop_back();
 
-                if next.1.unwrap() == child {
-                    let offset = *last_offset_set.get(&child_path).unwrap();
-                    let child_source = sources.get(&child_path).unwrap();
-                    if offset <= child_source.len() {
-                        merge_list.push_back(&child_source[offset..]);
+                let offset = *last_offset_set.get(&child_path).unwrap();
+                let child_source = sources.get(&child_path).unwrap();
+                // this evaluates to false once the file contents have been exhausted aka offset = child_source.len() + 1
+                let end_offset = {
+                    match child_source.ends_with("\n") {
+                        true => 1/* child_source.len()-1 */,
+                        false => 0/* child_source.len() */,
                     }
+                };
+                if offset < child_source.len()-end_offset {
+                    // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
+                    merge_list.push_back(&child_source[offset../* std::cmp::max( */child_source.len()-end_offset/* , offset) */]);
+                    last_offset_set.insert(child_path.clone(), 0);
+                }
 
-                    // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                    add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
+                // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
+                add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
+
+                // we need to check the next item at the point of original return further down the callstack
+                if nodes.peek().is_some() && stack.contains(&nodes.peek().unwrap().1.unwrap()) {
+                    return;
                 }
             },
             None => {
                 let child_source = sources.get(&child_path).unwrap();
-                merge_list.push_back(&child_source[..]);
+                // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
+                let offset = {
+                    match child_source.ends_with("\n") {
+                        true => child_source.len()-1,
+                        false => child_source.len(),
+                    }
+                };
+                merge_list.push_back(&child_source[..offset]);
+                last_offset_set.insert(child_path.clone(), 0);
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                 add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
             }
@@ -147,7 +175,7 @@ fn add_opening_line_directive(path: &str, merge_list: &mut LinkedList<&str>, lin
 fn add_closing_line_directive(line: usize, path: &str, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
     // Optifine doesn't seem to add a leading newline if the previous line was a #line directive
     let line_directive = if let Some(l) = merge_list.back() {
-        if l.starts_with("\n#line") {
+        if l.trim().starts_with("#line") {
             format!("#line {} \"{}\"\n", line, path)
         } else {
             format!("\n#line {} \"{}\"\n", line, path)

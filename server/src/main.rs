@@ -12,7 +12,6 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter, Debug};
-use std::cmp::max;
 use std::io::{stdin, stdout, BufRead, BufReader};
 use std::ops::Add;
 use std::rc::Rc;
@@ -285,8 +284,10 @@ impl MinecraftShaderLanguageServer {
 
             all_sources.extend( self.load_sources(&tree)?);
 
+            let view = {
             let graph = self.graph.borrow();
-            let views = merge_views::generate_merge_list(&tree, &all_sources, &graph);
+                merge_views::generate_merge_list(&tree, &all_sources, &graph)
+            };
 
             let root_path = self.graph.borrow().get_node(root).clone();
             let tree_type = if root_path.ends_with(".fsh") {
@@ -299,7 +300,7 @@ impl MinecraftShaderLanguageServer {
                 return Ok(diagnostics)
             };
 
-            let stdout = match opengl::validate(tree_type, views) {
+            let stdout = match opengl::validate(tree_type, view) {
                 Some(s) => s,
                 None => {
                     back_fill(&all_sources, &mut diagnostics);
@@ -336,10 +337,12 @@ impl MinecraftShaderLanguageServer {
             }
 
             for tree in all_trees {
+                let view = {
                 let graph = self.graph.borrow();
-                let views = merge_views::generate_merge_list(&tree.1, &all_sources, &graph);
+                    merge_views::generate_merge_list(&tree.1, &all_sources, &graph)
+                };
 
-                let stdout = match opengl::validate(tree.0, views) {
+                let stdout = match opengl::validate(tree.0, view) {
                     Some(s) => s,
                     None => continue,
                 };
@@ -366,17 +369,13 @@ impl MinecraftShaderLanguageServer {
             
             let msg = diagnostic_capture.name("output").unwrap().as_str();//.replace("'' : ", "");
 
-            if msg.starts_with("compilation terminated") {
-                continue;
-            }
-
-            let line = max(match diagnostic_capture.name("linenum") {
+            let line = match diagnostic_capture.name("linenum") {
                 Some(c) => match c.as_str().parse::<u32>() {
                     Ok(i) => i,
                     Err(_) => 0,
                 },
                 None => 0,
-            }, 2) - 2;
+            } - 2;
 
             // TODO: line matching maybe
             /* let line_text = source_lines[line as usize];
@@ -449,7 +448,10 @@ impl MinecraftShaderLanguageServer {
                 continue;
             }
 
-            let source = fs::read_to_string(path)?;
+            let source = match fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => return Err(anyhow!("error reading {}: {}", path, e))
+            };
             sources.insert(path.clone(), source);
         }
 
