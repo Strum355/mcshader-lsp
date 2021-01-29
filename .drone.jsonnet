@@ -10,6 +10,7 @@ local Pipeline(name, os) = {
       name: "test",
       image: "rust:1.49-slim-buster",
       commands: [
+        "cd server",
         "cargo build --verbose --all",
         "cargo test --verbose --all"
       ]
