@@ -2,7 +2,7 @@ local Pipeline(name, os) = {
   kind: "pipeline",
   name: name,
   platform: {
-      os: os
+      os: os,
       arch: "amd64"
   },
   steps: [
@@ -15,10 +15,10 @@ local Pipeline(name, os) = {
       ]
     }
   ]
-}
+};
 
 [
     Pipeline("Linux", "linux"),
     Pipeline("Windows", "windows"),
-    Pipeline("MacOS", "darwin")
-],
+    Pipeline("MacOS", "darwin"),
+]
