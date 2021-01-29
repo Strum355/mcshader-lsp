@@ -36,7 +36,7 @@ export class Extension {
     this.context.subscriptions.push(vscode.commands.registerCommand('mcshader.'+name, cmd))
   }
 
-  public deactivate = async () => {
+   deactivate = async () => {
     await this.lspClient.stop()
     while(this.context.subscriptions.length > 0) {
       this.context.subscriptions.pop()?.dispose()
