@@ -20,5 +20,5 @@ local Pipeline(name, os) = {
 [
     Pipeline("Linux", "linux"),
     Pipeline("Windows", "windows"),
-    Pipeline("MacOS", "darwin"),
+    //Pipeline("MacOS", "darwin"),
 ]

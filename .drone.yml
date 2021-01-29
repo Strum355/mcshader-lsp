@@ -28,19 +28,4 @@ steps:
   - cargo build --verbose --all
   - cargo test --verbose --all
 
----
-kind: pipeline
-name: MacOS
-
-platform:
-  os: darwin
-  arch: amd64
-
-steps:
-- name: test
-  image: rust:1.49-slim-buster
-  commands:
-  - cargo build --verbose --all
-  - cargo test --verbose --all
-
 ...
