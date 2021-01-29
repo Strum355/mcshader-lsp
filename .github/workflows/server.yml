@@ -1,14 +1,14 @@
 name: LSP Server
-
 on:
   push:
     branches: [ rust-rewrite ]
   pull_request:
     branches: [ rust-rewrite ]
-
 env:
   CARGO_TERM_COLOR: always
-
+defaults:
+  run:
+    working-directory: server
 jobs:
   build:
     runs-on: ${{ matrix.os }}
