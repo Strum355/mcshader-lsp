@@ -2,7 +2,7 @@
   "name": "vscode-mc-shader",
   "displayName": "Minecraft GLSL Shaders",
   "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
-  "version": "0.9.5",
+  "version": "1.0.0-unreleased",
   "publisher": "Strum355",
   "author": "Noah Santschi-Cooney (Strum355)",
   "license": "MIT",
@@ -62,22 +62,11 @@
     ],
     "configuration": {
       "title": "Minecraft GLSL Shaders",
-      "properties": {
-        "mcglsl.glslangValidatorPath": {
-          "type": "string",
-          "default": "glslangValidator",
-          "description": "The path to the glslangValidator executable. Default value assumes its in your PATH."
-        },
-        "mcglsl.shaderpacksPath": {
-          "type": "string",
-          "default": "",
-          "description": "Absolute path to your Minecraft's shaderpacks folder."
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && cd client && rollup -c",
     "compile": "tsc -b",
     "package": "vsce package -o vscode-mc-shader.vsix",
     "watch": "concurrently \"tsc -b -w\" \"cd server && cargo watch -x build\"",
