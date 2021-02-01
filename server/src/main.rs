@@ -8,10 +8,10 @@ use serde_json::Value;
 use url_norm::FromUrl;
 use walkdir::WalkDir;
 
-use std::{cell::RefCell, ffi::OsString, path::{Path, PathBuf}, str::FromStr};
+use std::{cell::RefCell, path::PathBuf, str::FromStr};
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt::{Display, Formatter, Debug};
 use std::io::{stdin, stdout, BufRead, BufReader};
 use std::rc::Rc;
