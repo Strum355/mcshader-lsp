@@ -113,15 +113,6 @@ pub enum TreeType {
     Fragment, Vertex, Geometry
 }
 
-impl Into<&'static str> for TreeType {
-    fn into(self) -> &'static str {
-        match self {
-            TreeType::Vertex => "vert",
-            _ => "frag"
-        }
-    }
-}
-
 impl MinecraftShaderLanguageServer {
     pub fn error_not_available<DATA>(data: DATA) -> MethodError<DATA> {
         let msg = "Functionality not implemented.".to_string();
