@@ -3,7 +3,7 @@ use petgraph::stable_graph::NodeIndex;
 use petgraph::Direction;
 use petgraph::stable_graph::EdgeIndex;
 
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, str::FromStr};
 
 use super::IncludePosition;
 
@@ -14,10 +14,10 @@ pub struct CachedStableGraph {
     // StableDiGraph is used as it allows for String node values, essential for
     // generating the GraphViz DOT render.
     pub graph: StableDiGraph<String, IncludePosition>,
-    cache: HashMap<String, NodeIndex>,
+    cache: HashMap<PathBuf, NodeIndex>,
     // Maps a node index to its abstracted string representation.
     // Mainly used as the graph is based on NodeIndex and 
-    reverse_index: HashMap<NodeIndex, String>,
+    reverse_index: HashMap<NodeIndex, PathBuf>,
 }
 
 impl CachedStableGraph {
@@ -33,23 +33,23 @@ impl CachedStableGraph {
     /// and caches the result in the `HashMap`. Complexity is **O(1)** if the value
     /// is cached (which should always be the case), else **O(n)** where **n** is
     /// the number of node indices, as an exhaustive search must be done.
-    pub fn find_node(&mut self, name: &str) -> Option<NodeIndex> {
+    pub fn find_node(&mut self, name: &PathBuf) -> Option<NodeIndex> {
         match self.cache.get(name) {
             Some(n) => Some(*n),
             None => {
                 // If the string is not in cache, O(n) search the graph (i know...) and then cache the NodeIndex
                 // for later
-                let n = self.graph.node_indices().find(|n| self.graph[*n] == name);
+                let n = self.graph.node_indices().find(|n| self.graph[*n] == name.to_str().unwrap().to_string());
                 if let Some(n) = n {
-                    self.cache.insert(name.to_string(), n);
+                    self.cache.insert(name.into(), n);
                 }
                 n
             }
         }
     }
 
-    pub fn get_node(&self, node: NodeIndex) -> &String {
-        &self.graph[node]
+    pub fn get_node(&self, node: NodeIndex) -> PathBuf {
+        PathBuf::from_str(&self.graph[node]).unwrap()
     }
 
     pub fn get_edge_meta(&self, parent: NodeIndex, child: NodeIndex) -> &IncludePosition {
@@ -57,21 +57,20 @@ impl CachedStableGraph {
     }
 
     #[allow(dead_code)]
-    pub fn remove_node(&mut self, name: &str) {
+    pub fn remove_node(&mut self, name: &PathBuf) {
         let idx = self.cache.remove(name);
         if let Some(idx) = idx {
             self.graph.remove_node(idx);
         }
     }
 
-    pub fn add_node(&mut self, name: &str) -> NodeIndex {
+    pub fn add_node(&mut self, name: &PathBuf) -> NodeIndex {
         if let Some(idx) = self.cache.get(name) {
             return *idx;
         }
-        let name_str = name.to_string();
-        let idx = self.graph.add_node(name_str.clone());
-        self.cache.insert(name_str.clone(), idx);
-        self.reverse_index.insert(idx, name_str);
+        let idx = self.graph.add_node(name.to_str().unwrap().to_string());
+        self.cache.insert(name.clone(), idx);
+        self.reverse_index.insert(idx, name.clone());
         idx
     }
 
@@ -90,11 +89,11 @@ impl CachedStableGraph {
     }
 
     #[allow(dead_code)]
-    pub fn child_node_names(&self, node: NodeIndex) -> Vec<String> {
+    pub fn child_node_names(&self, node: NodeIndex) -> Vec<PathBuf> {
         self.graph.neighbors(node).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
     }
 
-    pub fn child_node_meta(&self, node: NodeIndex) -> Vec<(String, IncludePosition)> {
+    pub fn child_node_meta(&self, node: NodeIndex) -> Vec<(PathBuf, IncludePosition)> {
         self.graph.neighbors(node).map(|n| {
             let edge = self.graph.find_edge(node, n).unwrap();
             let edge_meta = self.graph.edge_weight(edge).unwrap();
@@ -107,7 +106,7 @@ impl CachedStableGraph {
     }
 
     #[allow(dead_code)]
-    pub fn parent_node_names(&self, node: NodeIndex) -> Vec<String> {
+    pub fn parent_node_names(&self, node: NodeIndex) -> Vec<PathBuf> {
         self.graph.neighbors_directed(node, Direction::Incoming).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
     }
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::fs::OpenOptions;
@@ -28,7 +28,7 @@ impl CustomCommandProvider {
         }
     }
 
-    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &str) -> Result<Value, String> {
+    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &PathBuf) -> Result<Value, String> {
         if self.commands.contains_key(command) {
             return self.commands.get(command).unwrap().run_command(root_path, args);
         }
@@ -37,7 +37,7 @@ impl CustomCommandProvider {
 }
 
 pub trait Invokeable {
-    fn run_command(&self, root: &str, arguments: Vec<Value>) -> Result<Value, String>;
+    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value, String>;
 }
 
 pub struct GraphDotCommand {
@@ -45,9 +45,9 @@ pub struct GraphDotCommand {
 }
 
 impl Invokeable for GraphDotCommand {
-    fn run_command(&self, root: &str, _: Vec<Value>) -> Result<Value, String> {
-        let filepath = String::from(root) + "/graph.dot";
-        eprintln!("generating dot file at {}", filepath);
+    fn run_command(&self, root: &PathBuf, _: Vec<Value>) -> Result<Value, String> {
+        let filepath = root.join("graph.dot");
+        eprintln!("generating dot file at {:?}", filepath);
         let mut file = OpenOptions::new()
             .truncate(true)
             .write(true)
@@ -59,7 +59,7 @@ impl Invokeable for GraphDotCommand {
             let graph = self.graph.as_ref();
 
             file.seek(std::io::SeekFrom::Start(0))?;
-            file.write_all(dot::Dot::new(&(graph.borrow().graph)).to_string().as_bytes())?;
+            file.write_all(dot::Dot::new(&graph.borrow().graph).to_string().as_bytes())?;
             file.flush()?;
             file.seek(std::io::SeekFrom::Start(0))?;
             Ok(())
@@ -78,10 +78,10 @@ pub struct VirtualMergedDocument {
 
 impl VirtualMergedDocument {
     // TODO: DUPLICATE CODE
-    fn get_file_toplevel_ancestors(&self, uri: &str) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
+    fn get_file_toplevel_ancestors(&self, uri: &PathBuf) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
-            None => return Err(anyhow!("node not found {}", uri)),
+            None => return Err(anyhow!("node not found {:?}", uri)),
         };
         let roots = self.graph.borrow().collect_root_ancestors(curr_node);
         if roots.is_empty() {
@@ -98,20 +98,20 @@ impl VirtualMergedDocument {
         dfs.collect::<Result<Vec<_>, _>>()
     }
 
-    pub fn load_sources(&self, nodes: &[(NodeIndex, Option<NodeIndex>)]) -> Result<HashMap<String, String>> {
+    pub fn load_sources(&self, nodes: &[(NodeIndex, Option<NodeIndex>)]) -> Result<HashMap<PathBuf, String>> {
         let mut sources = HashMap::new();
 
         for node in nodes {
             let graph = self.graph.borrow();
             let path = graph.get_node(node.0);
 
-            if sources.contains_key(path) {
+            if sources.contains_key(&path) {
                 continue;
             }
 
-            let source = match fs::read_to_string(path) {
+            let source = match fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(e) => return Err(anyhow!("error reading {}: {}", path, e))
+                Err(e) => return Err(anyhow!("error reading {:?}: {}", path, e))
             };
             sources.insert(path.clone(), source);
         }
@@ -121,9 +121,12 @@ impl VirtualMergedDocument {
 }
 
 impl Invokeable for VirtualMergedDocument {
-    fn run_command(&self, root: &str, arguments: Vec<Value>) -> Result<Value, String> {
+    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value, String> {
         let path = arguments.get(0).unwrap().to_string();
-        let path = String::from(path.trim_start_matches('"').trim_end_matches('"'));
+        let path = percent_encoding::percent_decode_str(
+            path.trim_start_matches('"').trim_end_matches('"').strip_prefix("/").unwrap()
+        ).decode_utf8().unwrap();
+        let path = PathBuf::from_str(&path).unwrap();
 
         let file_ancestors = match self.get_file_toplevel_ancestors(&path) {
             Ok(opt) => match opt {
@@ -136,7 +139,7 @@ impl Invokeable for VirtualMergedDocument {
         //eprintln!("ancestors for {}:\n\t{:?}", path, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
 
         // the set of all filepath->content. TODO: change to Url?
-        let mut all_sources: HashMap<String, String> = HashMap::new();
+        let mut all_sources: HashMap<PathBuf, String> = HashMap::new();
 
         // if we are a top-level file (this has to be one of the set defined by Optifine, right?)
         if file_ancestors.is_empty() {
@@ -157,6 +160,6 @@ impl Invokeable for VirtualMergedDocument {
             let view = merge_views::generate_merge_list(&tree, &all_sources, &graph);
             return Ok(serde_json::value::Value::String(view));
         }
-        return Err(format!("{} is not a top-level file aka has ancestors", path.trim_start_matches(&(String::from(root) + "/"))))
+        return Err(format!("{:?} is not a top-level file aka has ancestors", path.strip_prefix(root).unwrap()))
     }
 }

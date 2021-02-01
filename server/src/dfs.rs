@@ -103,18 +103,18 @@ pub mod error {
 
     use thiserror::Error;
 
-    use std::fmt::{Debug, Display};
+    use std::{fmt::{Debug, Display}, path::PathBuf};
 
     use crate::{graph::CachedStableGraph, consts};
 
     use rust_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
     #[derive(Debug, Error)]
-    pub struct CycleError(Vec<String>);
+    pub struct CycleError(Vec<PathBuf>);
     
     impl CycleError {
         pub fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph) -> Self {
-            let mut resolved_nodes: Vec<String> = nodes.iter().map(|i| graph.get_node(*i).clone()).collect();
+            let mut resolved_nodes: Vec<PathBuf> = nodes.iter().map(|i| graph.get_node(*i).clone()).collect();
             resolved_nodes.push(graph.get_node(current_node).clone());
             CycleError(resolved_nodes)
         }
@@ -123,11 +123,11 @@ pub mod error {
     impl Display for CycleError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let mut disp = String::new();
-            disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0]).as_str());
+            disp.push_str(format!("Include cycle detected:\n{:?} imports ", self.0[0]).as_str());
             for p in &self.0[1..self.0.len()-1] {
-                disp.push_str(format!("\n{}, which imports ", *p).as_str());
+                disp.push_str(format!("\n{:?}, which imports ", *p).as_str());
             }
-            disp.push_str(format!("\n{}", self.0[self.0.len()-1]).as_str());
+            disp.push_str(format!("\n{:?}", self.0[self.0.len()-1]).as_str());
             f.write_str(disp.as_str())
         }
     }

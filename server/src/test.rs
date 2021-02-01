@@ -4,6 +4,7 @@ use std::io;
 use std::io::Result;
 
 use hamcrest2::prelude::*;
+use pretty_assertions::assert_eq;
 
 use tempdir::TempDir;
 
@@ -42,7 +43,7 @@ fn new_temp_server() -> MinecraftShaderLanguageServer {
         endpoint,
         graph: Rc::new(RefCell::new(graph::CachedStableGraph::new())),
         wait: WaitGroup::new(),
-        root: "".to_string(),
+        root: "".into(),
         command_provider: None,
         opengl_context: Rc::new(opengl::MockShaderValidator::new()),
     }
@@ -52,30 +53,27 @@ fn copy_files(files: &str, dest: &TempDir) {
     let opts = &dir::CopyOptions::new();
     let files = fs::read_dir(files)
         .unwrap()
-        .map(|e| String::from(e.unwrap().path().as_os_str().to_str().unwrap()))
+        .map(|e| String::from(e.unwrap().path().to_str().unwrap()))
         .collect::<Vec<String>>();
     copy_items(&files, dest.path().join("shaders"), opts).unwrap();
 }
 
-fn copy_to_and_set_root(
-    test_path: &str,
-    server: &mut MinecraftShaderLanguageServer,
-) -> (Rc<TempDir>, String) {
+fn copy_to_and_set_root(test_path: &str, server: &mut MinecraftShaderLanguageServer,) -> (Rc<TempDir>, PathBuf) {
     let (_tmp_dir, tmp_path) = copy_to_tmp_dir(test_path);
 
-    server.root = format!("{}{}", "file://", tmp_path);
+    server.root = tmp_path.clone();//format!("{}{}", "file://", tmp_path);
 
     (_tmp_dir, tmp_path)
 }
 
-fn copy_to_tmp_dir(test_path: &str) -> (Rc<TempDir>, String) {
+fn copy_to_tmp_dir(test_path: &str) -> (Rc<TempDir>, PathBuf) {
     let tmp_dir = Rc::new(TempDir::new("mcshader").unwrap());
     fs::create_dir(tmp_dir.path().join("shaders")).unwrap();
 
     copy_files(test_path, &tmp_dir);
 
     let tmp_clone = tmp_dir.clone();
-    let tmp_path = tmp_clone.path().as_os_str().to_str().unwrap();
+    let tmp_path = tmp_clone.path().to_str().unwrap();
 
     (tmp_dir, tmp_path.into())
 }
@@ -86,13 +84,12 @@ fn test_empty_initialize() {
     let mut server = new_temp_server();
 
     let tmp_dir = TempDir::new("mcshader").unwrap();
-    let tmp_path = tmp_dir.path().as_os_str().to_str().unwrap();
-    let tmp_uri = format!("{}{}", "file://", tmp_path);
+    let tmp_path = tmp_dir.path();
 
     let initialize_params = InitializeParams {
         process_id: None,
         root_path: None,
-        root_uri: Some(Url::parse(tmp_uri.as_str()).unwrap()),
+        root_uri: Some(Url::from_directory_path(tmp_path.clone()).unwrap()),
         client_info: None,
         initialization_options: None,
         capabilities: ClientCapabilities {
@@ -124,7 +121,7 @@ fn test_empty_initialize() {
     ));
     server.initialize(initialize_params, completable);
 
-    assert_eq!(server.root, String::from(tmp_path));
+    assert_eq!(server.root, tmp_path);
 
     assert_eq!(server.graph.borrow().graph.edge_count(), 0);
     assert_eq!(server.graph.borrow().graph.node_count(), 0);
@@ -144,7 +141,7 @@ fn test_01_initialize() {
     let initialize_params = InitializeParams {
         process_id: None,
         root_path: None,
-        root_uri: Some(Url::parse(format!("{}{}", "file://", tmp_path).as_str()).unwrap()),
+        root_uri: Some(Url::from_directory_path(tmp_path.clone()).unwrap()),
         client_info: None,
         initialization_options: None,
         capabilities: ClientCapabilities {
@@ -175,6 +172,7 @@ fn test_01_initialize() {
         Box::new(on_response),
     ));
     server.initialize(initialize_params, completable);
+    server.endpoint.request_shutdown();
 
     // Assert there is one edge between two nodes
     assert_eq!(server.graph.borrow().graph.edge_count(), 1);
@@ -185,27 +183,27 @@ fn test_01_initialize() {
     // Assert the values of the two nodes in the tree
     assert_eq!(
         server.graph.borrow().graph[node1],
-        format!("{}/{}/{}", tmp_path, "shaders", "final.fsh")
+        //format!("{:?}/{}/{}", tmp_path, "shaders", "final.fsh")
+        tmp_path.join("shaders").join("final.fsh").to_str().unwrap().to_string()    
     );
     assert_eq!(
         server.graph.borrow().graph[node2],
-        format!("{}/{}/{}", tmp_path, "shaders", "common.glsl")
+        //format!("{:?}/{}/{}", tmp_path, "shaders", "common.glsl")
+        tmp_path.join("shaders").join("common.glsl").to_str().unwrap().to_string()
     );
 
     assert_eq!(
         server.graph.borrow().graph.edge_weight(edge).unwrap().line,
         2
     );
-
-    server.endpoint.request_shutdown();
 }
 
 #[test]
 fn test_graph_two_connected_nodes() {
     let mut graph = graph::CachedStableGraph::new();
 
-    let idx1 = graph.add_node("sample");
-    let idx2 = graph.add_node("banana");
+    let idx1 = graph.add_node(&("sample".to_string().into()));
+    let idx2 = graph.add_node(&("banana".to_string().into()));
     graph.add_edge(
         idx1,
         idx2,
@@ -218,7 +216,7 @@ fn test_graph_two_connected_nodes() {
 
     let children = graph.child_node_names(idx1);
     assert_eq!(children.len(), 1);
-    assert_eq!(children[0], "banana");
+    assert_eq!(children[0], Into::<PathBuf>::into("banana".to_string()));
 
     let children = graph.child_node_indexes(idx1);
     assert_eq!(children.len(), 1);
@@ -229,7 +227,7 @@ fn test_graph_two_connected_nodes() {
 
     let parents = graph.parent_node_names(idx2);
     assert_eq!(parents.len(), 1);
-    assert_eq!(parents[0], "sample");
+    assert_eq!(parents[0], Into::<PathBuf>::into("sample".to_string()));
 
     let parents = graph.parent_node_indexes(idx2);
     assert_eq!(parents.len(), 1);
@@ -242,9 +240,9 @@ fn test_graph_two_connected_nodes() {
     let ancestors = graph.collect_root_ancestors(idx1);
     assert_eq!(ancestors.len(), 0);
 
-    graph.remove_node("sample");
+    graph.remove_node(&("sample".to_string().into()));
     assert_eq!(graph.graph.node_count(), 1);
-    assert!(graph.find_node("sample").is_none());
+    assert!(graph.find_node(&("sample".to_string().into())).is_none());
     let neighbors = graph.child_node_names(idx2);
     assert_eq!(neighbors.len(), 0);
 }
@@ -254,10 +252,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -308,10 +306,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -362,10 +360,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -418,10 +416,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -476,10 +474,10 @@ fn test_graph_dfs() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -538,14 +536,14 @@ fn test_graph_dfs() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
-        let idx4 = graph.add_node("4");
-        let idx5 = graph.add_node("5");
-        let idx6 = graph.add_node("6");
-        let idx7 = graph.add_node("7");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx4 = graph.add_node(&("4".to_string().into()));
+        let idx5 = graph.add_node(&("5".to_string().into()));
+        let idx6 = graph.add_node(&("6".to_string().into()));
+        let idx7 = graph.add_node(&("7".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -680,14 +678,14 @@ fn test_graph_dfs_cycle() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
-        let idx2 = graph.add_node("2");
-        let idx3 = graph.add_node("3");
-        let idx4 = graph.add_node("4");
-        let idx5 = graph.add_node("5");
-        let idx6 = graph.add_node("6");
-        let idx7 = graph.add_node("7");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx2 = graph.add_node(&("2".to_string().into()));
+        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx4 = graph.add_node(&("4".to_string().into()));
+        let idx5 = graph.add_node(&("5".to_string().into()));
+        let idx6 = graph.add_node(&("6".to_string().into()));
+        let idx7 = graph.add_node(&("7".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -804,8 +802,8 @@ fn test_graph_dfs_cycle() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node("0");
-        let idx1 = graph.add_node("1");
+        let idx0 = graph.add_node(&("0".to_string().into()));
+        let idx1 = graph.add_node(&("1".to_string().into()));
 
         graph.add_edge(
             idx0,
@@ -839,11 +837,14 @@ fn test_generate_merge_list_01() {
     let mut server = new_temp_server();
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/01", &mut server);
+    server.endpoint.request_shutdown();
 
     let final_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+        //.add_node(&format!("{:?}/shaders/final.fsh", tmp_path).try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("final.fsh"));
     let common_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/{}", tmp_path, "common.glsl"));
+        //.add_node(&format!("{:?}/shaders/common.glsl", tmp_path).try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("common.glsl"));
 
     server.graph.borrow_mut().add_edge(
         final_idx,
@@ -861,15 +862,13 @@ fn test_generate_merge_list_01() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone().join( "shaders").join("final.fsh.merge");
 
-    let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
-    truth = truth.replacen("!!", &(tmp_path.clone() + "/shaders/" + "common.glsl"), 1);
-    truth = truth.replace("!!", &(tmp_path + "/shaders/" + "final.fsh"));
+    let mut truth = fs::read_to_string(merge_file).unwrap();
+    truth = truth.replacen("!!", &tmp_path.clone().join("shaders").join("common.glsl").to_str().unwrap().replace("\\", "\\\\"), 1);
+    truth = truth.replace("!!", &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace("\\", "\\\\"));
 
-    server.endpoint.request_shutdown();
-
-    assert_that!(result, eq(truth));
+    assert_eq!(result, truth);
 }
 
 #[test]
@@ -877,15 +876,20 @@ fn test_generate_merge_list_02() {
     let mut server = new_temp_server();
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/02", &mut server);
+    server.endpoint.request_shutdown();
 
     let final_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+        //.add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("final.fsh"));
     let test_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("test.glsl"));
     let burger_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("burger.glsl"));
     let sample_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("sample.glsl"));
 
     server.graph.borrow_mut().add_edge(
         final_idx,
@@ -921,9 +925,9 @@ fn test_generate_merge_list_02() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone().join("shaders").join("final.fsh.merge");
 
-    let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
+    let mut truth = fs::read_to_string(merge_file).unwrap();
 
     for file in &[
         "sample.glsl",
@@ -933,13 +937,11 @@ fn test_generate_merge_list_02() {
         "sample.glsl",
     ] {
         let path = tmp_path.clone();
-        truth = truth.replacen("!!", &format!("{}/shaders/utils/{}", path, file), 1);
+        truth = truth.replacen("!!", &&path.join("shaders").join("utils").join(file).to_str().unwrap().replace("\\", "\\\\"), 1);
     }
-    truth = truth.replacen("!!", &(tmp_path + "/shaders/final.fsh"), 1);
+    truth = truth.replacen("!!", &&tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace("\\", "\\\\"), 1);
 
-    assert_that!(result, eq(truth));
-
-    server.endpoint.request_shutdown();
+    assert_eq!(result, truth);
 }
 
 #[test]
@@ -947,15 +949,20 @@ fn test_generate_merge_list_03() {
     let mut server = new_temp_server();
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/03", &mut server);
+    server.endpoint.request_shutdown();
 
     let final_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+        //.add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("final.fsh"));
     let test_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("test.glsl"));
     let burger_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("burger.glsl"));
     let sample_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("sample.glsl"));
 
     server.graph.borrow_mut().add_edge(
         final_idx,
@@ -991,9 +998,9 @@ fn test_generate_merge_list_03() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone().join("shaders").join("final.fsh.merge");
 
-    let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
+    let mut truth = fs::read_to_string(merge_file).unwrap();
 
     for file in &[
         "sample.glsl",
@@ -1003,13 +1010,11 @@ fn test_generate_merge_list_03() {
         "sample.glsl",
     ] {
         let path = tmp_path.clone();
-        truth = truth.replacen("!!", &format!("{}/shaders/utils/{}", path, file), 1);
+        truth = truth.replacen("!!", &&&path.join("shaders").join("utils").join(file).to_str().unwrap().replace("\\", "\\\\"), 1);
     }
-    truth = truth.replacen("!!", &(tmp_path + "/shaders/final.fsh"), 1);
+    truth = truth.replacen("!!", &&&tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace("\\", "\\\\"), 1);
 
-    assert_that!(result, eq(truth));
-
-    server.endpoint.request_shutdown();
+    assert_eq!(result, truth);
 }
 
 #[test]
@@ -1017,17 +1022,23 @@ fn test_generate_merge_list_04() {
     let mut server = new_temp_server();
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/04", &mut server);
+    server.endpoint.request_shutdown();
 
     let final_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh"));
+        //.add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("final.fsh"));
     let utilities_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "utilities.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "utilities.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("utilities.glsl"));
     let stuff1_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff1.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff1.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("stuff1.glsl"));
     let stuff2_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff2.glsl"));
+        //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff2.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("utils").join("stuff2.glsl"));
     let matrices_idx = server.graph.borrow_mut()
-        .add_node(&format!("{}/shaders/lib/{}", tmp_path, "matrices.glsl"));
+        //.add_node(&format!("{}/shaders/lib/{}", tmp_path, "matrices.glsl").try_into().unwrap());
+        .add_node(&tmp_path.join("shaders").join("lib").join("matrices.glsl"));
 
     server.graph.borrow_mut().add_edge(
         final_idx,
@@ -1072,25 +1083,24 @@ fn test_generate_merge_list_04() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone() + "/shaders/final.fsh.merge";
+    let merge_file = tmp_path.clone().join("shaders").join("final.fsh.merge");
 
-    let mut truth = fs::read_to_string::<String>(merge_file).unwrap();
+    let mut truth = fs::read_to_string(merge_file).unwrap();
 
     for file in &[
-        "utils/utilities.glsl",
-        "utils/stuff1.glsl",
-        "utils/utilities.glsl",
-        "utils/stuff2.glsl",
-        "utils/utilities.glsl",
-        "final.fsh",
-        "lib/matrices.glsl",
-        "final.fsh"
+        PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
+        PathBuf::new().join("utils").join("stuff1.glsl").to_str().unwrap(),
+        PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
+        PathBuf::new().join("utils").join("stuff2.glsl").to_str().unwrap(),
+        PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
+        PathBuf::new().join("final.fsh").to_str().unwrap(),
+        PathBuf::new().join("lib").join("matrices.glsl").to_str().unwrap(),
+        PathBuf::new().join("final.fsh").to_str().unwrap()
     ] {
         let path = tmp_path.clone();
-        truth = truth.replacen("!!", &format!("{}/shaders/{}", path, file), 1);
+        //path.f
+        truth = truth.replacen("!!", &path.join("shaders").join(file).to_str().unwrap().replace("\\", "\\\\"), 1);
     }
 
-    server.endpoint.request_shutdown();
-
-    assert_that!(result, eq(truth));
+    assert_eq!(result, truth);
 }

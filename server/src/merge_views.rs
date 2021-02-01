@@ -1,4 +1,4 @@
-use std::collections::{HashMap, LinkedList, VecDeque};
+use std::{collections::{HashMap, LinkedList, VecDeque}, path::PathBuf};
 use std::iter::Peekable;
 use std::cmp::min;
 
@@ -10,7 +10,7 @@ use crate::graph::CachedStableGraph;
 
 pub fn generate_merge_list<'a>(
     nodes: &'a [(NodeIndex, Option<NodeIndex>)],
-    sources: &'a HashMap<String, String>, 
+    sources: &'a HashMap<PathBuf, String>, 
     graph: &'a CachedStableGraph
 ) -> String {
     let mut line_directives: Vec<String> = Vec::new();
@@ -20,7 +20,7 @@ pub fn generate_merge_list<'a>(
 
     line_directives.reserve(nodes.len() * 2);
 
-    let mut last_offset_set: HashMap<String, usize> = HashMap::new();
+    let mut last_offset_set: HashMap<PathBuf, usize> = HashMap::new();
 
     let mut nodes_iter = nodes.iter().peekable();
 
@@ -29,10 +29,16 @@ pub fn generate_merge_list<'a>(
 
     last_offset_set.insert(first_path.clone(), 0);
 
+    let line_ending_offset = if is_crlf(sources.get(&first_path).unwrap()) {
+        2
+    } else {
+        1
+    };
+
     // stack to keep track of the depth first traversal
     let mut stack = VecDeque::<NodeIndex>::new();
 
-    create_merge_views(&mut nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives, &mut stack);
+    create_merge_views(&mut nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives, &mut stack, line_ending_offset);
 
     // now we add a view of the remainder of the root file
     let offset = *last_offset_set.get(&first_path).unwrap();
@@ -52,14 +58,19 @@ pub fn generate_merge_list<'a>(
     merged
 }
 
+fn is_crlf(source: &String) -> bool {
+    source.contains("\r\n")
+}
+
 fn create_merge_views<'a>(
     nodes: &mut Peekable<Iter<(NodeIndex, Option<NodeIndex>)>>,
     merge_list: &mut LinkedList<&'a str>,
-    last_offset_set: &mut HashMap<String, usize>,
+    last_offset_set: &mut HashMap<PathBuf, usize>,
     graph: &'a CachedStableGraph,
-    sources: &'a HashMap<String, String>,
+    sources: &'a HashMap<PathBuf, String>,
     line_directives: &mut Vec<String>,
     stack: &mut VecDeque<NodeIndex>,
+    line_ending_offset: usize,
 ) {
     
     loop {
@@ -75,7 +86,7 @@ fn create_merge_views<'a>(
         let child_path = graph.get_node(child).clone();
 
         let parent_source = sources.get(&parent_path).unwrap();
-        let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source);
+        let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source, line_ending_offset);
         
         let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
         merge_list.push_back(&parent_source[offset..char_for_line]);
@@ -90,7 +101,7 @@ fn create_merge_views<'a>(
                     // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                     let offset = {
                         match child_source.ends_with("\n") {
-                            true => child_source.len()-1,
+                            true => child_source.len()-line_ending_offset,
                             false => child_source.len(),
                         }
                     };
@@ -106,7 +117,7 @@ fn create_merge_views<'a>(
                 }
                 
                 stack.push_back(parent);
-                create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack);
+                create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack, line_ending_offset);
                 stack.pop_back();
 
                 let offset = *last_offset_set.get(&child_path).unwrap();
@@ -114,7 +125,7 @@ fn create_merge_views<'a>(
                 // this evaluates to false once the file contents have been exhausted aka offset = child_source.len() + 1
                 let end_offset = {
                     match child_source.ends_with("\n") {
-                        true => 1/* child_source.len()-1 */,
+                        true => line_ending_offset/* child_source.len()-1 */,
                         false => 0/* child_source.len() */,
                     }
                 };
@@ -137,7 +148,7 @@ fn create_merge_views<'a>(
                 // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                 let offset = {
                     match child_source.ends_with("\n") {
-                        true => child_source.len()-1,
+                        true => child_source.len()-line_ending_offset,
                         false => child_source.len(),
                     }
                 };
@@ -152,36 +163,36 @@ fn create_merge_views<'a>(
 
 // returns the character offset + 1 of the end of line number `line` and the character
 // offset + 1 for the end of the line after the previous one
-fn char_offset_for_line(line_num: usize, source: &str) -> (usize, usize) {
+fn char_offset_for_line(line_num: usize, source: &str, line_ending_offset: usize) -> (usize, usize) {
     let mut char_for_line: usize = 0;
     let mut char_following_line: usize = 0;
     for (n, line) in source.lines().enumerate() {
         if n == line_num {
-            char_following_line += line.len()+1;
+            char_following_line += line.len()+line_ending_offset;
             break;
         }
-        char_for_line += line.len()+1;
+        char_for_line += line.len()+line_ending_offset;
         char_following_line = char_for_line;
     }
     (char_for_line, char_following_line)
 }
 
-fn add_opening_line_directive(path: &str, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
-    let line_directive = format!("#line 1 \"{}\"\n", path);
+fn add_opening_line_directive(path: &PathBuf, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
+    let line_directive = format!("#line 1 \"{}\"\n", path.to_str().unwrap().replace("\\", "\\\\"));
     line_directives.push(line_directive);
     unsafe_get_and_insert(merge_list, line_directives);
 }
 
-fn add_closing_line_directive(line: usize, path: &str, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
+fn add_closing_line_directive(line: usize, path: &PathBuf, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
     // Optifine doesn't seem to add a leading newline if the previous line was a #line directive
     let line_directive = if let Some(l) = merge_list.back() {
         if l.trim().starts_with("#line") {
-            format!("#line {} \"{}\"\n", line, path)
+            format!("#line {} \"{}\"\n", line, path.to_str().unwrap().replace("\\", "\\\\"))
         } else {
-            format!("\n#line {} \"{}\"\n", line, path)
+            format!("\n#line {} \"{}\"\n", line, path.to_str().unwrap().replace("\\", "\\\\"))
         }
     } else {
-        format!("\n#line {} \"{}\"\n", line, path)
+        format!("\n#line {} \"{}\"\n", line, path.to_str().unwrap().replace("\\", "\\\\"))
     };
     
     line_directives.push(line_directive);
