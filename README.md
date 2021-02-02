@@ -10,29 +10,23 @@ mcshader-lsp is a [Language Server](https://langserver.org/) and collection of e
 
 Currently supported editors:
 
-- [Visual Studio Code](https://code.visualstudio.com/)
+- [Visual Studio Code](https://code.visualstudio.com/) with `vscode-mc-shader`
 
 <img src="https://github.com/Strum355/mcshader-lsp/raw/master/logo.png" width="20%" height="20%">
 
 ## Features
 
 - Linting
-- Syntax highlighting (by extension dependency)
+- Syntax highlighting
 - Support for `#include` directives
+- Displaying `#include` flattened file
+- Generating Graphviz DOT `#include` dependency graph
 <!-- - Auto-complete prompts (incomplete and rough) -->
-
-## Installation (assumes installing from VSCode extension tab)
-
-- After reloading, open a shaderpack's folder.
-- You should be prompted to set your shaderpacks folder e.g. `"mcglsl.shaderpacksPath": "C:/Users/Noah/AppData/Roaming/.minecraft/shaderpacks"`
-- You should then be prompted saying `glslangValidator` isn't installed. Hit the download button and wait for a notification saying that it's been installed.
-- You should now be good to go!
 
 ## Requirements
 
-- Visual Studio Code (v1.43.0 or higher - minimum requirement untested).
-- The [Shader languages support for VS Code](https://marketplace.visualstudio.com/items?itemName=slevesque.shader) extension. This should automatically install when you install this extension.
 - That you've only one shader folder open. Multiple workspaces aren't currently supported.
+- The root folder of the workspace is the parent folder of `shaders` folder.
 
 <!-- ## Extension Settings
 
@@ -48,6 +42,7 @@ Please see [CONTRIBUTING.md](https://github.com/Strum355/mcshader-lsp/blob/maste
 
 - Multi-workspaces (currently only one is supported and using multiple is very undefined behaviour)
 - Warnings for unused uniforms/varyings
+- Lint for all #define value combinations
 - Some cool `DRAWBUFFERS` stuff
 
 Got a feature request? Chuck it into an Issue!
@@ -62,4 +57,4 @@ Check [CHANGELOG.md](https://github.com/Strum355/mcshader-lsp/blob/master/CHANGE
 
 ## License
 
-This code is released under the [MIT License](https://github.com/Strum355/mcshader-lsp/blob/master/LICENSE). Copyright (c) 2018 Noah Santschi-Cooney
+This code is released under the [MIT License](https://github.com/Strum355/mcshader-lsp/blob/master/LICENSE). Copyright (c) 2021 Noah Santschi-Cooney
