@@ -1,17 +1,5 @@
 {
   "name": "vscode-mc-shader-client",
-  "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
-  "version": "0.0.1",
-  "publisher": "Noah Santschi-Cooney (Strum355)",
-  "author": "Noah Santschi-Cooney (Strum355)",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Strum355/vscode-mc-shader"
-  },
-  "engines": {
-    "vscode": "^1.43.0"
-  },
   "scripts": {
     "compile": "tsc -p ./"
   },
