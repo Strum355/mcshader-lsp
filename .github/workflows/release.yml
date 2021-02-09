@@ -1,0 +1,73 @@
+name: Create Github Release
+on:
+  push:
+    tags: [ "*" ]
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  empty-release:
+    runs-on: ubuntu-20.04
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+    - name: Get tag
+      run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: $VERSION
+        release_name: Release $VERSION
+        draft: false
+        prerelease: false
+  release-server:
+    runs-on: ${{ matrix.platforms.os }}
+    defaults:
+      run:
+        working-directory: server
+    needs: empty-release
+    strategy:
+      matrix:
+        platforms:
+        - os: ubuntu-20.04
+          target: x86_64-unknown-linux-gnu
+        - os: windows-latest
+          target: x86_64-windows-msvc
+        - os: macos-10.15
+          target: x86_64-apple-darwin
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build server
+      run: cargo build --release
+    - name: Upload release file
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: target/release/mcshader-lsp
+        asset_name: mcshader-lsp-${{ matrix.platforms.target }}
+        asset_content_type: application/octet-stream
+  release-vscode-extension:
+    runs-on: ubuntu-20.04
+    needs: empty-release
+    steps:
+    - uses: actions/checkout@v2
+    - run: npm i
+    - run: npm i -g rollup
+    - uses: HaaLeo/publish-vscode-extension@v0
+      id: vsce_release
+      with:
+        pat: ${{ secrets.VSCE_TOKEN }}
+        registryUrl: https://marketplace.visualstudio.com
+    - name: Upload VSIX file
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.empty-release.outputs.upload_url }}
+        asset_path: ${{ steps.vsce_release.outputs.vsixPath }}
+        asset_name: vscode-mc-shader.vsix
+        asset_content_type: application/vsix

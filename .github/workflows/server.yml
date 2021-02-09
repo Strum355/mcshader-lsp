@@ -1,4 +1,4 @@
-name: LSP Server
+name: Test Server
 on:
   push:
     branches: [ rust-rewrite ]
@@ -6,18 +6,18 @@ on:
     branches: [ rust-rewrite ]
 env:
   CARGO_TERM_COLOR: always
-defaults:
-  run:
-    working-directory: server
 jobs:
-  build:
+  build-and-test:
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: server
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-10.15]
+        os: [ ubuntu-20.04, windows-latest, macos-10.15 ]
     steps:
     - uses: actions/checkout@v2
-    - name: Build
+    - name: Build server
       run: cargo build
     - name: Run tests
       run: cargo test
