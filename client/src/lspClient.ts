@@ -11,8 +11,8 @@ export class LanguageClient extends lsp.LanguageClient {
   constructor(ext: Extension) {
     super('vscode-mc-shader', 'VSCode MC Shader', {
       command: process.env['MCSHADER_DEBUG'] ? 
-        ext.context.asAbsolutePath(path.join('server', 'target', 'debug', 'vscode-mc-shader')) :
-        path.join(ext.context.globalStoragePath, 'mcshader-lsp')
+      ext.context.asAbsolutePath(path.join('server', 'target', 'debug', 'mcshader-lsp')) :
+      path.join(ext.context.globalStoragePath, 'mcshader-lsp')
     }, {
       documentSelector: [{scheme: 'file', language: 'glsl'}],
       outputChannel: lspOutputChannel,

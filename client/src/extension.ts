@@ -53,7 +53,7 @@ export class Extension {
 
   registerCommand = (name: string, f: (e: Extension) => commands.Command) => {
     const cmd = f(this)
-    this.context.subscriptions.push(vscode.commands.registerCommand('mcshader.'+name, cmd))
+    this.context.subscriptions.push(vscode.commands.registerCommand('mcglsl.'+name, cmd))
   }
 
    deactivate = async () => {

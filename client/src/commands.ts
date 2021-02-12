@@ -36,8 +36,8 @@ export function virtualMergedDocument(e: Extension): Command {
   }
 
   const docProvider = new class implements vscode.TextDocumentContentProvider {
-    onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
-    onDidChange = this.onDidChangeEmitter.event;
+    onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>()
+    onDidChange = this.onDidChangeEmitter.event
 
     provideTextDocumentContent(uri: vscode.Uri, __: vscode.CancellationToken): vscode.ProviderResult<string> {
       return getVirtualDocument(uri.path)
@@ -50,6 +50,7 @@ export function virtualMergedDocument(e: Extension): Command {
     const uri = vscode.window.activeTextEditor.document.uri
     const path = vscode.Uri.parse('mcglsl:' + uri.path)
     const doc = await vscode.workspace.openTextDocument(path)
+    docProvider.onDidChangeEmitter.fire(path)
     await vscode.window.showTextDocument(doc, {preview: true})
   }
 }
