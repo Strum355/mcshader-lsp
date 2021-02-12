@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, path::PathBuf};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::fs::OpenOptions;
@@ -8,11 +8,11 @@ use serde_json::Value;
 
 use petgraph::{dot, graph::NodeIndex};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, format_err};
 
 use std::fs;
 
-use crate::{graph::CachedStableGraph, merge_views};
+use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJSON};
 use crate::dfs;
 
 pub struct CustomCommandProvider {
@@ -28,16 +28,16 @@ impl CustomCommandProvider {
         }
     }
 
-    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &PathBuf) -> Result<Value, String> {
+    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &PathBuf) -> Result<Value> {
         if self.commands.contains_key(command) {
             return self.commands.get(command).unwrap().run_command(root_path, args);
         }
-        Err("command doesn't exist".into())
+        Err(format_err!("command doesn't exist"))
     }
 }
 
 pub trait Invokeable {
-    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value, String>;
+    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value>;
 }
 
 pub struct GraphDotCommand {
@@ -45,7 +45,7 @@ pub struct GraphDotCommand {
 }
 
 impl Invokeable for GraphDotCommand {
-    fn run_command(&self, root: &PathBuf, _: Vec<Value>) -> Result<Value, String> {
+    fn run_command(&self, root: &PathBuf, _: Vec<Value>) -> Result<Value> {
         let filepath = root.join("graph.dot");
         eprintln!("generating dot file at {:?}", filepath);
         let mut file = OpenOptions::new()
@@ -66,7 +66,7 @@ impl Invokeable for GraphDotCommand {
         };
 
         match write_data_closure() {
-            Err(err) => Err(format!("Error generating graphviz data: {}", err)),
+            Err(err) => Err(format_err!("Error generating graphviz data: {}", err)),
             _ => Ok(Value::Null)
         }
     }
@@ -81,7 +81,7 @@ impl VirtualMergedDocument {
     fn get_file_toplevel_ancestors(&self, uri: &PathBuf) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
-            None => return Err(anyhow!("node not found {:?}", uri)),
+            None => return Err(format_err!("node not found {:?}", uri)),
         };
         let roots = self.graph.borrow().collect_root_ancestors(curr_node);
         if roots.is_empty() {
@@ -111,7 +111,7 @@ impl VirtualMergedDocument {
 
             let source = match fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(e) => return Err(anyhow!("error reading {:?}: {}", path, e))
+                Err(e) => return Err(format_err!("error reading {:?}: {}", path, e))
             };
             sources.insert(path.clone(), source);
         }
@@ -121,19 +121,15 @@ impl VirtualMergedDocument {
 }
 
 impl Invokeable for VirtualMergedDocument {
-    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value, String> {
-        let path = arguments.get(0).unwrap().to_string();
-        let path = percent_encoding::percent_decode_str(
-            path.trim_start_matches('"').trim_end_matches('"').strip_prefix("/").unwrap()
-        ).decode_utf8().unwrap();
-        let path = PathBuf::from_str(&path).unwrap();
+    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value> {
+        let path = PathBuf::from_json(arguments.get(0).unwrap())?;
 
         let file_ancestors = match self.get_file_toplevel_ancestors(&path) {
             Ok(opt) => match opt {
                 Some(ancestors) => ancestors,
                 None => vec![],
             },
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(e),
         };
         
         //eprintln!("ancestors for {}:\n\t{:?}", path, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
@@ -147,12 +143,12 @@ impl Invokeable for VirtualMergedDocument {
             let root = self.graph.borrow_mut().find_node(&path).unwrap();
             let tree = match self.get_dfs_for_node(root) {
                 Ok(tree) => tree,
-                Err(e) => return Err(e.to_string()),
+                Err(e) => return Err(e.into()),
             };
 
             let sources = match self.load_sources(&tree) {
                 Ok(s) => s,
-                Err(e) => return Err(e.to_string())
+                Err(e) => return Err(e)
             };
             all_sources.extend(sources);
 
@@ -160,6 +156,6 @@ impl Invokeable for VirtualMergedDocument {
             let view = merge_views::generate_merge_list(&tree, &all_sources, &graph);
             return Ok(serde_json::value::Value::String(view));
         }
-        return Err(format!("{:?} is not a top-level file aka has ancestors", path.strip_prefix(root).unwrap()))
+        return Err(format_err!("{:?} is not a top-level file aka has ancestors", path.strip_prefix(root).unwrap()))
     }
 }

@@ -101,16 +101,16 @@ impl <'a> Iterator for Dfs<'a> {
 pub mod error {
     use petgraph::stable_graph::NodeIndex;
 
-    use thiserror::Error;
-
-    use std::{fmt::{Debug, Display}, path::PathBuf};
+    use std::{fmt::{Debug, Display}, path::PathBuf, error::Error as StdError};
 
     use crate::{graph::CachedStableGraph, consts};
 
     use rust_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
-    #[derive(Debug, Error)]
+    #[derive(Debug)]
     pub struct CycleError(Vec<PathBuf>);
+
+    impl StdError for CycleError {}
     
     impl CycleError {
         pub fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph) -> Self {

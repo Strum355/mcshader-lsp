@@ -630,7 +630,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                     message: format!("Failed to execute `{}`. Reason: {}", params.command, err),
                 }).expect("failed to send popup/show message notification");
                 eprintln!("failed to execute {}: {}", params.command, err);
-                completable.complete(Err(MethodError::new(32420, err, ())))
+                completable.complete(Err(MethodError::new(32420, err.to_string(), ())))
             },
         }
     }
