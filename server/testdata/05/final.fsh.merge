@@ -1,0 +1,22 @@
+#version 120
+
+#line 1 "!!"
+float test() {
+	return 0.5;
+}
+#line 4 "!!"
+#line 1 "!!"
+#line 1 "!!"
+void dont() {
+
+}
+#line 2 "!!"
+
+void ok() {
+	
+}
+#line 5 "!!"
+
+void main() {
+	gl_FragColor = vec4(0.0);
+}

@@ -149,13 +149,12 @@ impl MinecraftShaderLanguageServer {
 
                 Some(entry.into_path())
         }).for_each(|path| {
-        // iterate all valid found files, search for includes, add a node into the graph for each
-        // file and add a file->includes KV into the map
+            // iterate all valid found files, search for includes, add a node into the graph for each
+            // file and add a file->includes KV into the map
             self.add_file_and_includes_to_graph(&path);
         });
 
         eprintln!("finished building project include graph");
-        //std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     fn add_file_and_includes_to_graph(&self, path: &PathBuf) {
@@ -163,11 +162,11 @@ impl MinecraftShaderLanguageServer {
 
         let idx = self.graph.borrow_mut().add_node(&path);
 
-            //eprintln!("adding {} with\n{:?}", path.clone(), includes);
-            for include in includes {
-                self.add_include(include, idx);
-            }
+        //eprintln!("adding {:?} with {:?}", path, includes);
+        for include in includes {
+            self.add_include(include, idx);
         }
+    }
 
     fn add_include(&self, include: (PathBuf, IncludePosition), node: NodeIndex) {
         let child = self.graph.borrow_mut().add_node(&include.0);
@@ -191,17 +190,19 @@ impl MinecraftShaderLanguageServer {
                     .unwrap()
                     .get(1)
                     .unwrap();
-                //eprintln!("{:?}", caps);
 
                 let start = cap.start();
                 let end = cap.end();
                 let mut path: String = cap.as_str().into();
 
                 // TODO: difference between / and not
-                if path.starts_with('/') {
+                let full_include = if path.starts_with('/') {
                     path = path.strip_prefix('/').unwrap().to_string();
-                }
-                let full_include = self.root.join("shaders").join(PathBuf::from_slash(&path));
+                    self.root.join("shaders").join(PathBuf::from_slash(&path))
+                } else {
+                    file.parent().unwrap().join(PathBuf::from_slash(&path))
+                };
+
                 includes.push((
                     full_include,
                     IncludePosition {
@@ -210,7 +211,6 @@ impl MinecraftShaderLanguageServer {
                         end,
                     }
                 ));
-                //eprintln!("{} includes {}", file, full_include);
             });
 
         includes
@@ -218,6 +218,8 @@ impl MinecraftShaderLanguageServer {
 
     fn update_includes(&self, file: &PathBuf) {
         let includes = self.find_includes(file);
+
+        eprintln!("updating {:?} with {:?}", file, includes);
 
         let idx = match self.graph.borrow_mut().find_node(&file) {
             None => {
@@ -231,6 +233,8 @@ impl MinecraftShaderLanguageServer {
 
         let to_be_added = new_children.difference(&prev_children);
         let to_be_removed = prev_children.difference(&new_children);
+
+        eprintln!("removing:\n\t{:?}\nadding:\n\t{:?}", to_be_removed, to_be_added);
 
         for removal in to_be_removed {
             let child = self.graph.borrow_mut().find_node(&removal.0).unwrap();
@@ -367,7 +371,7 @@ impl MinecraftShaderLanguageServer {
 
             eprintln!("match {:?}", diagnostic_capture);
             
-            let msg = diagnostic_capture.name("output").unwrap().as_str();//.replace("'' : ", "");
+            let msg = diagnostic_capture.name("output").unwrap().as_str();
 
             let line = match diagnostic_capture.name("linenum") {
                 Some(c) => match c.as_str().parse::<u32>() {
