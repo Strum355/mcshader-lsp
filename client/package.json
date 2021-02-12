@@ -1,7 +1,8 @@
 {
   "name": "vscode-mc-shader-client",
   "scripts": {
-    "compile": "tsc -p ./"
+    "compile": "tsc -p ./",
+    "rollup": "rollup -c"
   },
   "dependencies": {
     "adm-zip": "^0.4.14",

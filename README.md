@@ -43,6 +43,7 @@ Please see [CONTRIBUTING.md](https://github.com/Strum355/mcshader-lsp/blob/maste
 - Multi-workspaces (currently only one is supported and using multiple is very undefined behaviour)
 - Warnings for unused uniforms/varyings
 - Lint for all #define value combinations
+- Compute shader support
 - Some cool `DRAWBUFFERS` stuff
 
 Got a feature request? Chuck it into an Issue!
