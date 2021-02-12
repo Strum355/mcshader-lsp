@@ -9,7 +9,7 @@ import { PersistentState } from './persistent_state'
 import * as path from 'path' 
 
 const platforms: { [key: string]: string } = {
-  'x64 win32': 'x86_64-pc-windows-msvc',
+  'x64 win32': 'x86_64-windows-msvc',
   'x64 linux': 'x86_64-unknown-linux-gnu',
   'x64 darwin': 'x86_64-apple-darwin',
 }
