@@ -7,9 +7,10 @@ export class PersistentState {
     log.info('working with state', { serverVersion })
   }
 
-  get serverVersion(): string | undefined {
+  public get serverVersion(): string | undefined {
     return this.state.get('serverVersion')
   }
+
   async updateServerVersion(value: string | undefined) {
       await this.state.update('serverVersion', value)
   }

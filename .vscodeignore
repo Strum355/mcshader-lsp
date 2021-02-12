@@ -7,5 +7,4 @@ server/
 *.py
 .gitignore
 **/*.yml
-**/*.md
 **/*.txt

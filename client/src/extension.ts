@@ -82,8 +82,6 @@ export class Extension {
     const exists = await fs.stat(dest).then(() => true, () => false)
     if (!exists) await this.state.updateServerVersion(undefined)
 
-    this.state.updateServerVersion('borger')
-    
     const release = await getReleaseInfo(this.package.version)
 
     const platform = platforms[`${process.arch} ${process.platform}`]
@@ -94,7 +92,7 @@ export class Extension {
     
     if (release.tag_name === this.state.serverVersion) return
 
-    const artifact = release.assets.find(artifact => artifact.name === `mcshader-lsp-${platform}`)
+    const artifact = release.assets.find(artifact => artifact.name === `mcshader-lsp-${platform}${(process.platform === 'win32' ? '.exe' : '')}`)
 
     const userResponse = await vscode.window.showInformationMessage(
       this.state.serverVersion == undefined ?
