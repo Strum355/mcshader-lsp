@@ -2,7 +2,7 @@
   "name": "vscode-mc-shader",
   "displayName": "Minecraft GLSL Shaders",
   "description": "A Visual Studio Code extension for linting/etc Minecraft GLSL Shaders",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "publisher": "Strum355",
   "author": "Noah Santschi-Cooney (Strum355)",
   "license": "MIT",
@@ -19,9 +19,7 @@
   ],
   "activationEvents": [
     "onLanguage:glsl",
-    "workspaceContains:**/*.fsh",
-    "workspaceContains:**/*.vsh",
-    "workspaceContains:**/*.gsh"
+    "workspaceContains:shaders/"
   ],
   "extensionDependencies": [
     "slevesque.shader"

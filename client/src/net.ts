@@ -29,7 +29,7 @@ export async function getReleaseInfo(releaseTag: string): Promise<GithubRelease>
 
   const json = await response.json()
   if(!isRelease(json)) {
-    throw new TypeError('Received malformed request from Github Release API')
+    throw new TypeError('Received malformed request from Github Release API ' + JSON.stringify(json))
   }
   return json
 }
@@ -72,7 +72,7 @@ async function downloadFile(
   
   const totalBytes = Number(res.headers.get('content-length'))
   
-  log.debug('downloading file of', totalBytes, 'bytes size from', url, 'to', destFilePath)
+  log.debug('downloading file with', totalBytes, 'bytes size from', url, 'to', destFilePath)
   
   let readBytes = 0
   res.body.on('data', (chunk: Buffer) => {
