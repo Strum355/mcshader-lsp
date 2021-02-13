@@ -38,7 +38,7 @@ export class Extension {
     this.extensionContext = context
     this.state = new PersistentState(context.globalState)
 
-    await this.bootstrap()
+    if(!process.env['MCSHADER_DEBUG']) await this.bootstrap() 
 
     this.registerCommand('graphDot', commands.generateGraphDot)
     this.registerCommand('restart', commands.restartExtension)
