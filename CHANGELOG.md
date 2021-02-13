@@ -4,6 +4,57 @@ All notable changes to the "vscode-mc-shader" extension will be documented in th
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## [0.9.4]
+
+### Fixed
+
+- `#include` merging when project consists of files with both CRLF and LF files
+- Out-of-tree shader files are not linted or added to the dependency graph
+- Client no longer attempts to bootstrap server when `MCSHADER_DEBUG=true`
+
+## [0.9.3]
+
+### Fixed
+
+- Language server download for windows
+
+## [0.9.2]
+
+### Changed
+
+- VSCode extension activation predicate to only when `shaders` folder exists at top level
+
+### Added
+
+- Additional client-side logging
+
+## [0.9.1]
+
+### Fixed
+
+- Windows support in client not adding `.exe` to language server path
+- Binary release CI
+
+## [0.9.0]
+
+### Changed
+
+- Replaced in-process Typescript language server with Rust based language server
+
+### Fixed
+
+- Due to the above, `#include` directive handling is vastly improved
+
+### Added
+
+- Command to view read-only document representing a top-level file with all includes merged
+- Command to generate a DOT graph file of the entire project
+- Command to restart language server
+
+### Removed
+
+- `glslangValidatorPath` and `shaderpacksPath` config settings
+
 ## [0.8.5]
 
 ### Fixed
