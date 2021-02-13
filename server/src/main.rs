@@ -574,6 +574,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
         //eprintln!("opened doc {}", params.text_document.uri);
         let path = PathBuf::from_url(params.text_document.uri);
+        if !path.starts_with(&self.root) {
+            return
+        }
         if self.graph.borrow_mut().find_node(&path) == None {
             self.add_file_and_includes_to_graph(&path);
         }
@@ -588,9 +591,12 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
 
     fn did_save_text_document(&mut self, params: DidSaveTextDocumentParams) {
-        eprintln!("saved doc {}", params.text_document.uri);
+        //eprintln!("saved doc {}", params.text_document.uri);
 
         let path = PathBuf::from_url(params.text_document.uri);
+        if !path.starts_with(&self.root) {
+            return
+        }
         self.update_includes(&path);
         
         match self.lint(&path) {
