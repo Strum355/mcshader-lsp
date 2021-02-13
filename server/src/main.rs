@@ -45,6 +45,7 @@ lazy_static! {
     static ref RE_VERSION: Regex = Regex::new(r#"#version [\d]{3}"#).unwrap();
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
+    pub static ref RE_CRLF: Regex = Regex::new(r#"\r\n"#).unwrap();
 }
 
 fn main() {
@@ -456,6 +457,7 @@ impl MinecraftShaderLanguageServer {
                 Ok(s) => s,
                 Err(e) => return Err(anyhow!("error reading {:?}: {}", path, e))
             };
+            let source = RE_CRLF.replace_all(&source, "\n").to_string();
             sources.insert(path.clone(), source);
         }
 

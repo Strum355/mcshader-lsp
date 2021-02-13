@@ -29,16 +29,10 @@ pub fn generate_merge_list<'a>(
 
     last_offset_set.insert(first_path.clone(), 0);
 
-    let line_ending_offset = if is_crlf(sources.get(&first_path).unwrap()) {
-        2
-    } else {
-        1
-    };
-
     // stack to keep track of the depth first traversal
     let mut stack = VecDeque::<NodeIndex>::new();
 
-    create_merge_views(&mut nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives, &mut stack, line_ending_offset);
+    create_merge_views(&mut nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives, &mut stack);
 
     // now we add a view of the remainder of the root file
     let offset = *last_offset_set.get(&first_path).unwrap();
@@ -58,10 +52,6 @@ pub fn generate_merge_list<'a>(
     merged
 }
 
-fn is_crlf(source: &String) -> bool {
-    source.contains("\r\n")
-}
-
 fn create_merge_views<'a>(
     nodes: &mut Peekable<Iter<(NodeIndex, Option<NodeIndex>)>>,
     merge_list: &mut LinkedList<&'a str>,
@@ -70,7 +60,6 @@ fn create_merge_views<'a>(
     sources: &'a HashMap<PathBuf, String>,
     line_directives: &mut Vec<String>,
     stack: &mut VecDeque<NodeIndex>,
-    line_ending_offset: usize,
 ) {
     
     loop {
@@ -86,7 +75,7 @@ fn create_merge_views<'a>(
         let child_path = graph.get_node(child).clone();
 
         let parent_source = sources.get(&parent_path).unwrap();
-        let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source, line_ending_offset);
+        let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source);
         
         let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
         merge_list.push_back(&parent_source[offset..char_for_line]);
@@ -101,7 +90,7 @@ fn create_merge_views<'a>(
                     // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                     let offset = {
                         match child_source.ends_with("\n") {
-                            true => child_source.len()-line_ending_offset,
+                            true => child_source.len()-1,
                             false => child_source.len(),
                         }
                     };
@@ -117,7 +106,7 @@ fn create_merge_views<'a>(
                 }
                 
                 stack.push_back(parent);
-                create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack, line_ending_offset);
+                create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack);
                 stack.pop_back();
 
                 let offset = *last_offset_set.get(&child_path).unwrap();
@@ -125,7 +114,7 @@ fn create_merge_views<'a>(
                 // this evaluates to false once the file contents have been exhausted aka offset = child_source.len() + 1
                 let end_offset = {
                     match child_source.ends_with("\n") {
-                        true => line_ending_offset/* child_source.len()-1 */,
+                        true => 1/* child_source.len()-1 */,
                         false => 0/* child_source.len() */,
                     }
                 };
@@ -148,7 +137,7 @@ fn create_merge_views<'a>(
                 // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                 let offset = {
                     match child_source.ends_with("\n") {
-                        true => child_source.len()-line_ending_offset,
+                        true => child_source.len()-1,
                         false => child_source.len(),
                     }
                 };
@@ -163,15 +152,15 @@ fn create_merge_views<'a>(
 
 // returns the character offset + 1 of the end of line number `line` and the character
 // offset + 1 for the end of the line after the previous one
-fn char_offset_for_line(line_num: usize, source: &str, line_ending_offset: usize) -> (usize, usize) {
+fn char_offset_for_line(line_num: usize, source: &str) -> (usize, usize) {
     let mut char_for_line: usize = 0;
     let mut char_following_line: usize = 0;
     for (n, line) in source.lines().enumerate() {
         if n == line_num {
-            char_following_line += line.len()+line_ending_offset;
+            char_following_line += line.len()+1;
             break;
         }
-        char_for_line += line.len()+line_ending_offset;
+        char_for_line += line.len()+1;
         char_following_line = char_for_line;
     }
     (char_for_line, char_following_line)

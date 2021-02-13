@@ -113,6 +113,7 @@ impl VirtualMergedDocument {
                 Ok(s) => s,
                 Err(e) => return Err(format_err!("error reading {:?}: {}", path, e))
             };
+            let source = crate::RE_CRLF.replace_all(&source, "\n").to_string();
             sources.insert(path.clone(), source);
         }
 
