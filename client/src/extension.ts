@@ -45,10 +45,36 @@ export class Extension {
     this.registerCommand('virtualMerge', commands.virtualMergedDocument)
 
     log.info('starting language server...')
+
+    const lspBinary = process.env['MCSHADER_DEBUG'] ? 
+      this.context.asAbsolutePath(path.join('server', 'target', 'debug', 'mcshader-lsp')) + 
+        (process.platform === 'win32' ? '.exe' : '') :
+        path.join(this.context.globalStoragePath, 'mcshader-lsp')
+
+    const filewatcherGlob = this.fileAssociationsToGlob(this.getGLSLFileAssociations())
   
-    this.client = await new LanguageClient(this).startServer()
+    this.client = await new LanguageClient(this, lspBinary, filewatcherGlob).startServer()
   
     log.info('language server started!')
+  }
+
+  fileAssociationsToGlob = (associations: string[]): string => {
+    return '**/*.{'.concat(
+      associations.map(s => s.substring(s.indexOf('.'))).join(',')
+      ) + '}'
+  }
+
+  getGLSLFileAssociations = (): string[] => {
+    const exts = ['.fsh', '.vsh', '.gsh', '.glsl']
+    const associations = vscode.workspace.getConfiguration('files').get('associations') as {[key: string]: string}
+    
+    Object.keys(associations).forEach((key) => {
+      if(associations[key] === 'glsl') {
+        exts.push(key.substring(key.indexOf('*')+1))
+      }
+    })
+
+    return exts
   }
 
   registerCommand = (name: string, f: (e: Extension) => commands.Command) => {
@@ -83,7 +109,7 @@ export class Extension {
     if (!exists) await this.state.updateServerVersion(undefined)
 
     const release = await getReleaseInfo(this.package.version)
-    log.info(`got release info from Github:\n\t`, JSON.stringify(release))
+    log.info('got release info from Github:\n\t', JSON.stringify(release))
 
     const platform = platforms[`${process.arch} ${process.platform}`]
     if (platform === undefined) {
@@ -93,7 +119,7 @@ export class Extension {
     }
     
     if (release.tag_name === this.state.serverVersion) {
-      log.info(`server version is same as extension:\n\t`, this.state.serverVersion)
+      log.info('server version is same as extension:\n\t', this.state.serverVersion)
       return
     }
 

@@ -1,28 +1,27 @@
-import * as path from 'path'
 import { ConfigurationTarget, workspace } from 'vscode'
 import * as lsp from 'vscode-languageclient'
 import { Extension } from './extension'
-import { lspOutputChannel } from './log'
+import { log, lspOutputChannel } from './log'
 import { ConfigUpdateParams, statusMethod, StatusParams, updateConfigMethod } from './lspExt'
 
 export class LanguageClient extends lsp.LanguageClient {
   private extension: Extension
 
-  constructor(ext: Extension) {
+  constructor(ext: Extension, lspBinary: string, filewatcherGlob: string) {
     super('vscode-mc-shader', 'VSCode MC Shader', {
-      command: process.env['MCSHADER_DEBUG'] ? 
-      ext.context.asAbsolutePath(path.join('server', 'target', 'debug', 'mcshader-lsp')) + 
-        (process.platform === 'win32' ? '.exe' : '') :
-        path.join(ext.context.globalStoragePath, 'mcshader-lsp')
+      command: lspBinary
     }, {
       documentSelector: [{scheme: 'file', language: 'glsl'}],
       outputChannel: lspOutputChannel,
       synchronize: {
         configurationSection: 'mcglsl',
-        fileEvents: workspace.createFileSystemWatcher('**/*.{fsh,gsh,vsh,glsl,inc}')
+        fileEvents: workspace.createFileSystemWatcher(filewatcherGlob)
       },
     })
     this.extension = ext
+
+    log.info('server receiving events for file glob:\n\t', filewatcherGlob)
+    log.info('running with binary at path:\n\t', lspBinary)
   }
 
   public startServer = async (): Promise<LanguageClient> => {
