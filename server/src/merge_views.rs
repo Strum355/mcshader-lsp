@@ -8,6 +8,18 @@ use petgraph::stable_graph::NodeIndex;
 
 use crate::graph::CachedStableGraph;
 
+/// FilialTuple represents a tuple with a parent at index 0 
+/// and a child at index 1. Parent can be nullable in the case of
+/// the child being a top level node in the tree.
+#[derive(PartialEq, Eq, Hash)]
+struct FilialTuple(Option<NodeIndex>, NodeIndex);
+
+impl From<(Option<&NodeIndex>, NodeIndex)> for FilialTuple {
+    fn from(tuple: (Option<&NodeIndex>, NodeIndex)) -> Self {
+        FilialTuple(tuple.0.and_then(|n| Some(*n)), tuple.1)
+    }
+}
+
 pub fn generate_merge_list<'a>(
     nodes: &'a [(NodeIndex, Option<NodeIndex>)],
     sources: &'a HashMap<PathBuf, String>, 
@@ -20,14 +32,15 @@ pub fn generate_merge_list<'a>(
 
     line_directives.reserve(nodes.len() * 2);
 
-    let mut last_offset_set: HashMap<PathBuf, usize> = HashMap::new();
+    let mut last_offset_set: HashMap<FilialTuple, usize> = HashMap::new();
 
     let mut nodes_iter = nodes.iter().peekable();
 
+    // invariant: nodes_iter always has _at least_ one element. Can't save a not-file :B
     let first = nodes_iter.next().unwrap().0;
-    let first_path = graph.get_node(first).clone();
+    let first_path = graph.get_node(first);
 
-    last_offset_set.insert(first_path.clone(), 0);
+    last_offset_set.insert(FilialTuple(None, first), 0);
 
     // stack to keep track of the depth first traversal
     let mut stack = VecDeque::<NodeIndex>::new();
@@ -35,7 +48,7 @@ pub fn generate_merge_list<'a>(
     create_merge_views(&mut nodes_iter, &mut merge_list, &mut last_offset_set, graph, sources, &mut line_directives, &mut stack);
 
     // now we add a view of the remainder of the root file
-    let offset = *last_offset_set.get(&first_path).unwrap();
+    let offset = *last_offset_set.get(&FilialTuple(None, first)).unwrap();
 
     let len = sources.get(&first_path).unwrap().len();
     merge_list.push_back(&sources.get(&first_path).unwrap()[min(offset, len) ..]);
@@ -55,7 +68,7 @@ pub fn generate_merge_list<'a>(
 fn create_merge_views<'a>(
     nodes: &mut Peekable<Iter<(NodeIndex, Option<NodeIndex>)>>,
     merge_list: &mut LinkedList<&'a str>,
-    last_offset_set: &mut HashMap<PathBuf, usize>,
+    last_offset_set: &mut HashMap<FilialTuple, usize>,
     graph: &'a CachedStableGraph,
     sources: &'a HashMap<PathBuf, String>,
     line_directives: &mut Vec<String>,
@@ -68,6 +81,7 @@ fn create_merge_views<'a>(
             None => return,
         };
         
+        // invariant: never None as only the first element in `nodes` should have a None, which is popped off in the calling function
         let parent = n.1.unwrap();
         let child = n.0;
         let edge = graph.get_edge_meta(parent, child);
@@ -77,7 +91,7 @@ fn create_merge_views<'a>(
         let parent_source = sources.get(&parent_path).unwrap();
         let (char_for_line, char_following_line) = char_offset_for_line(edge.line, parent_source);
         
-        let offset = *last_offset_set.insert(parent_path.clone(), char_following_line).get_or_insert(0);
+        let offset = *last_offset_set.insert((stack.back(), parent).into(), char_following_line).get_or_insert(0);
         merge_list.push_back(&parent_source[offset..char_for_line]);
         add_opening_line_directive(&child_path, merge_list, line_directives);
 
@@ -95,7 +109,7 @@ fn create_merge_views<'a>(
                         }
                     };
                     merge_list.push_back(&child_source[..offset]);
-                    last_offset_set.insert(child_path.clone(), 0);
+                    last_offset_set.insert(FilialTuple(Some(parent), child), 0);
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                     add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
                     // if the next pair's parent is not the current pair's parent, we need to bubble up
@@ -109,7 +123,7 @@ fn create_merge_views<'a>(
                 create_merge_views(nodes, merge_list, last_offset_set, graph, sources, line_directives, stack);
                 stack.pop_back();
 
-                let offset = *last_offset_set.get(&child_path).unwrap();
+                let offset = *last_offset_set.get(&FilialTuple(Some(parent), child)).unwrap();
                 let child_source = sources.get(&child_path).unwrap();
                 // this evaluates to false once the file contents have been exhausted aka offset = child_source.len() + 1
                 let end_offset = {
@@ -121,7 +135,7 @@ fn create_merge_views<'a>(
                 if offset < child_source.len()-end_offset {
                     // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                     merge_list.push_back(&child_source[offset../* std::cmp::max( */child_source.len()-end_offset/* , offset) */]);
-                    last_offset_set.insert(child_path.clone(), 0);
+                    last_offset_set.insert(FilialTuple(Some(parent), child), 0);
                 }
 
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
@@ -142,7 +156,7 @@ fn create_merge_views<'a>(
                     }
                 };
                 merge_list.push_back(&child_source[..offset]);
-                last_offset_set.insert(child_path.clone(), 0);
+                last_offset_set.insert(FilialTuple(Some(parent), child), 0);
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                 add_closing_line_directive(edge.line+2, &parent_path, merge_list, line_directives);
             }
