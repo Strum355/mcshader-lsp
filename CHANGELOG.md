@@ -4,6 +4,12 @@ All notable changes to the "vscode-mc-shader" extension will be documented in th
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## Unreleased
+
+### Fixed
+
+- Fixed `#include` merging for when file is merged twice that would normally be `#ifdef` guarded. Please see commit message of [551380a](https://github.com/Strum355/mcshader-lsp/commit/551380a6ed00709287460b7d8c88e7803956052c) for detailed explanation.
+
 ## [0.9.4]
 
 ### Fixed
