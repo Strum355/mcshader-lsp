@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, LinkedList, VecDeque}, path::PathBuf};
+use std::{collections::{HashMap, LinkedList, VecDeque}, path::{Path, PathBuf}};
 use std::iter::Peekable;
 use std::cmp::min;
 
@@ -16,7 +16,7 @@ struct FilialTuple(Option<NodeIndex>, NodeIndex);
 
 impl From<(Option<&NodeIndex>, NodeIndex)> for FilialTuple {
     fn from(tuple: (Option<&NodeIndex>, NodeIndex)) -> Self {
-        FilialTuple(tuple.0.and_then(|n| Some(*n)), tuple.1)
+        FilialTuple(tuple.0.copied(), tuple.1)
     }
 }
 
@@ -103,7 +103,7 @@ fn create_merge_views<'a>(
                     let child_source = sources.get(&child_path).unwrap();
                     // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                     let offset = {
-                        match child_source.ends_with("\n") {
+                        match child_source.ends_with('\n') {
                             true => child_source.len()-1,
                             false => child_source.len(),
                         }
@@ -127,7 +127,7 @@ fn create_merge_views<'a>(
                 let child_source = sources.get(&child_path).unwrap();
                 // this evaluates to false once the file contents have been exhausted aka offset = child_source.len() + 1
                 let end_offset = {
-                    match child_source.ends_with("\n") {
+                    match child_source.ends_with('\n') {
                         true => 1/* child_source.len()-1 */,
                         false => 0/* child_source.len() */,
                     }
@@ -150,7 +150,7 @@ fn create_merge_views<'a>(
                 let child_source = sources.get(&child_path).unwrap();
                 // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
                 let offset = {
-                    match child_source.ends_with("\n") {
+                    match child_source.ends_with('\n') {
                         true => child_source.len()-1,
                         false => child_source.len(),
                     }
@@ -180,13 +180,13 @@ fn char_offset_for_line(line_num: usize, source: &str) -> (usize, usize) {
     (char_for_line, char_following_line)
 }
 
-fn add_opening_line_directive(path: &PathBuf, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
+fn add_opening_line_directive(path: &Path, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
     let line_directive = format!("#line 1 \"{}\"\n", path.to_str().unwrap().replace("\\", "\\\\"));
     line_directives.push(line_directive);
     unsafe_get_and_insert(merge_list, line_directives);
 }
 
-fn add_closing_line_directive(line: usize, path: &PathBuf, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
+fn add_closing_line_directive(line: usize, path: &Path, merge_list: &mut LinkedList<&str>, line_directives: &mut Vec<String>) {
     // Optifine doesn't seem to add a leading newline if the previous line was a #line directive
     let line_directive = if let Some(l) = merge_list.back() {
         if l.trim().starts_with("#line") {
@@ -202,7 +202,7 @@ fn add_closing_line_directive(line: usize, path: &PathBuf, merge_list: &mut Link
     unsafe_get_and_insert(merge_list, line_directives);
 }
 
-fn unsafe_get_and_insert(merge_list: &mut LinkedList<&str>, line_directives: &Vec<String>) {
+fn unsafe_get_and_insert(merge_list: &mut LinkedList<&str>, line_directives: &[String]) {
     // :^)
     unsafe {
         let vec_ptr_offset = line_directives.as_ptr().add(line_directives.len()-1);

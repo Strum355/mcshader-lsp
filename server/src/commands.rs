@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::{Path, PathBuf}};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::fs::OpenOptions;
@@ -12,7 +12,7 @@ use anyhow::{Result, format_err};
 
 use std::fs;
 
-use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJSON};
+use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJson};
 use crate::dfs;
 
 pub struct CustomCommandProvider {
@@ -28,7 +28,7 @@ impl CustomCommandProvider {
         }
     }
 
-    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &PathBuf) -> Result<Value> {
+    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &Path) -> Result<Value> {
         if self.commands.contains_key(command) {
             return self.commands.get(command).unwrap().run_command(root_path, args);
         }
@@ -37,7 +37,7 @@ impl CustomCommandProvider {
 }
 
 pub trait Invokeable {
-    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value>;
+    fn run_command(&self, root: &Path, arguments: Vec<Value>) -> Result<Value>;
 }
 
 pub struct GraphDotCommand {
@@ -45,7 +45,7 @@ pub struct GraphDotCommand {
 }
 
 impl Invokeable for GraphDotCommand {
-    fn run_command(&self, root: &PathBuf, _: Vec<Value>) -> Result<Value> {
+    fn run_command(&self, root: &Path, _: Vec<Value>) -> Result<Value> {
         let filepath = root.join("graph.dot");
         eprintln!("generating dot file at {:?}", filepath);
         let mut file = OpenOptions::new()
@@ -78,7 +78,7 @@ pub struct VirtualMergedDocument {
 
 impl VirtualMergedDocument {
     // TODO: DUPLICATE CODE
-    fn get_file_toplevel_ancestors(&self, uri: &PathBuf) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
+    fn get_file_toplevel_ancestors(&self, uri: &Path) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
             None => return Err(format_err!("node not found {:?}", uri)),
@@ -113,7 +113,7 @@ impl VirtualMergedDocument {
                 Ok(s) => s,
                 Err(e) => return Err(format_err!("error reading {:?}: {}", path, e))
             };
-            let source = crate::RE_CRLF.replace_all(&source, "\n").to_string();
+            let source = source.replace("\r\n", "\n");
             sources.insert(path.clone(), source);
         }
 
@@ -122,7 +122,7 @@ impl VirtualMergedDocument {
 }
 
 impl Invokeable for VirtualMergedDocument {
-    fn run_command(&self, root: &PathBuf, arguments: Vec<Value>) -> Result<Value> {
+    fn run_command(&self, root: &Path, arguments: Vec<Value>) -> Result<Value> {
         let path = PathBuf::from_json(arguments.get(0).unwrap())?;
 
         let file_ancestors = match self.get_file_toplevel_ancestors(&path) {

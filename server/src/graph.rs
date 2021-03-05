@@ -3,7 +3,7 @@ use petgraph::stable_graph::NodeIndex;
 use petgraph::Direction;
 use petgraph::stable_graph::EdgeIndex;
 
-use std::{collections::{HashMap, HashSet}, path::PathBuf, str::FromStr};
+use std::{collections::{HashMap, HashSet}, path::{Path, PathBuf}, str::FromStr};
 
 use super::IncludePosition;
 
@@ -21,6 +21,7 @@ pub struct CachedStableGraph {
 }
 
 impl CachedStableGraph {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> CachedStableGraph {
         CachedStableGraph{
             graph: StableDiGraph::new(),
@@ -33,13 +34,13 @@ impl CachedStableGraph {
     /// and caches the result in the `HashMap`. Complexity is **O(1)** if the value
     /// is cached (which should always be the case), else **O(n)** where **n** is
     /// the number of node indices, as an exhaustive search must be done.
-    pub fn find_node(&mut self, name: &PathBuf) -> Option<NodeIndex> {
+    pub fn find_node(&mut self, name: &Path) -> Option<NodeIndex> {
         match self.cache.get(name) {
             Some(n) => Some(*n),
             None => {
                 // If the string is not in cache, O(n) search the graph (i know...) and then cache the NodeIndex
                 // for later
-                let n = self.graph.node_indices().find(|n| self.graph[*n] == name.to_str().unwrap().to_string());
+                let n = self.graph.node_indices().find(|n| self.graph[*n] == name.to_str().unwrap());
                 if let Some(n) = n {
                     self.cache.insert(name.into(), n);
                 }
@@ -57,20 +58,20 @@ impl CachedStableGraph {
     }
 
     #[allow(dead_code)]
-    pub fn remove_node(&mut self, name: &PathBuf) {
+    pub fn remove_node(&mut self, name: &Path) {
         let idx = self.cache.remove(name);
         if let Some(idx) = idx {
             self.graph.remove_node(idx);
         }
     }
 
-    pub fn add_node(&mut self, name: &PathBuf) -> NodeIndex {
+    pub fn add_node(&mut self, name: &Path) -> NodeIndex {
         if let Some(idx) = self.cache.get(name) {
             return *idx;
         }
         let idx = self.graph.add_node(name.to_str().unwrap().to_string());
-        self.cache.insert(name.clone(), idx);
-        self.reverse_index.insert(idx, name.clone());
+        self.cache.insert(name.to_owned(), idx);
+        self.reverse_index.insert(idx, name.to_owned());
         idx
     }
 

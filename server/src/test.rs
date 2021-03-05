@@ -89,7 +89,7 @@ fn test_empty_initialize() {
     let initialize_params = InitializeParams {
         process_id: None,
         root_path: None,
-        root_uri: Some(Url::from_directory_path(tmp_path.clone()).unwrap()),
+        root_uri: Some(Url::from_directory_path(tmp_path).unwrap()),
         client_info: None,
         initialization_options: None,
         capabilities: ClientCapabilities {

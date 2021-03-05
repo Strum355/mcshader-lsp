@@ -8,7 +8,7 @@ use serde_json::Value;
 use url_norm::FromUrl;
 use walkdir::WalkDir;
 
-use std::{cell::RefCell, path::PathBuf, str::FromStr};
+use std::{cell::RefCell, path::{Path, PathBuf}, str::FromStr};
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
 use std::convert::TryFrom;
@@ -45,7 +45,6 @@ lazy_static! {
     static ref RE_VERSION: Regex = Regex::new(r#"#version [\d]{3}"#).unwrap();
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
-    pub static ref RE_CRLF: Regex = Regex::new(r#"\r\n"#).unwrap();
 }
 
 fn main() {
@@ -61,7 +60,7 @@ fn main() {
         wait: WaitGroup::new(),
         root: "".into(),
         command_provider: None,
-        opengl_context: Rc::new(opengl::OpenGLContext::new())
+        opengl_context: Rc::new(opengl::OpenGlContext::new())
     };
 
     langserver.command_provider = Some(commands::CustomCommandProvider::new(vec![
@@ -158,7 +157,7 @@ impl MinecraftShaderLanguageServer {
         eprintln!("finished building project include graph");
     }
 
-    fn add_file_and_includes_to_graph(&self, path: &PathBuf) {
+    fn add_file_and_includes_to_graph(&self, path: &Path) {
         let includes = self.find_includes(path);
 
         let idx = self.graph.borrow_mut().add_node(&path);
@@ -174,7 +173,7 @@ impl MinecraftShaderLanguageServer {
         self.graph.borrow_mut().add_edge(node, child, include.1);
     }
 
-    pub fn find_includes(&self, file: &PathBuf) -> Vec<(PathBuf, IncludePosition)> {
+    pub fn find_includes(&self, file: &Path) -> Vec<(PathBuf, IncludePosition)> {
         let mut includes = Vec::default();
 
         let buf = BufReader::new(std::fs::File::open(file).unwrap());
@@ -217,7 +216,7 @@ impl MinecraftShaderLanguageServer {
         includes
     }
 
-    fn update_includes(&self, file: &PathBuf) {
+    fn update_includes(&self, file: &Path) {
         let includes = self.find_includes(file);
 
         eprintln!("updating {:?} with {:?}", file, includes);
@@ -230,7 +229,7 @@ impl MinecraftShaderLanguageServer {
         };
 
         let prev_children: HashSet<_, RandomState> = HashSet::from_iter(self.graph.borrow().child_node_meta(idx));
-        let new_children: HashSet<_, RandomState> = HashSet::from_iter(includes.iter().map(|e| e.clone()));
+        let new_children: HashSet<_, RandomState> = includes.iter().cloned().collect();
 
         let to_be_added = new_children.difference(&prev_children);
         let to_be_removed = prev_children.difference(&new_children);
@@ -247,7 +246,7 @@ impl MinecraftShaderLanguageServer {
         }
     }
 
-    pub fn lint(&self, uri: &PathBuf) -> Result<HashMap<Url, Vec<Diagnostic>>> {
+    pub fn lint(&self, uri: &Path) -> Result<HashMap<Url, Vec<Diagnostic>>> {
         // get all top level ancestors of this file
         let file_ancestors = match self.get_file_toplevel_ancestors(uri) {
             Ok(opt) => match opt {
@@ -259,14 +258,14 @@ impl MinecraftShaderLanguageServer {
         
         eprintln!("ancestors for {:?}:\n\t{:?}", uri, file_ancestors.iter().map(|e| PathBuf::from_str(&self.graph.borrow().graph.node_weight(*e).unwrap().clone()).unwrap()).collect::<Vec<PathBuf>>());
 
-        // the set of all filepath->content. TODO: change to Url?
+        // the set of all filepath->content.
         let mut all_sources: HashMap<PathBuf, String> = HashMap::new();
         // the set of filepath->list of diagnostics to report
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
 
         // we want to backfill the diagnostics map with all linked sources 
-        let back_fill = |all_sources, diagnostics: &mut HashMap<Url, Vec<Diagnostic>>| {
-            for (path, _) in all_sources {
+        let back_fill = |all_sources: &HashMap<PathBuf, String>, diagnostics: &mut HashMap<Url, Vec<Diagnostic>>| {
+            for path in all_sources.keys() {
                 diagnostics.entry(Url::from_file_path(path).unwrap()).or_default();
             }
         };
@@ -374,7 +373,7 @@ impl MinecraftShaderLanguageServer {
         Ok(diagnostics)
     }
 
-    fn parse_validator_stdout(&self, uri: &PathBuf, stdout: String, _source: &str) -> HashMap<Url, Vec<Diagnostic>> {
+    fn parse_validator_stdout(&self, uri: &Path, stdout: String, _source: &str) -> HashMap<Url, Vec<Diagnostic>> {
         let stdout_lines = stdout.split('\n');
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::with_capacity(stdout_lines.count());
         let stdout_lines = stdout.split('\n');
@@ -390,10 +389,7 @@ impl MinecraftShaderLanguageServer {
             let msg = diagnostic_capture.name("output").unwrap().as_str();
 
             let line = match diagnostic_capture.name("linenum") {
-                Some(c) => match c.as_str().parse::<u32>() {
-                    Ok(i) => i,
-                    Err(_) => 0,
-                },
+                Some(c) => c.as_str().parse::<u32>().unwrap_or(0),
                 None => 0,
             } - 2;
 
@@ -412,7 +408,7 @@ impl MinecraftShaderLanguageServer {
 
             let origin = match diagnostic_capture.name("filepath") {
                 Some(o) => {
-                    if o.as_str().to_string() == "0" {
+                    if o.as_str() == "0" {
                         uri.to_str().unwrap().to_string()
                     } else {
                         o.as_str().to_string()
@@ -472,14 +468,14 @@ impl MinecraftShaderLanguageServer {
                 Ok(s) => s,
                 Err(e) => return Err(anyhow!("error reading {:?}: {}", path, e))
             };
-            let source = RE_CRLF.replace_all(&source, "\n").to_string();
+            let source = source.replace("\r\n", "\n");
             sources.insert(path.clone(), source);
         }
 
         Ok(sources)
     }
 
-    fn get_file_toplevel_ancestors(&self, uri: &PathBuf) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
+    fn get_file_toplevel_ancestors(&self, uri: &Path) -> Result<Option<Vec<petgraph::stable_graph::NodeIndex>>> {
         let curr_node = match self.graph.borrow_mut().find_node(uri) {
             Some(n) => n,
             None => return Err(anyhow!("node not found {:?}", uri)),
@@ -515,21 +511,20 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn initialize(&mut self, params: InitializeParams, completable: MethodCompletable<InitializeResult, InitializeError>) {
         self.wait.add(1);
 
-        let mut capabilities = ServerCapabilities::default();
-        capabilities.hover_provider = None;
-        capabilities.document_link_provider = Some(DocumentLinkOptions {
+        let capabilities = ServerCapabilities{
+            document_link_provider: Some(DocumentLinkOptions {
             resolve_provider: None,
             work_done_progress_options: WorkDoneProgressOptions {
                 work_done_progress: None,
             },
-        });
-        capabilities.execute_command_provider = Some(ExecuteCommandOptions {
+            }),
+            execute_command_provider: Some(ExecuteCommandOptions {
             commands: vec!["graphDot".into()],
             work_done_progress_options: WorkDoneProgressOptions {
                 work_done_progress: None,
             },
-        });
-        capabilities.text_document_sync = Some(TextDocumentSyncCapability::Options(
+            }),
+            text_document_sync: Some(TextDocumentSyncCapability::Options(
             TextDocumentSyncOptions {
                 open_close: Some(true),
                 will_save: None,
@@ -539,7 +534,9 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                     include_text: Some(true),
                 }))
             },
-        ));
+            )),
+            .. ServerCapabilities::default()
+        };
 
         let root = match params.root_uri {
             Some(uri) => PathBuf::from_url(uri),

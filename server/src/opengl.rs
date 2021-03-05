@@ -3,17 +3,18 @@ use std::ffi::{CString, CStr};
 
 #[cfg(test)]
 use mockall::automock;
+
 #[cfg_attr(test, automock)]
 pub trait ShaderValidator {
     fn validate(&self, tree_type: super::TreeType, source: String) -> Option<String>;
 }
 
-pub struct OpenGLContext {
+pub struct OpenGlContext {
     _ctx: glutin::Context<glutin::PossiblyCurrent>
 }
 
-impl OpenGLContext {
-    pub fn new() -> OpenGLContext {
+impl OpenGlContext {
+    pub fn new() -> OpenGlContext {
         let events_loop = glutin::event_loop::EventLoop::new();
         let gl_window = glutin::ContextBuilder::new().build_headless(&*events_loop, glutin::dpi::PhysicalSize::new(1, 1)).unwrap();
     
@@ -31,7 +32,7 @@ impl OpenGLContext {
                 String::from_utf8(CStr::from_ptr(gl::GetString(gl::RENDERER) as *const _).to_bytes().to_vec()).unwrap()
             );
         }
-        OpenGLContext{
+        OpenGlContext{
             _ctx: gl_window,
         }
     }
@@ -59,7 +60,7 @@ impl OpenGLContext {
     }
 }
 
-impl ShaderValidator for OpenGLContext {
+impl ShaderValidator for OpenGlContext {
     fn validate(&self, tree_type: super::TreeType, source: String) -> Option<String> {
         unsafe {
             match tree_type {

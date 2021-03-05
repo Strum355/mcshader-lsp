@@ -114,8 +114,8 @@ pub mod error {
     
     impl CycleError {
         pub fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph) -> Self {
-            let mut resolved_nodes: Vec<PathBuf> = nodes.iter().map(|i| graph.get_node(*i).clone()).collect();
-            resolved_nodes.push(graph.get_node(current_node).clone());
+            let mut resolved_nodes: Vec<PathBuf> = nodes.iter().map(|i| graph.get_node(*i)).collect();
+            resolved_nodes.push(graph.get_node(current_node));
             CycleError(resolved_nodes)
         }
     }
@@ -132,13 +132,13 @@ pub mod error {
         }
     }
 
-    impl Into<Diagnostic> for CycleError {
-        fn into(self) -> Diagnostic {
+    impl From<CycleError> for Diagnostic {
+        fn from(e: CycleError) -> Diagnostic {
             Diagnostic{
                 severity: Some(DiagnosticSeverity::Error),
                 range: Range::new(Position::new(0, 0), Position::new(0, 500)),
                 source: Some(consts::SOURCE.into()),
-                message: self.into(),
+                message: e.into(),
                 code: None,
                 tags: None,
                 related_information: None,
@@ -147,10 +147,10 @@ pub mod error {
             }
         }
     }
-    
-    impl Into<String> for CycleError {
-        fn into(self) -> String {
-            format!("{}", self)
+
+    impl From<CycleError> for String {
+        fn from(e: CycleError) -> String {
+            format!("{}", e)
         }
     }
 }

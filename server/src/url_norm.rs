@@ -8,7 +8,7 @@ pub trait FromUrl {
     fn from_url(u: Url) -> Self;
 }
 
-pub trait FromJSON {
+pub trait FromJson {
     fn from_json(v: &serde_json::value::Value) -> Result<Self> where Self: Sized;
 }
 
@@ -26,7 +26,7 @@ impl FromUrl for PathBuf {
     }
 }
 
-impl FromJSON for PathBuf {
+impl FromJson for PathBuf {
     #[cfg(target_family = "windows")]
     fn from_json(v: &serde_json::value::Value) -> Result<Self>
     where Self: Sized {
