@@ -78,6 +78,11 @@ impl ShaderValidator for OpenGLContext {
                     let geometry_shader = gl::CreateShader(gl::GEOMETRY_SHADER);
                     self.compile_and_get_shader_log(geometry_shader, source)
                 }
+                crate::TreeType::Compute => {
+                    // Compute shader
+                    let compute_shader= gl::CreateShader(gl::COMPUTE_SHADER);
+                    self.compile_and_get_shader_log(compute_shader, source)
+                }
             }
         }
     }

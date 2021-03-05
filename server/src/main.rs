@@ -111,7 +111,7 @@ impl Display for IncludePosition {
 }
 
 pub enum TreeType {
-    Fragment, Vertex, Geometry
+    Fragment, Vertex, Geometry, Compute
 }
 
 impl MinecraftShaderLanguageServer {
@@ -290,15 +290,24 @@ impl MinecraftShaderLanguageServer {
                 merge_views::generate_merge_list(&tree, &all_sources, &graph)
             };
 
-            let root_path = self.graph.borrow().get_node(root).clone();
-            let tree_type = if root_path.extension().unwrap() == "fsh" {
+            let root_path = self.graph.borrow().get_node(root);
+            let ext = match root_path.extension() {
+                Some(ext) => ext,
+                None => {
+                    back_fill(&all_sources, &mut diagnostics);
+                    return Ok(diagnostics)
+                },
+            };
+            let tree_type = if ext == "fsh" {
                 TreeType::Fragment
-            } else if root_path.extension().unwrap() == "vsh" {
+            } else if ext == "vsh" {
                 TreeType::Vertex
-            } else if root_path.extension().unwrap() == "gsh" {
+            } else if ext == "gsh" {
                 TreeType::Geometry
+            } else if ext == "csh" {
+                TreeType::Compute
             } else {
-                eprintln!("got a non fsh|vsh ({:?}) as a file root ancestor: {:?}", root_path.extension().unwrap(), root_path);
+                eprintln!("got a non fsh|vsh|gsh|csh ({:?}) as a file root ancestor: {:?}", ext, root_path);
                 back_fill(&all_sources, &mut diagnostics);
                 return Ok(diagnostics)
             };
@@ -325,14 +334,20 @@ impl MinecraftShaderLanguageServer {
                 };
 
                 let root_path = self.graph.borrow().get_node(*root).clone();
-                let tree_type = if root_path.extension().unwrap() == "fsh" {
+                let ext = match root_path.extension() {
+                    Some(ext) => ext,
+                    None => continue
+                };
+                let tree_type = if ext == "fsh" {
                     TreeType::Fragment
-                } else if root_path.extension().unwrap() == "vsh" {
+                } else if ext == "vsh" {
                     TreeType::Vertex
-                } else if root_path.extension().unwrap() == "gsh" {
+                } else if ext == "gsh" {
                     TreeType::Geometry
+                } else if ext == "csh" {
+                    TreeType::Compute
                 } else {
-                    eprintln!("got a non fsh|vsh ({:?}) as a file root ancestor: {:?}", root_path.extension().unwrap(), root_path);
+                    eprintln!("got a non fsh|vsh|gsh|csh ({:?}) as a file root ancestor: {:?}", ext, root_path);
                     continue;
                 };
 
