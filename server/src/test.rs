@@ -273,8 +273,8 @@ fn test_05_initialize() {
 fn test_graph_two_connected_nodes() {
     let mut graph = graph::CachedStableGraph::new();
 
-    let idx1 = graph.add_node(&("sample".to_string().into()));
-    let idx2 = graph.add_node(&("banana".to_string().into()));
+    let idx1 = graph.add_node(&PathBuf::from("sample"));
+    let idx2 = graph.add_node(&PathBuf::from("banana"));
     graph.add_edge(
         idx1,
         idx2,
@@ -311,9 +311,9 @@ fn test_graph_two_connected_nodes() {
     let ancestors = graph.collect_root_ancestors(idx1);
     assert_eq!(ancestors.len(), 0);
 
-    graph.remove_node(&("sample".to_string().into()));
+    graph.remove_node(&PathBuf::from("sample"));
     assert_eq!(graph.graph.node_count(), 1);
-    assert!(graph.find_node(&("sample".to_string().into())).is_none());
+    assert!(graph.find_node(&PathBuf::from("sample")).is_none());
     let neighbors = graph.child_node_names(idx2);
     assert_eq!(neighbors.len(), 0);
 }
@@ -323,10 +323,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
 
         graph.add_edge(
             idx0,
@@ -377,10 +377,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
 
         graph.add_edge(
             idx0,
@@ -431,10 +431,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
 
         graph.add_edge(
             idx0,
@@ -487,10 +487,10 @@ fn test_collect_root_ancestors() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
 
         graph.add_edge(
             idx0,
@@ -545,10 +545,10 @@ fn test_graph_dfs() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
 
         graph.add_edge(
             idx0,
@@ -607,14 +607,14 @@ fn test_graph_dfs() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
-        let idx4 = graph.add_node(&("4".to_string().into()));
-        let idx5 = graph.add_node(&("5".to_string().into()));
-        let idx6 = graph.add_node(&("6".to_string().into()));
-        let idx7 = graph.add_node(&("7".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
+        let idx4 = graph.add_node(&PathBuf::from("4"));
+        let idx5 = graph.add_node(&PathBuf::from("5"));
+        let idx6 = graph.add_node(&PathBuf::from("6"));
+        let idx7 = graph.add_node(&PathBuf::from("7"));
 
         graph.add_edge(
             idx0,
@@ -749,14 +749,14 @@ fn test_graph_dfs_cycle() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
-        let idx2 = graph.add_node(&("2".to_string().into()));
-        let idx3 = graph.add_node(&("3".to_string().into()));
-        let idx4 = graph.add_node(&("4".to_string().into()));
-        let idx5 = graph.add_node(&("5".to_string().into()));
-        let idx6 = graph.add_node(&("6".to_string().into()));
-        let idx7 = graph.add_node(&("7".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
+        let idx2 = graph.add_node(&PathBuf::from("2"));
+        let idx3 = graph.add_node(&PathBuf::from("3"));
+        let idx4 = graph.add_node(&PathBuf::from("4"));
+        let idx5 = graph.add_node(&PathBuf::from("5"));
+        let idx6 = graph.add_node(&PathBuf::from("6"));
+        let idx7 = graph.add_node(&PathBuf::from("7"));
 
         graph.add_edge(
             idx0,
@@ -873,8 +873,8 @@ fn test_graph_dfs_cycle() {
     {
         let mut graph = graph::CachedStableGraph::new();
 
-        let idx0 = graph.add_node(&("0".to_string().into()));
-        let idx1 = graph.add_node(&("1".to_string().into()));
+        let idx0 = graph.add_node(&PathBuf::from("0"));
+        let idx1 = graph.add_node(&PathBuf::from("1"));
 
         graph.add_edge(
             idx0,
