@@ -33,6 +33,13 @@ jobs:
           artifact: aarch64-apple-darwin
     steps:
     - uses: actions/checkout@v2
+    - name: Install latest nightly
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: nightly
+          default: true
+          target: ${{ matrix.platforms.target }}
+          override: true
     - name: Build server
       run: cargo build --target ${{ matrix.platforms.target }}
     - uses: actions/upload-artifact@v2
