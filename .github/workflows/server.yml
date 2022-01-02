@@ -8,16 +8,36 @@ env:
   CARGO_TERM_COLOR: always
 jobs:
   build-and-test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platforms.os }}
     defaults:
       run:
         working-directory: server
     strategy:
       matrix:
-        os: [ ubuntu-20.04, windows-latest, macos-10.15 ]
+        platforms:
+        - os: ubuntu-18.04
+          target: x86_64-unknown-linux-gnu
+          dir: server/mcshader-lsp
+          artifact: x86_64-linux-mcshader-lsp
+        - os: windows-latest
+          target: x86_64-windows-msvc.exe
+          dir: server/mcshader-lsp.exe
+          artifact: x86_64-windows-mcshader-lsp.exe
+        - os: macos-11
+          target: x86_64-apple-darwin
+          dir: server/mcshader-lsp
+          artifact: x86_64-darwin-mcshader-lsp
+        - os: macos-11
+          target: aarch64-apple-darwin
+          dir: server/mcshader-lsp
+          artifact: aarch64-darwin-mcshader-lsp
     steps:
     - uses: actions/checkout@v2
     - name: Build server
-      run: cargo build
+      run: cargo build --target ${{ matrix.platforms.target }}
+    - uses: actions/upload-artifact@v2
+      with:
+        name: ${{ matrix.platforms.artifact }}
+        path: ${{ matrix.platforms.dir }}
     - name: Run tests
-      run: cargo test
+      run: cargo test --target ${{ matrix.platforms.target }}

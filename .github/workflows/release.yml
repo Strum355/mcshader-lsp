@@ -38,8 +38,11 @@ jobs:
         - os: windows-latest
           target: x86_64-windows-msvc.exe
           dir: server/mcshader-lsp.exe
-        - os: macos-10.15
+        - os: macos-11
           target: x86_64-apple-darwin
+          dir: server/mcshader-lsp
+        - os: macos-11
+          target: aarch64-apple-darwin
           dir: server/mcshader-lsp
     steps:
     - uses: actions/checkout@v2
@@ -49,7 +52,7 @@ jobs:
           toolchain: nightly
           default: true
     - name: Build server
-      run: cargo build --release --out-dir . -Z unstable-options
+      run: cargo build --release --target ${{ matrix.platforms.target }} --out-dir . -Z unstable-options
     - name: Upload release file
       uses: actions/upload-release-asset@v1
       env:
