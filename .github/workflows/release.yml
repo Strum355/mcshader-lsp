@@ -34,15 +34,19 @@ jobs:
         platforms:
         - os: ubuntu-18.04
           target: x86_64-unknown-linux-gnu
+          artifact: x86_64-unknown-linux-gnu
           dir: server/mcshader-lsp
         - os: windows-latest
-          target: x86_64-windows-msvc.exe
+          target: x86_64-pc-windows-msvc
+          artifact: x86_64-windows-msvc.exe
           dir: server/mcshader-lsp.exe
         - os: macos-11
           target: x86_64-apple-darwin
+          artifact: x86_64-apple-darwin
           dir: server/mcshader-lsp
         - os: macos-11
           target: aarch64-apple-darwin
+          artifact: aarch64-apple-darwin
           dir: server/mcshader-lsp
     steps:
     - uses: actions/checkout@v2
@@ -60,7 +64,7 @@ jobs:
       with:
         upload_url: ${{ needs.empty-release.outputs.upload_url }}
         asset_path: ${{ matrix.platforms.dir }}
-        asset_name: mcshader-lsp-${{ matrix.platforms.target }}
+        asset_name: mcshader-lsp-${{ matrix.platforms.artifact }}
         asset_content_type: application/octet-stream
   release-vscode-extension:
     runs-on: ubuntu-20.04

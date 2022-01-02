@@ -18,26 +18,26 @@ jobs:
         - os: ubuntu-18.04
           target: x86_64-unknown-linux-gnu
           dir: server/mcshader-lsp
-          artifact: x86_64-linux-mcshader-lsp
+          artifact: x86_64-unknown-linux-gnu
         - os: windows-latest
-          target: x86_64-windows-msvc.exe
+          target: x86_64-pc-windows-msvc
           dir: server/mcshader-lsp.exe
-          artifact: x86_64-windows-mcshader-lsp.exe
+          artifact: x86_64-windows-msvc.exe
         - os: macos-11
           target: x86_64-apple-darwin
           dir: server/mcshader-lsp
-          artifact: x86_64-darwin-mcshader-lsp
+          artifact: x86_64-apple-darwin
         - os: macos-11
           target: aarch64-apple-darwin
           dir: server/mcshader-lsp
-          artifact: aarch64-darwin-mcshader-lsp
+          artifact: aarch64-apple-darwin
     steps:
     - uses: actions/checkout@v2
     - name: Build server
       run: cargo build --target ${{ matrix.platforms.target }}
     - uses: actions/upload-artifact@v2
       with:
-        name: ${{ matrix.platforms.artifact }}
+        name: mcshader-lsp-${{ matrix.platforms.artifact }}
         path: ${{ matrix.platforms.dir }}
     - name: Run tests
       run: cargo test --target ${{ matrix.platforms.target }}
