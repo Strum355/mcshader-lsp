@@ -22,8 +22,6 @@ use path_slash::PathBufExt;
 
 use anyhow::{Result, anyhow};
 
-use chan::WaitGroup;
-
 use regex::Regex;
 
 use lazy_static::lazy_static;
@@ -57,7 +55,6 @@ fn main() {
     let mut langserver = MinecraftShaderLanguageServer {
         endpoint: endpoint_output.clone(),
         graph: Rc::new(RefCell::new(cache_graph)),
-        wait: WaitGroup::new(),
         root: "".into(),
         command_provider: None,
         opengl_context: Rc::new(opengl::OpenGlContext::new())
@@ -84,7 +81,6 @@ fn main() {
 struct MinecraftShaderLanguageServer {
     endpoint: Endpoint,
     graph: Rc<RefCell<graph::CachedStableGraph>>,
-    wait: WaitGroup,
     root: PathBuf,
     command_provider: Option<commands::CustomCommandProvider>,
     opengl_context: Rc<dyn opengl::ShaderValidator>
@@ -509,7 +505,7 @@ impl MinecraftShaderLanguageServer {
 
 impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn initialize(&mut self, params: InitializeParams, completable: MethodCompletable<InitializeResult, InitializeError>) {
-        self.wait.add(1);
+        
 
         let capabilities = ServerCapabilities{
             document_link_provider: Some(DocumentLinkOptions {
@@ -577,10 +573,6 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn workspace_change_configuration(&mut self, params: DidChangeConfigurationParams) {
         //let config = params.settings.as_object().unwrap().get("mcglsl").unwrap();
-
-        eprintln!("{:?}", params.settings.as_object().unwrap());
-
-        self.wait.done();
     }
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
@@ -628,7 +620,6 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn hover(&mut self, _: TextDocumentPositionParams, _: LSCompletable<Hover>) {
-        self.wait.wait();
         /* completable.complete(Ok(Hover{
             contents: HoverContents::Markup(MarkupContent{
                 kind: MarkupKind::Markdown,

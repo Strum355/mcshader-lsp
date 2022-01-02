@@ -42,7 +42,6 @@ fn new_temp_server() -> MinecraftShaderLanguageServer {
     MinecraftShaderLanguageServer {
         endpoint,
         graph: Rc::new(RefCell::new(graph::CachedStableGraph::new())),
-        wait: WaitGroup::new(),
         root: "".into(),
         command_provider: None,
         opengl_context: Rc::new(opengl::MockShaderValidator::new()),
@@ -125,8 +124,6 @@ fn test_empty_initialize() {
 
     assert_eq!(server.graph.borrow().graph.edge_count(), 0);
     assert_eq!(server.graph.borrow().graph.node_count(), 0);
-
-    assert_eq!(format!("{:?}", server.wait), "WaitGroup { count: 1 }");
 
     server.endpoint.request_shutdown();
 }

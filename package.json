@@ -8,7 +8,7 @@
   "license": "MIT",
   "icon": "logo-mini.png",
   "repository": {
-    "url": "https://github.com/Strum355/vscode-mc-shader"
+    "url": "https://github.com/Strum355/mcshader-lsp"
   },
   "engines": {
     "vscode": "^1.43.0"
@@ -59,7 +59,13 @@
     ],
     "configuration": {
       "title": "Minecraft GLSL Shaders",
-      "properties": {}
+      "properties": {
+        "mcglsl.skipBootstrap": {
+          "type": "boolean",
+          "default": false,
+          "description": "[DEBUG] Enable to skip bootstrapping the language server binary from Github. Set this to use a manually provided language server binary."
+        }
+      }
     }
   },
   "scripts": {

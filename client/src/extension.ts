@@ -12,6 +12,7 @@ const platforms: { [key: string]: string } = {
   'x64 win32': 'x86_64-windows-msvc',
   'x64 linux': 'x86_64-unknown-linux-gnu',
   'x64 darwin': 'x86_64-apple-darwin',
+  'arm64 darwin': 'aarch64-apple-darwin'
 }
 
 export class Extension {
@@ -38,7 +39,11 @@ export class Extension {
     this.extensionContext = context
     this.state = new PersistentState(context.globalState)
 
-    if(!process.env['MCSHADER_DEBUG']) await this.bootstrap() 
+    if(!process.env['MCSHADER_DEBUG'] && !(vscode.workspace.getConfiguration('mcglsl').get('skipBootstrap') as boolean)) {
+      await this.bootstrap() 
+    } else {
+      log.info('skipping language server bootstrap')
+    }
 
     this.registerCommand('graphDot', commands.generateGraphDot)
     this.registerCommand('restart', commands.restartExtension)

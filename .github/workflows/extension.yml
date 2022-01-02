@@ -1,0 +1,21 @@
+name: Build Extension
+on:
+  push:
+    branches: [ rust-rewrite ]
+  pull_request:
+    branches: [ rust-rewrite ]
+jobs:
+  build-vscode-extension:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - run: npm i
+    - uses: HaaLeo/publish-vscode-extension@v0
+      id: vsce_build
+      with:
+        pat: 'sample text'
+        dryRun: true
+    - uses: actions/upload-artifact@v2
+      with:
+        name: vscode-mc-shader.vsix
+        path: ${{ steps.vsce_build.outputs.vsixPath }}
