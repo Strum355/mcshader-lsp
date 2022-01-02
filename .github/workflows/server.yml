@@ -41,10 +41,11 @@ jobs:
           target: ${{ matrix.platforms.target }}
           override: true
     - name: Build server
-      run: cargo build --target ${{ matrix.platforms.target }}
+      run: cargo build --target ${{ matrix.platforms.target }} --out-dir . -Z unstable-options
     - uses: actions/upload-artifact@v2
       with:
         name: mcshader-lsp-${{ matrix.platforms.artifact }}
         path: ${{ matrix.platforms.dir }}
     - name: Run tests
       run: cargo test --target ${{ matrix.platforms.target }}
+      if: ${{ matrix.platforms.target != 'aarch64-apple-darwin' }}
