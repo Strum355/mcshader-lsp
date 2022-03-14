@@ -5,16 +5,18 @@
     "rollup": "rollup -c"
   },
   "dependencies": {
-    "adm-zip": "^0.4.14",
-    "node-fetch": "^2.6.0",
-    "vscode-languageclient": "^6.1.3"
+    "@rollup/plugin-json": "^4.1.0",
+    "adm-zip": "^0.5.9",
+    "encoding": "^0.1.13",
+    "node-fetch": "^3.2.3",
+    "vscode-languageclient": "^7.0.0"
   },
   "devDependencies": {
-    "rollup": "^2.38.1",
-    "@rollup/plugin-commonjs": "^17.1.0",
-    "@rollup/plugin-node-resolve": "^11.1.1",
-    "@types/vscode": "^1.47.0",
-    "@types/adm-zip": "^0.4.32",
-    "@types/node-fetch": "^2.5.4"
+    "@rollup/plugin-commonjs": "^21.0.2",
+    "@rollup/plugin-node-resolve": "^13.1.3",
+    "@types/adm-zip": "^0.4.34",
+    "@types/node-fetch": "^2.6.1",
+    "@types/vscode": "^1.65.0",
+    "rollup": "^2.70.1"
   }
 }
