@@ -1,0 +1,3 @@
+edition = "2021"
+fn_args_layout = "compressed"
+max_width = 140
