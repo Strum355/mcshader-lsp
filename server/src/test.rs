@@ -6,6 +6,8 @@ use std::io::Result;
 use hamcrest2::prelude::*;
 use pretty_assertions::assert_eq;
 
+use slog::Logger;
+use slog::o;
 use tempdir::TempDir;
 
 use petgraph::algo::is_cyclic_directed;
@@ -34,17 +36,20 @@ impl io::Write for StdoutNewline {
     }
 }
 
-fn new_temp_server() -> MinecraftShaderLanguageServer {
-    let endpoint = LSPEndpoint::create_lsp_output_with_output_stream(|| StdoutNewline {
-        s: Box::new(io::sink()),
-    });
+fn new_temp_server(opengl_context: Option<Box<dyn opengl::ShaderValidator>>) -> MinecraftShaderLanguageServer {
+    let endpoint = LSPEndpoint::create_lsp_output_with_output_stream(|| StdoutNewline { s: Box::new(io::sink()) });
+
+    let context = opengl_context.unwrap_or_else(|| Box::new(opengl::MockShaderValidator::new()));
+    let logger = Logger::root(slog::Discard, o!());
+    let guard = slog_scope::set_global_logger(logger);
 
     MinecraftShaderLanguageServer {
         endpoint,
         graph: Rc::new(RefCell::new(graph::CachedStableGraph::new())),
         root: "".into(),
         command_provider: None,
-        opengl_context: Rc::new(opengl::MockShaderValidator::new()),
+        opengl_context: context.into(),
+        _log_guard: Some(guard),
     }
 }
 
@@ -80,7 +85,7 @@ fn copy_to_tmp_dir(test_path: &str) -> (Rc<TempDir>, PathBuf) {
 #[allow(deprecated)]
 #[test]
 fn test_empty_initialize() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let tmp_dir = TempDir::new("mcshader").unwrap();
     let tmp_path = tmp_dir.path();
@@ -131,7 +136,7 @@ fn test_empty_initialize() {
 #[allow(deprecated)]
 #[test]
 fn test_01_initialize() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let (_tmp_dir, tmp_path) = copy_to_tmp_dir("./testdata/01");
 
@@ -197,7 +202,7 @@ fn test_01_initialize() {
 
 #[test]
 fn test_05_initialize() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let (_tmp_dir, tmp_path) = copy_to_tmp_dir("./testdata/05");
 
@@ -902,7 +907,7 @@ fn test_graph_dfs_cycle() {
 
 #[test]
 fn test_generate_merge_list_01() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/01", &mut server);
     server.endpoint.request_shutdown();
@@ -941,7 +946,7 @@ fn test_generate_merge_list_01() {
 
 #[test]
 fn test_generate_merge_list_02() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/02", &mut server);
     server.endpoint.request_shutdown();
@@ -1014,7 +1019,7 @@ fn test_generate_merge_list_02() {
 
 #[test]
 fn test_generate_merge_list_03() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/03", &mut server);
     server.endpoint.request_shutdown();
@@ -1087,7 +1092,7 @@ fn test_generate_merge_list_03() {
 
 #[test]
 fn test_generate_merge_list_04() {
-    let mut server = new_temp_server();
+    let mut server = new_temp_server(None);
 
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/04", &mut server);
     server.endpoint.request_shutdown();

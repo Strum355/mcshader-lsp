@@ -17,6 +17,7 @@ use std::io::{stdin, stdout, BufRead, BufReader};
 use std::rc::Rc;
 use std::fs;
 use std::iter::{Extend, FromIterator};
+use slog::Level;
 
 use path_slash::PathBufExt;
 
@@ -33,6 +34,7 @@ mod dfs;
 mod merge_views;
 mod consts;
 mod opengl;
+mod logging;
 mod url_norm;
 
 #[cfg(test)]
@@ -46,8 +48,9 @@ lazy_static! {
 }
 
 fn main() {
-    let stdin = stdin();
+    let guard = logging::set_logger_with_level(Level::Info);
 
+    let stdin = stdin();
     let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(stdout);
 
     let cache_graph = graph::CachedStableGraph::new();
@@ -57,7 +60,8 @@ fn main() {
         graph: Rc::new(RefCell::new(cache_graph)),
         root: "".into(),
         command_provider: None,
-        opengl_context: Rc::new(opengl::OpenGlContext::new())
+        opengl_context: Rc::new(opengl::OpenGlContext::new()),
+        _log_guard: Some(guard),
     };
 
     langserver.command_provider = Some(commands::CustomCommandProvider::new(vec![
@@ -83,7 +87,8 @@ struct MinecraftShaderLanguageServer {
     graph: Rc<RefCell<graph::CachedStableGraph>>,
     root: PathBuf,
     command_provider: Option<commands::CustomCommandProvider>,
-    opengl_context: Rc<dyn opengl::ShaderValidator>
+    opengl_context: Rc<dyn opengl::ShaderValidator>,
+    _log_guard: Option<slog_scope::GlobalLoggerGuard>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
