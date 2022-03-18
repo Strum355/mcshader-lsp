@@ -40,6 +40,7 @@ use lazy_static::lazy_static;
 mod commands;
 mod consts;
 mod dfs;
+mod configuration;
 mod graph;
 mod lsp_ext;
 mod merge_views;
@@ -604,6 +605,20 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn workspace_change_configuration(&mut self, params: DidChangeConfigurationParams) {
         logging::slog_with_trace_id(|| {
+            #[derive(Deserialize)]
+            struct Configuration {
+                #[serde(alias ="logLevel")]
+                log_level: String
+            }
+
+            let config: Configuration = from_value(params.settings.as_object().unwrap().get("mcglsl").unwrap().to_owned()).unwrap();
+
+            info!("got updated configuration"; "config" => params.settings.as_object().unwrap().get("mcglsl").unwrap().to_string());
+            
+            configuration::handle_log_level_change(config.log_level, |level| {
+                self._log_guard = None; // set to None so Drop is invoked
+                self._log_guard = Some(logging::set_logger_with_level(level));
+            })
         });
     }
 

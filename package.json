@@ -64,6 +64,12 @@
           "type": "boolean",
           "default": false,
           "description": "[DEBUG] Enable to skip bootstrapping the language server binary from Github. Set this to use a manually provided language server binary."
+        },
+        "mcglsl.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": ["trace", "debug", "info", "warn", "error"],
+          "description": "Change the log level of the language server. This change happens live and does not require a restart."
         }
       }
     }
