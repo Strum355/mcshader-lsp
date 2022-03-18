@@ -1,5 +1,5 @@
 import { ConfigurationTarget, workspace } from 'vscode'
-import * as lsp from 'vscode-languageclient'
+import * as lsp from 'vscode-languageclient/node'
 import { Extension } from './extension'
 import { log, lspOutputChannel } from './log'
 import { ConfigUpdateParams, statusMethod, StatusParams, updateConfigMethod } from './lspExt'
