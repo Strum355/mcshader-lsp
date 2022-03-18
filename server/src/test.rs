@@ -62,10 +62,10 @@ fn copy_files(files: &str, dest: &TempDir) {
     copy_items(&files, dest.path().join("shaders"), opts).unwrap();
 }
 
-fn copy_to_and_set_root(test_path: &str, server: &mut MinecraftShaderLanguageServer,) -> (Rc<TempDir>, PathBuf) {
+fn copy_to_and_set_root(test_path: &str, server: &mut MinecraftShaderLanguageServer) -> (Rc<TempDir>, PathBuf) {
     let (_tmp_dir, tmp_path) = copy_to_tmp_dir(test_path);
 
-    server.root = tmp_path.clone();//format!("{}{}", "file://", tmp_path);
+    server.root = tmp_path.clone(); //format!("{}{}", "file://", tmp_path);
 
     (_tmp_dir, tmp_path)
 }
@@ -119,10 +119,7 @@ fn test_empty_initialize() {
         }
     };
 
-    let completable = MethodCompletable::new(ResponseCompletable::new(
-        Some(Id::Number(1)),
-        Box::new(on_response),
-    ));
+    let completable = MethodCompletable::new(ResponseCompletable::new(Some(Id::Number(1)), Box::new(on_response)));
     server.initialize(initialize_params, completable);
 
     assert_eq!(server.root, tmp_path);
@@ -169,10 +166,7 @@ fn test_01_initialize() {
         }
     };
 
-    let completable = MethodCompletable::new(ResponseCompletable::new(
-        Some(Id::Number(1)),
-        Box::new(on_response),
-    ));
+    let completable = MethodCompletable::new(ResponseCompletable::new(Some(Id::Number(1)), Box::new(on_response)));
     server.initialize(initialize_params, completable);
     server.endpoint.request_shutdown();
 
@@ -186,7 +180,7 @@ fn test_01_initialize() {
     assert_eq!(
         server.graph.borrow().graph[node1],
         //format!("{:?}/{}/{}", tmp_path, "shaders", "final.fsh")
-        tmp_path.join("shaders").join("final.fsh").to_str().unwrap().to_string()    
+        tmp_path.join("shaders").join("final.fsh").to_str().unwrap().to_string()
     );
     assert_eq!(
         server.graph.borrow().graph[node2],
@@ -194,10 +188,7 @@ fn test_01_initialize() {
         tmp_path.join("shaders").join("common.glsl").to_str().unwrap().to_string()
     );
 
-    assert_eq!(
-        server.graph.borrow().graph.edge_weight(edge).unwrap().line,
-        2
-    );
+    assert_eq!(server.graph.borrow().graph.edge_weight(edge).unwrap().line, 2);
 }
 
 #[test]
@@ -235,10 +226,7 @@ fn test_05_initialize() {
         }
     };
 
-    let completable = MethodCompletable::new(ResponseCompletable::new(
-        Some(Id::Number(1)),
-        Box::new(on_response),
-    ));
+    let completable = MethodCompletable::new(ResponseCompletable::new(Some(Id::Number(1)), Box::new(on_response)));
     server.initialize(initialize_params, completable);
     server.endpoint.request_shutdown();
 
@@ -250,17 +238,40 @@ fn test_05_initialize() {
     let pairs: HashSet<(PathBuf, PathBuf)> = vec![
         (
             tmp_path.join("shaders").join("final.fsh").to_str().unwrap().to_string().into(),
-            tmp_path.join("shaders").join("common.glsl").to_str().unwrap().to_string().into()
+            tmp_path.join("shaders").join("common.glsl").to_str().unwrap().to_string().into(),
         ),
         (
             tmp_path.join("shaders").join("final.fsh").to_str().unwrap().to_string().into(),
-            tmp_path.join("shaders").join("test").join("banana.glsl").to_str().unwrap().to_string().into()
+            tmp_path
+                .join("shaders")
+                .join("test")
+                .join("banana.glsl")
+                .to_str()
+                .unwrap()
+                .to_string()
+                .into(),
         ),
         (
-            tmp_path.join("shaders").join("test").join("banana.glsl").to_str().unwrap().to_string().into(),
-            tmp_path.join("shaders").join("test").join("burger.glsl").to_str().unwrap().to_string().into()
-        )
-    ].into_iter().collect();
+            tmp_path
+                .join("shaders")
+                .join("test")
+                .join("banana.glsl")
+                .to_str()
+                .unwrap()
+                .to_string()
+                .into(),
+            tmp_path
+                .join("shaders")
+                .join("test")
+                .join("burger.glsl")
+                .to_str()
+                .unwrap()
+                .to_string()
+                .into(),
+        ),
+    ]
+    .into_iter()
+    .collect();
 
     for edge in server.graph.borrow().graph.edge_indices() {
         let endpoints = server.graph.borrow().graph.edge_endpoints(edge).unwrap();
@@ -277,15 +288,7 @@ fn test_graph_two_connected_nodes() {
 
     let idx1 = graph.add_node(&PathBuf::from("sample"));
     let idx2 = graph.add_node(&PathBuf::from("banana"));
-    graph.add_edge(
-        idx1,
-        idx2,
-        IncludePosition {
-            line: 3,
-            start: 0,
-            end: 0,
-        },
-    );
+    graph.add_edge(idx1, idx2, IncludePosition { line: 3, start: 0, end: 0 });
 
     let children = graph.child_node_names(idx1);
     assert_eq!(children.len(), 1);
@@ -330,33 +333,9 @@ fn test_collect_root_ancestors() {
         let idx2 = graph.add_node(&PathBuf::from("2"));
         let idx3 = graph.add_node(&PathBuf::from("3"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx2,
-            IncludePosition {
-                line: 3,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx3,
-            idx1,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx1, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+        graph.add_edge(idx3, idx1, IncludePosition { line: 4, start: 0, end: 0 });
 
         //       0  3
         //       |/
@@ -384,33 +363,9 @@ fn test_collect_root_ancestors() {
         let idx2 = graph.add_node(&PathBuf::from("2"));
         let idx3 = graph.add_node(&PathBuf::from("3"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx0,
-            idx2,
-            IncludePosition {
-                line: 3,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx3,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+        graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
 
         //       0
         //      / \
@@ -438,33 +393,9 @@ fn test_collect_root_ancestors() {
         let idx2 = graph.add_node(&PathBuf::from("2"));
         let idx3 = graph.add_node(&PathBuf::from("3"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx2,
-            idx3,
-            IncludePosition {
-                line: 3,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx3,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx2, idx3, IncludePosition { line: 3, start: 0, end: 0 });
+        graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
 
         //       0
         //       |
@@ -494,33 +425,9 @@ fn test_collect_root_ancestors() {
         let idx2 = graph.add_node(&PathBuf::from("2"));
         let idx3 = graph.add_node(&PathBuf::from("3"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx2,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx3,
-            IncludePosition {
-                line: 6,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx1, idx2, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx1, idx3, IncludePosition { line: 6, start: 0, end: 0 });
 
         //       0
         //       |
@@ -552,33 +459,9 @@ fn test_graph_dfs() {
         let idx2 = graph.add_node(&PathBuf::from("2"));
         let idx3 = graph.add_node(&PathBuf::from("3"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx0,
-            idx2,
-            IncludePosition {
-                line: 3,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx3,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+        graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
 
         let dfs = dfs::Dfs::new(&graph, idx0);
 
@@ -618,87 +501,15 @@ fn test_graph_dfs() {
         let idx6 = graph.add_node(&PathBuf::from("6"));
         let idx7 = graph.add_node(&PathBuf::from("7"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx0,
-            idx2,
-            IncludePosition {
-                line: 3,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx3,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx4,
-            IncludePosition {
-                line: 6,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx2,
-            idx4,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx2,
-            idx5,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx3,
-            idx6,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx4,
-            idx6,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx6,
-            idx7,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+        graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+        graph.add_edge(idx1, idx4, IncludePosition { line: 6, start: 0, end: 0 });
+        graph.add_edge(idx2, idx4, IncludePosition { line: 5, start: 0, end: 0 });
+        graph.add_edge(idx2, idx5, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx3, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx4, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx6, idx7, IncludePosition { line: 4, start: 0, end: 0 });
 
         let dfs = dfs::Dfs::new(&graph, idx0);
 
@@ -718,9 +529,7 @@ fn test_graph_dfs() {
         //    3    4    5
         //     \ /
         //      6 - 7
-        let expected_nodes = vec![
-            idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7,
-        ];
+        let expected_nodes = vec![idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7];
 
         assert_eq!(expected_nodes, nodes);
 
@@ -760,96 +569,16 @@ fn test_graph_dfs_cycle() {
         let idx6 = graph.add_node(&PathBuf::from("6"));
         let idx7 = graph.add_node(&PathBuf::from("7"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx0,
-            idx2,
-            IncludePosition {
-                line: 3,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx3,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx4,
-            IncludePosition {
-                line: 6,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx2,
-            idx4,
-            IncludePosition {
-                line: 5,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx2,
-            idx5,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx3,
-            idx6,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx4,
-            idx6,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx6,
-            idx7,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx7,
-            idx4,
-            IncludePosition {
-                line: 4,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+        graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+        graph.add_edge(idx1, idx4, IncludePosition { line: 6, start: 0, end: 0 });
+        graph.add_edge(idx2, idx4, IncludePosition { line: 5, start: 0, end: 0 });
+        graph.add_edge(idx2, idx5, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx3, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx4, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx6, idx7, IncludePosition { line: 4, start: 0, end: 0 });
+        graph.add_edge(idx7, idx4, IncludePosition { line: 4, start: 0, end: 0 });
 
         let mut dfs = dfs::Dfs::new(&graph, idx0);
 
@@ -878,24 +607,8 @@ fn test_graph_dfs_cycle() {
         let idx0 = graph.add_node(&PathBuf::from("0"));
         let idx1 = graph.add_node(&PathBuf::from("1"));
 
-        graph.add_edge(
-            idx0,
-            idx1,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
-        graph.add_edge(
-            idx1,
-            idx0,
-            IncludePosition {
-                line: 2,
-                start: 0,
-                end: 0,
-            },
-        );
+        graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+        graph.add_edge(idx1, idx0, IncludePosition { line: 2, start: 0, end: 0 });
 
         let mut dfs = dfs::Dfs::new(&graph, idx1);
 
@@ -912,22 +625,21 @@ fn test_generate_merge_list_01() {
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/01", &mut server);
     server.endpoint.request_shutdown();
 
-    let final_idx = server.graph.borrow_mut()
+    let final_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{:?}/shaders/final.fsh", tmp_path).try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("final.fsh"));
-    let common_idx = server.graph.borrow_mut()
+    let common_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{:?}/shaders/common.glsl", tmp_path).try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("common.glsl"));
 
-    server.graph.borrow_mut().add_edge(
-        final_idx,
-        common_idx,
-        IncludePosition {
-            line: 2,
-            start: 0,
-            end: 0,
-        },
-    );
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(final_idx, common_idx, IncludePosition { line: 2, start: 0, end: 0 });
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
     let sources = server.load_sources(&nodes).unwrap();
@@ -935,11 +647,18 @@ fn test_generate_merge_list_01() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone().join( "shaders").join("final.fsh.merge");
+    let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
     let mut truth = fs::read_to_string(merge_file).unwrap();
-    truth = truth.replacen("!!", &tmp_path.clone().join("shaders").join("common.glsl").to_str().unwrap().replace("\\", "\\\\"), 1);
-    truth = truth.replace("!!", &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace("\\", "\\\\"));
+    truth = truth.replacen(
+        "!!",
+        &tmp_path.join("shaders").join("common.glsl").to_str().unwrap().replace('\\', "\\\\"),
+        1,
+    );
+    truth = truth.replace(
+        "!!",
+        &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+    );
 
     assert_eq!(result, truth);
 }
@@ -951,46 +670,39 @@ fn test_generate_merge_list_02() {
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/02", &mut server);
     server.endpoint.request_shutdown();
 
-    let final_idx = server.graph.borrow_mut()
+    let final_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("final.fsh"));
-    let test_idx = server.graph.borrow_mut()
+    let test_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("test.glsl"));
-    let burger_idx = server.graph.borrow_mut()
+    let burger_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("burger.glsl"));
-    let sample_idx = server.graph.borrow_mut()
+    let sample_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("sample.glsl"));
 
-    server.graph.borrow_mut().add_edge(
-        final_idx,
-        sample_idx,
-        IncludePosition {
-            line: 2,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        sample_idx,
-        burger_idx,
-        IncludePosition {
-            line: 4,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        sample_idx,
-        test_idx,
-        IncludePosition {
-            line: 6,
-            start: 0,
-            end: 0,
-        },
-    );
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(final_idx, sample_idx, IncludePosition { line: 2, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(sample_idx, burger_idx, IncludePosition { line: 4, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(sample_idx, test_idx, IncludePosition { line: 6, start: 0, end: 0 });
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
     let sources = server.load_sources(&nodes).unwrap();
@@ -998,21 +710,29 @@ fn test_generate_merge_list_02() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone().join("shaders").join("final.fsh.merge");
+    let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
     let mut truth = fs::read_to_string(merge_file).unwrap();
 
-    for file in &[
-        "sample.glsl",
-        "burger.glsl",
-        "sample.glsl",
-        "test.glsl",
-        "sample.glsl",
-    ] {
+    for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
         let path = tmp_path.clone();
-        truth = truth.replacen("!!", &&path.join("shaders").join("utils").join(file).to_str().unwrap().replace("\\", "\\\\"), 1);
+        truth = truth.replacen(
+            "!!",
+            &path
+                .join("shaders")
+                .join("utils")
+                .join(file)
+                .to_str()
+                .unwrap()
+                .replace('\\', "\\\\"),
+            1,
+        );
     }
-    truth = truth.replacen("!!", &&tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace("\\", "\\\\"), 1);
+    truth = truth.replacen(
+        "!!",
+        &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+        1,
+    );
 
     assert_eq!(result, truth);
 }
@@ -1024,46 +744,39 @@ fn test_generate_merge_list_03() {
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/03", &mut server);
     server.endpoint.request_shutdown();
 
-    let final_idx = server.graph.borrow_mut()
+    let final_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("final.fsh"));
-    let test_idx = server.graph.borrow_mut()
+    let test_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "test.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("test.glsl"));
-    let burger_idx = server.graph.borrow_mut()
+    let burger_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "burger.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("burger.glsl"));
-    let sample_idx = server.graph.borrow_mut()
+    let sample_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "sample.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("sample.glsl"));
 
-    server.graph.borrow_mut().add_edge(
-        final_idx,
-        sample_idx,
-        IncludePosition {
-            line: 2,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        sample_idx,
-        burger_idx,
-        IncludePosition {
-            line: 4,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        sample_idx,
-        test_idx,
-        IncludePosition {
-            line: 6,
-            start: 0,
-            end: 0,
-        },
-    );
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(final_idx, sample_idx, IncludePosition { line: 2, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(sample_idx, burger_idx, IncludePosition { line: 4, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(sample_idx, test_idx, IncludePosition { line: 6, start: 0, end: 0 });
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
     let sources = server.load_sources(&nodes).unwrap();
@@ -1071,21 +784,29 @@ fn test_generate_merge_list_03() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone().join("shaders").join("final.fsh.merge");
+    let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
     let mut truth = fs::read_to_string(merge_file).unwrap();
 
-    for file in &[
-        "sample.glsl",
-        "burger.glsl",
-        "sample.glsl",
-        "test.glsl",
-        "sample.glsl",
-    ] {
+    for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
         let path = tmp_path.clone();
-        truth = truth.replacen("!!", &&&path.join("shaders").join("utils").join(file).to_str().unwrap().replace("\\", "\\\\"), 1);
+        truth = truth.replacen(
+            "!!",
+            &path
+                .join("shaders")
+                .join("utils")
+                .join(file)
+                .to_str()
+                .unwrap()
+                .replace('\\', "\\\\"),
+            1,
+        );
     }
-    truth = truth.replacen("!!", &&&tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace("\\", "\\\\"), 1);
+    truth = truth.replacen(
+        "!!",
+        &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+        1,
+    );
 
     assert_eq!(result, truth);
 }
@@ -1097,58 +818,48 @@ fn test_generate_merge_list_04() {
     let (_tmp_dir, tmp_path) = copy_to_and_set_root("./testdata/04", &mut server);
     server.endpoint.request_shutdown();
 
-    let final_idx = server.graph.borrow_mut()
+    let final_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/{}", tmp_path, "final.fsh").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("final.fsh"));
-    let utilities_idx = server.graph.borrow_mut()
+    let utilities_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "utilities.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("utilities.glsl"));
-    let stuff1_idx = server.graph.borrow_mut()
+    let stuff1_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff1.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("stuff1.glsl"));
-    let stuff2_idx = server.graph.borrow_mut()
+    let stuff2_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/utils/{}", tmp_path, "stuff2.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("utils").join("stuff2.glsl"));
-    let matrices_idx = server.graph.borrow_mut()
+    let matrices_idx = server
+        .graph
+        .borrow_mut()
         //.add_node(&format!("{}/shaders/lib/{}", tmp_path, "matrices.glsl").try_into().unwrap());
         .add_node(&tmp_path.join("shaders").join("lib").join("matrices.glsl"));
 
-    server.graph.borrow_mut().add_edge(
-        final_idx,
-        utilities_idx,
-        IncludePosition {
-            line: 2,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        utilities_idx,
-        stuff1_idx,
-        IncludePosition {
-            line: 0,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        utilities_idx,
-        stuff2_idx,
-        IncludePosition {
-            line: 1,
-            start: 0,
-            end: 0,
-        },
-    );
-    server.graph.borrow_mut().add_edge(
-        final_idx,
-        matrices_idx,
-        IncludePosition {
-            line: 3,
-            start: 0,
-            end: 0,
-        },
-    );
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(final_idx, utilities_idx, IncludePosition { line: 2, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(utilities_idx, stuff1_idx, IncludePosition { line: 0, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(utilities_idx, stuff2_idx, IncludePosition { line: 1, start: 0, end: 0 });
+    server
+        .graph
+        .borrow_mut()
+        .add_edge(final_idx, matrices_idx, IncludePosition { line: 3, start: 0, end: 0 });
 
     let nodes = server.get_dfs_for_node(final_idx).unwrap();
     let sources = server.load_sources(&nodes).unwrap();
@@ -1156,7 +867,7 @@ fn test_generate_merge_list_04() {
     let graph_borrow = server.graph.borrow();
     let result = merge_views::generate_merge_list(&nodes, &sources, &graph_borrow);
 
-    let merge_file = tmp_path.clone().join("shaders").join("final.fsh.merge");
+    let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
     let mut truth = fs::read_to_string(merge_file).unwrap();
 
@@ -1168,12 +879,52 @@ fn test_generate_merge_list_04() {
         PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
         PathBuf::new().join("final.fsh").to_str().unwrap(),
         PathBuf::new().join("lib").join("matrices.glsl").to_str().unwrap(),
-        PathBuf::new().join("final.fsh").to_str().unwrap()
+        PathBuf::new().join("final.fsh").to_str().unwrap(),
     ] {
         let path = tmp_path.clone();
         //path.f
-        truth = truth.replacen("!!", &path.join("shaders").join(file).to_str().unwrap().replace("\\", "\\\\"), 1);
+        truth = truth.replacen("!!", &path.join("shaders").join(file).to_str().unwrap().replace('\\', "\\\\"), 1);
     }
 
     assert_eq!(result, truth);
+}
+
+#[test]
+fn test_nvidia_diagnostics() {
+    let mut mockgl = opengl::MockShaderValidator::new();
+    mockgl.expect_vendor().returning(|| "NVIDIA".into());
+    let server = new_temp_server(Some(Box::new(mockgl)));
+
+    let output = "/home/noah/.minecraft/shaderpacks/test/shaders/final.fsh(9) : error C0000: syntax error, unexpected '}', expecting ',' or ';' at token \"}\"";
+
+    let results = server.parse_validator_stdout(
+        &PathBuf::from_str("/home/noah/.minecraft/shaderpacks/test").unwrap(),
+        output.to_string(),
+        "",
+    );
+    assert_eq!(results.len(), 1);
+    let first = results.into_iter().next().unwrap();
+    assert_eq!(
+        first.0,
+        url::Url::from_file_path("/home/noah/.minecraft/shaderpacks/test/shaders/final.fsh").unwrap()
+    );
+    server.endpoint.request_shutdown();
+}
+
+#[test]
+fn test_amd_diagnostics() {
+    let mut mockgl = opengl::MockShaderValidator::new();
+    mockgl.expect_vendor().returning(|| "ATI Technologies".into());
+    let server = new_temp_server(Some(Box::new(mockgl)));
+
+    let output = "ERROR: 0:1: '' : syntax error: #line
+ERROR: 0:10: '' : syntax error: #line
+ERROR: 0:15: 'varying' : syntax error: syntax error
+";
+
+    let results = server.parse_validator_stdout(&PathBuf::from_str("/home/test").unwrap(), output.to_string(), "");
+    assert_eq!(results.len(), 1);
+    let first = results.into_iter().next().unwrap();
+    assert_eq!(first.1.len(), 3);
+    server.endpoint.request_shutdown();
 }

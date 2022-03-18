@@ -1,38 +1,48 @@
-use rust_lsp::jsonrpc::{*, method_types::*};
+use rust_lsp::jsonrpc::{method_types::*, *};
 use rust_lsp::lsp::*;
-use rust_lsp::lsp_types::{*, notification::*};
+use rust_lsp::lsp_types::{notification::*, *};
 
 use petgraph::stable_graph::NodeIndex;
 
-use serde_json::Value;
+use serde::Deserialize;
+use serde_json::{Value, from_value};
+
 use url_norm::FromUrl;
+
 use walkdir::WalkDir;
 
-use std::{cell::RefCell, path::{Path, PathBuf}, str::FromStr};
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::fmt::{Display, Formatter, Debug};
-use std::io::{stdin, stdout, BufRead, BufReader};
-use std::rc::Rc;
+use std::fmt::{Debug, Display, Formatter};
 use std::fs;
+use std::io::{stdin, stdout, BufRead, BufReader};
 use std::iter::{Extend, FromIterator};
+use std::rc::Rc;
+use std::str::FromStr;
+
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+};
+
 use slog::Level;
+use slog_scope::{debug, error, info, warn};
 
 use path_slash::PathBufExt;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 use regex::Regex;
 
 use lazy_static::lazy_static;
 
-mod graph;
 mod commands;
-mod lsp_ext;
-mod dfs;
-mod merge_views;
 mod consts;
+mod dfs;
+mod graph;
+mod lsp_ext;
+mod merge_views;
 mod opengl;
 mod logging;
 mod url_norm;
@@ -73,10 +83,10 @@ fn main() {
         ),
         (
             "virtualMerge",
-            Box::new(commands::VirtualMergedDocument{
-                graph: Rc::clone(&langserver.graph)
-            })
-        )
+            Box::new(commands::VirtualMergedDocument {
+                graph: Rc::clone(&langserver.graph),
+            }),
+        ),
     ]));
 
     LSPEndpoint::run_server_from_input(&mut stdin.lock(), endpoint_output, langserver);
@@ -110,8 +120,12 @@ impl Display for IncludePosition {
     }
 }
 
+#[derive(Debug)]
 pub enum TreeType {
-    Fragment, Vertex, Geometry, Compute
+    Fragment,
+    Vertex,
+    Geometry,
+    Compute,
 }
 
 impl MinecraftShaderLanguageServer {
@@ -125,10 +139,12 @@ impl MinecraftShaderLanguageServer {
     }
 
     pub fn gen_initial_graph(&self) {
-        eprintln!("root of project is {:?}", self.root);
+        info!("generating graph for current root"; "root" => self.root.to_str().unwrap());
 
         // filter directories and files not ending in any of the 3 extensions
-        WalkDir::new(&self.root).into_iter().filter_map(|entry| {
+        WalkDir::new(&self.root)
+            .into_iter()
+            .filter_map(|entry| {
                 if entry.is_err() {
                     return None;
                 }
@@ -141,29 +157,31 @@ impl MinecraftShaderLanguageServer {
 
                 let ext = match path.extension() {
                     Some(e) => e,
-                None => return None,
+                    None => return None,
                 };
 
+                // TODO: include user added extensions
                 if ext != "vsh" && ext != "fsh" && ext != "glsl" && ext != "inc" {
                     return None;
                 }
 
                 Some(entry.into_path())
-        }).for_each(|path| {
-            // iterate all valid found files, search for includes, add a node into the graph for each
-            // file and add a file->includes KV into the map
-            self.add_file_and_includes_to_graph(&path);
-        });
+            })
+            .for_each(|path| {
+                // iterate all valid found files, search for includes, add a node into the graph for each
+                // file and add a file->includes KV into the map
+                self.add_file_and_includes_to_graph(&path);
+            });
 
-        eprintln!("finished building project include graph");
+        info!("finished building project include graph");
     }
 
     fn add_file_and_includes_to_graph(&self, path: &Path) {
         let includes = self.find_includes(path);
 
-        let idx = self.graph.borrow_mut().add_node(&path);
+        let idx = self.graph.borrow_mut().add_node(path);
 
-        //eprintln!("adding {:?} with {:?}", path, includes);
+        debug!("adding includes for new file"; "file" => path.to_str().unwrap(), "includes" => format!("{:?}", includes));
         for include in includes {
             self.add_include(include, idx);
         }
@@ -186,17 +204,12 @@ impl MinecraftShaderLanguageServer {
             })
             .filter(|line| RE_INCLUDE.is_match(line.1.as_str()))
             .for_each(|line| {
-                let cap = RE_INCLUDE
-                    .captures(line.1.as_str())
-                    .unwrap()
-                    .get(1)
-                    .unwrap();
+                let cap = RE_INCLUDE.captures(line.1.as_str()).unwrap().get(1).unwrap();
 
                 let start = cap.start();
                 let end = cap.end();
                 let mut path: String = cap.as_str().into();
 
-                // TODO: difference between / and not
                 let full_include = if path.starts_with('/') {
                     path = path.strip_prefix('/').unwrap().to_string();
                     self.root.join("shaders").join(PathBuf::from_slash(&path))
@@ -204,14 +217,7 @@ impl MinecraftShaderLanguageServer {
                     file.parent().unwrap().join(PathBuf::from_slash(&path))
                 };
 
-                includes.push((
-                    full_include,
-                    IncludePosition {
-                        line: line.0,
-                        start,
-                        end,
-                    }
-                ));
+                includes.push((full_include, IncludePosition { line: line.0, start, end }));
             });
 
         includes
@@ -220,12 +226,10 @@ impl MinecraftShaderLanguageServer {
     fn update_includes(&self, file: &Path) {
         let includes = self.find_includes(file);
 
-        eprintln!("updating {:?} with {:?}", file, includes);
+        info!("includes found for file"; "file" => file.to_str().unwrap(), "includes" => format!("{:?}", includes));
 
-        let idx = match self.graph.borrow_mut().find_node(&file) {
-            None => {
-                return
-            },
+        let idx = match self.graph.borrow_mut().find_node(file) {
+            None => return,
             Some(n) => n,
         };
 
@@ -235,7 +239,11 @@ impl MinecraftShaderLanguageServer {
         let to_be_added = new_children.difference(&prev_children);
         let to_be_removed = prev_children.difference(&new_children);
 
-        eprintln!("removing:\n\t{:?}\nadding:\n\t{:?}", to_be_removed, to_be_added);
+        debug!(
+            "include sets diff'd";
+            "for removal" => format!("{:?}", to_be_removed),
+            "for addition" => format!("{:?}", to_be_added)
+        );
 
         for removal in to_be_removed {
             let child = self.graph.borrow_mut().find_node(&removal.0).unwrap();
@@ -256,15 +264,25 @@ impl MinecraftShaderLanguageServer {
             },
             Err(e) => return Err(e),
         };
-        
-        eprintln!("ancestors for {:?}:\n\t{:?}", uri, file_ancestors.iter().map(|e| PathBuf::from_str(&self.graph.borrow().graph.node_weight(*e).unwrap().clone()).unwrap()).collect::<Vec<PathBuf>>());
+
+        info!(
+            "top-level file ancestors found";
+            "uri" => uri.to_str().unwrap(),
+            "ancestors" => format!("{:?}", file_ancestors
+                .iter()
+                .map(|e| PathBuf::from_str(
+                    &self.graph.borrow().graph[*e].clone()
+                )
+                .unwrap())
+                .collect::<Vec<PathBuf>>())
+        );
 
         // the set of all filepath->content.
         let mut all_sources: HashMap<PathBuf, String> = HashMap::new();
         // the set of filepath->list of diagnostics to report
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
 
-        // we want to backfill the diagnostics map with all linked sources 
+        // we want to backfill the diagnostics map with all linked sources
         let back_fill = |all_sources: &HashMap<PathBuf, String>, diagnostics: &mut HashMap<Url, Vec<Diagnostic>>| {
             for path in all_sources.keys() {
                 diagnostics.entry(Url::from_file_path(path).unwrap()).or_default();
@@ -273,8 +291,8 @@ impl MinecraftShaderLanguageServer {
 
         // if we are a top-level file (this has to be one of the set defined by Optifine, right?)
         if file_ancestors.is_empty() {
-            // gather the list of all descendants 
-            let root = self.graph.borrow_mut().find_node(&uri).unwrap();
+            // gather the list of all descendants
+            let root = self.graph.borrow_mut().find_node(uri).unwrap();
             let tree = match self.get_dfs_for_node(root) {
                 Ok(tree) => tree,
                 Err(e) => {
@@ -283,20 +301,20 @@ impl MinecraftShaderLanguageServer {
                 }
             };
 
-            all_sources.extend( self.load_sources(&tree)?);
+            all_sources.extend(self.load_sources(&tree)?);
 
             let view = {
-            let graph = self.graph.borrow();
+                let graph = self.graph.borrow();
                 merge_views::generate_merge_list(&tree, &all_sources, &graph)
             };
 
             let root_path = self.graph.borrow().get_node(root);
             let ext = match root_path.extension() {
-                Some(ext) => ext,
+                Some(ext) => ext.to_str().unwrap(),
                 None => {
                     back_fill(&all_sources, &mut diagnostics);
-                    return Ok(diagnostics)
-                },
+                    return Ok(diagnostics);
+                }
             };
             let tree_type = if ext == "fsh" {
                 TreeType::Fragment
@@ -307,17 +325,20 @@ impl MinecraftShaderLanguageServer {
             } else if ext == "csh" {
                 TreeType::Compute
             } else {
-                eprintln!("got a non fsh|vsh|gsh|csh ({:?}) as a file root ancestor: {:?}", ext, root_path);
+                warn!(
+                    "got a non fsh|vsh|gsh|csh as a file root ancestor, skipping lint";
+                    "extension" => ext, "root_ancestor" => root_path.to_str().unwrap()
+                );
                 back_fill(&all_sources, &mut diagnostics);
-                return Ok(diagnostics)
+                return Ok(diagnostics);
             };
 
             let stdout = match self.opengl_context.clone().validate(tree_type, view) {
                 Some(s) => s,
                 None => {
                     back_fill(&all_sources, &mut diagnostics);
-                    return Ok(diagnostics)
-                },
+                    return Ok(diagnostics);
+                }
             };
             diagnostics.extend(self.parse_validator_stdout(uri, stdout, ""));
         } else {
@@ -335,8 +356,8 @@ impl MinecraftShaderLanguageServer {
 
                 let root_path = self.graph.borrow().get_node(*root).clone();
                 let ext = match root_path.extension() {
-                    Some(ext) => ext,
-                    None => continue
+                    Some(ext) => ext.to_str().unwrap(),
+                    None => continue,
                 };
                 let tree_type = if ext == "fsh" {
                     TreeType::Fragment
@@ -347,7 +368,10 @@ impl MinecraftShaderLanguageServer {
                 } else if ext == "csh" {
                     TreeType::Compute
                 } else {
-                    eprintln!("got a non fsh|vsh|gsh|csh ({:?}) as a file root ancestor: {:?}", ext, root_path);
+                    warn!(
+                        "got a non fsh|vsh|gsh|csh as a file root ancestor, skipping lint";
+                        "extension" => ext, "root_ancestor" => root_path.to_str().unwrap()
+                    );
                     continue;
                 };
 
@@ -358,7 +382,7 @@ impl MinecraftShaderLanguageServer {
 
             for tree in all_trees {
                 let view = {
-                let graph = self.graph.borrow();
+                    let graph = self.graph.borrow();
                     merge_views::generate_merge_list(&tree.1, &all_sources, &graph)
                 };
 
@@ -451,7 +475,7 @@ impl MinecraftShaderLanguageServer {
 
         let dfs = dfs::Dfs::new(&graph_ref, root);
 
-        dfs.collect::<Result<Vec<_>, _>>()
+        dfs.collect::<Result<_, _>>()
     }
 
     pub fn load_sources(&self, nodes: &[(NodeIndex, Option<NodeIndex>)]) -> Result<HashMap<PathBuf, String>> {
@@ -467,7 +491,7 @@ impl MinecraftShaderLanguageServer {
 
             let source = match fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(e) => return Err(anyhow!("error reading {:?}: {}", path, e))
+                Err(e) => return Err(anyhow!("error reading {:?}: {}", path, e)),
             };
             let source = source.replace("\r\n", "\n");
             sources.insert(path.clone(), source);
@@ -489,86 +513,88 @@ impl MinecraftShaderLanguageServer {
     }
 
     pub fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
-        eprintln!("DIAGNOSTICS:\n{:?}", diagnostics);
+        // info!("DIAGNOSTICS:\n{:?}", diagnostics);
         for (uri, diagnostics) in diagnostics {
-            self.endpoint.send_notification(PublishDiagnostics::METHOD, PublishDiagnosticsParams {
-                uri,
-                diagnostics,
-                version: document_version,
-            }).expect("failed to publish diagnostics");
+            self.endpoint
+                .send_notification(
+                    PublishDiagnostics::METHOD,
+                    PublishDiagnosticsParams {
+                        uri,
+                        diagnostics,
+                        version: document_version,
+                    },
+                )
+                .expect("failed to publish diagnostics");
         }
     }
 
     fn set_status(&self, status: impl Into<String>, message: impl Into<String>, icon: impl Into<String>) {
-        self.endpoint.send_notification(lsp_ext::Status::METHOD, lsp_ext::StatusParams {
-            status: status.into(),
-            message: Some(message.into()),
-            icon: Some(icon.into()),
-        }).unwrap_or(());
+        self.endpoint
+            .send_notification(
+                lsp_ext::Status::METHOD,
+                lsp_ext::StatusParams {
+                    status: status.into(),
+                    message: Some(message.into()),
+                    icon: Some(icon.into()),
+                },
+            )
+            .unwrap_or(());
     }
 }
 
 impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn initialize(&mut self, params: InitializeParams, completable: MethodCompletable<InitializeResult, InitializeError>) {
-        
+        logging::slog_with_trace_id(|| {
+            info!("starting server...");
 
-        let capabilities = ServerCapabilities{
-            document_link_provider: Some(DocumentLinkOptions {
-            resolve_provider: None,
-            work_done_progress_options: WorkDoneProgressOptions {
-                work_done_progress: None,
-            },
-            }),
-            execute_command_provider: Some(ExecuteCommandOptions {
-            commands: vec!["graphDot".into()],
-            work_done_progress_options: WorkDoneProgressOptions {
-                work_done_progress: None,
-            },
-            }),
-            text_document_sync: Some(TextDocumentSyncCapability::Options(
-            TextDocumentSyncOptions {
-                open_close: Some(true),
-                will_save: None,
-                will_save_wait_until: None,
-                change: Some(TextDocumentSyncKind::Full),
-                save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
-                    include_text: Some(true),
-                }))
-            },
-            )),
-            .. ServerCapabilities::default()
-        };
+            let capabilities = ServerCapabilities {
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: None,
+                    work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+                }),
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec!["graphDot".into()],
+                    work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+                }),
+                text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
+                    open_close: Some(true),
+                    will_save: None,
+                    will_save_wait_until: None,
+                    change: Some(TextDocumentSyncKind::Full),
+                    save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions { include_text: Some(true) })),
+                })),
+                ..ServerCapabilities::default()
+            };
 
-        let root = match params.root_uri {
-            Some(uri) => PathBuf::from_url(uri),
-            None => {
-                completable.complete(Err(MethodError {
-                    code: 42069,
-                    message: "Must be in workspace".into(),
-                    data: InitializeError {
-                        retry: false,
-                    },
-                }));
-                return;
-            }
-        };
+            let root = match params.root_uri {
+                Some(uri) => PathBuf::from_url(uri),
+                None => {
+                    completable.complete(Err(MethodError {
+                        code: 42069,
+                        message: "Must be in workspace".into(),
+                        data: InitializeError { retry: false },
+                    }));
+                    return;
+                }
+            };
 
-        completable.complete(Ok(InitializeResult {
-            capabilities,
-            server_info: None,
-        }));
+            completable.complete(Ok(InitializeResult {
+                capabilities,
+                server_info: None,
+            }));
 
-        self.set_status("loading", "Building dependency graph...", "$(loading~spin)");
+            self.set_status("loading", "Building dependency graph...", "$(loading~spin)");
 
-        self.root = root;
+            self.root = root;
 
-        self.gen_initial_graph();
+            self.gen_initial_graph();
 
-        self.set_status("ready", "Project initialized", "$(check)");
+            self.set_status("ready", "Project initialized", "$(check)");
+        });
     }
 
     fn shutdown(&mut self, _: (), completable: LSCompletable<()>) {
-        eprintln!("shutting down language server...");
+        warn!("shutting down language server...");
         completable.complete(Ok(()));
     }
 
@@ -577,22 +603,25 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn workspace_change_configuration(&mut self, params: DidChangeConfigurationParams) {
-        //let config = params.settings.as_object().unwrap().get("mcglsl").unwrap();
+        logging::slog_with_trace_id(|| {
+        });
     }
 
     fn did_open_text_document(&mut self, params: DidOpenTextDocumentParams) {
-        //eprintln!("opened doc {}", params.text_document.uri);
-        let path = PathBuf::from_url(params.text_document.uri);
-        if !path.starts_with(&self.root) {
-            return
-        }
-        if self.graph.borrow_mut().find_node(&path) == None {
-            self.add_file_and_includes_to_graph(&path);
-        }
-        match self.lint(&path) {
-            Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
-            Err(e) => eprintln!("error linting: {}", e),
-        }
+        logging::slog_with_trace_id(|| {
+            //info!("opened doc {}", params.text_document.uri);
+            let path = PathBuf::from_url(params.text_document.uri);
+            if !path.starts_with(&self.root) {
+                return;
+            }
+            if self.graph.borrow_mut().find_node(&path) == None {
+                self.add_file_and_includes_to_graph(&path);
+            }
+            match self.lint(&path) {
+                Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
+                Err(e) => error!("error linting"; "error" => format!("{:?}", e), "path" => path.to_str().unwrap()),
+            }
+        });
     }
 
     fn did_change_text_document(&mut self, _: DidChangeTextDocumentParams) {}
@@ -600,18 +629,18 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn did_close_text_document(&mut self, _: DidCloseTextDocumentParams) {}
 
     fn did_save_text_document(&mut self, params: DidSaveTextDocumentParams) {
-        //eprintln!("saved doc {}", params.text_document.uri);
+        logging::slog_with_trace_id(|| {
+            let path = PathBuf::from_url(params.text_document.uri);
+            if !path.starts_with(&self.root) {
+                return;
+            }
+            self.update_includes(&path);
 
-        let path = PathBuf::from_url(params.text_document.uri);
-        if !path.starts_with(&self.root) {
-            return
-        }
-        self.update_includes(&path);
-        
-        match self.lint(&path) {
-            Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
-            Err(e) => eprintln!("error linting: {}", e),
-        }
+            match self.lint(&path) {
+                Ok(diagnostics) => self.publish_diagnostic(diagnostics, None),
+                Err(e) => error!("error linting"; "error" => format!("{:?}", e), "path" => path.to_str().unwrap()),
+            }
+        });
     }
 
     fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) {}
@@ -635,24 +664,41 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn execute_command(&mut self, params: ExecuteCommandParams, completable: LSCompletable<Option<Value>>) {
-        match self.command_provider.as_ref().unwrap().execute(&params.command, params.arguments, &self.root) {
-            Ok(resp) => {
-                eprintln!("executed {} successfully", params.command);
-                self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
-                    typ: MessageType::Info,
-                    message: format!("Command {} executed successfully.", params.command),
-                }).expect("failed to send popup/show message notification");
-                completable.complete(Ok(Some(resp)))
-            },
-            Err(err) => {
-                self.endpoint.send_notification(ShowMessage::METHOD, ShowMessageParams {
-                    typ: MessageType::Error,
-                    message: format!("Failed to execute `{}`. Reason: {}", params.command, err),
-                }).expect("failed to send popup/show message notification");
-                eprintln!("failed to execute {}: {}", params.command, err);
-                completable.complete(Err(MethodError::new(32420, err.to_string(), ())))
-            },
-        }
+        logging::slog_with_trace_id(|| {
+            match self
+                .command_provider
+                .as_ref()
+                .unwrap()
+                .execute(&params.command, &params.arguments, &self.root)
+            {
+                Ok(resp) => {
+                    info!("executed command successfully"; "command" => params.command.clone());
+                    self.endpoint
+                        .send_notification(
+                            ShowMessage::METHOD,
+                            ShowMessageParams {
+                                typ: MessageType::Info,
+                                message: format!("Command {} executed successfully.", params.command),
+                            },
+                        )
+                        .expect("failed to send popup/show message notification");
+                    completable.complete(Ok(Some(resp)))
+                }
+                Err(err) => {
+                    error!("failed to execute command"; "command" => params.command.clone(), "error" => format!("{:?}", err));
+                    self.endpoint
+                        .send_notification(
+                            ShowMessage::METHOD,
+                            ShowMessageParams {
+                                typ: MessageType::Error,
+                                message: format!("Failed to execute `{}`. Reason: {}", params.command, err),
+                            },
+                        )
+                        .expect("failed to send popup/show message notification");
+                    completable.complete(Err(MethodError::new(32420, err.to_string(), ())))
+                }
+            }
+        });
     }
 
     fn signature_help(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<SignatureHelp>) {
@@ -692,55 +738,52 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn document_link(&mut self, params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
-        eprintln!("document link file: {:?}", params.text_document.uri.to_file_path().unwrap());
-        // node for current document
-        let curr_doc = params
-            .text_document
-            .uri
-            .to_file_path()
-            .unwrap();
-        let node = match self.graph.borrow_mut().find_node(&curr_doc) {
-            Some(n) => n,
-            None => {
-                completable.complete(Ok(vec![]));
-                return
-            },
-        };
+        logging::slog_with_trace_id(|| {
+            // node for current document
+            let curr_doc = params.text_document.uri.to_file_path().unwrap();
+            let node = match self.graph.borrow_mut().find_node(&curr_doc) {
+                Some(n) => n,
+                None => {
+                    warn!("document not found in graph"; "path" => curr_doc.to_str().unwrap());
+                    completable.complete(Ok(vec![]));
+                    return;
+                }
+            };
 
-        let edges: Vec<DocumentLink> = self
-            .graph
-            .borrow()
-            .child_node_indexes(node)
-            .into_iter()
-            .filter_map(|child| {
-                let graph = self.graph.borrow();
-                let value = graph.get_edge_meta(node, child);
-                let path = graph.get_node(child);
-                let url = match Url::from_file_path(&path) {
-                    Ok(url) => url,
-                    Err(e) => {
-                        eprintln!("error converting {:?} into url: {:?}", path, e);
-                        return None;
-                    }
-                };
+            let edges: Vec<DocumentLink> = self
+                .graph
+                .borrow()
+                .child_node_indexes(node)
+                .into_iter()
+                .filter_map(|child| {
+                    let graph = self.graph.borrow();
+                    let value = graph.get_edge_meta(node, child);
+                    let path = graph.get_node(child);
+                    let url = match Url::from_file_path(&path) {
+                        Ok(url) => url,
+                        Err(e) => {
+                            error!("error converting into url"; "path" => path.to_str().unwrap(), "error" => format!("{:?}", e));
+                            return None;
+                        }
+                    };
 
-                Some(DocumentLink {
-                    range: Range::new(
-                        Position::new(
-                            u32::try_from(value.line).unwrap(),
-                            u32::try_from(value.start).unwrap()),
-                        Position::new(
-                            u32::try_from(value.line).unwrap(),
-                            u32::try_from(value.end).unwrap()),
-                    ),
-                    target: Some(url),
-                    //tooltip: Some(url.path().to_string().strip_prefix(self.root.clone().unwrap().as_str()).unwrap().to_string()),
-                    tooltip: None,
-                    data: None,
+                    Some(DocumentLink {
+                        range: Range::new(
+                            Position::new(u32::try_from(value.line).unwrap(), u32::try_from(value.start).unwrap()),
+                            Position::new(u32::try_from(value.line).unwrap(), u32::try_from(value.end).unwrap()),
+                        ),
+                        target: Some(url.clone()),
+                        tooltip: Some(url.path().to_string()),
+                        data: None,
+                    })
                 })
-            }).collect();
-        eprintln!("links: {:?}", edges);
-        completable.complete(Ok(edges));
+                .collect();
+            debug!("document link results";
+                "links" => format!("{:?}", edges.iter().map(|e| (e.range, e.target.as_ref().unwrap().path())).collect::<Vec<_>>()),
+                "path" => curr_doc.to_str().unwrap(),
+            );
+            completable.complete(Ok(edges));
+        });
     }
 
     fn document_link_resolve(&mut self, _: DocumentLink, completable: LSCompletable<DocumentLink>) {

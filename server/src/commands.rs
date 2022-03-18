@@ -1,34 +1,37 @@
-use std::{collections::HashMap, path::{Path, PathBuf}};
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::rc::Rc;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
+use petgraph::dot::Config;
 use serde_json::Value;
 
 use petgraph::{dot, graph::NodeIndex};
 
-use anyhow::{Result, format_err};
+use anyhow::{format_err, Result};
+use slog_scope::info;
 
 use std::fs;
 
-use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJson};
 use crate::dfs;
+use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJson};
 
 pub struct CustomCommandProvider {
-    commands: HashMap<String, Box<dyn Invokeable>>
+    commands: HashMap<String, Box<dyn Invokeable>>,
 }
 
 impl CustomCommandProvider {
     pub fn new(commands: Vec<(&str, Box<dyn Invokeable>)>) -> CustomCommandProvider {
-       CustomCommandProvider{
-            commands: commands.into_iter().map(|tup| {
-                (tup.0.into(), tup.1)
-            }).collect(),
+        CustomCommandProvider {
+            commands: commands.into_iter().map(|tup| (tup.0.into(), tup.1)).collect(),
         }
     }
 
-    pub fn execute(&self, command: &str, args: Vec<Value>, root_path: &Path) -> Result<Value> {
+    pub fn execute(&self, command: &str, args: &[Value], root_path: &Path) -> Result<Value> {
         if self.commands.contains_key(command) {
             return self.commands.get(command).unwrap().run_command(root_path, args);
         }
@@ -37,43 +40,42 @@ impl CustomCommandProvider {
 }
 
 pub trait Invokeable {
-    fn run_command(&self, root: &Path, arguments: Vec<Value>) -> Result<Value>;
+    fn run_command(&self, root: &Path, arguments: &[Value]) -> Result<Value>;
 }
 
 pub struct GraphDotCommand {
-    pub graph: Rc<RefCell<CachedStableGraph>>
+    pub graph: Rc<RefCell<CachedStableGraph>>,
 }
 
 impl Invokeable for GraphDotCommand {
-    fn run_command(&self, root: &Path, _: Vec<Value>) -> Result<Value> {
+    fn run_command(&self, root: &Path, _: &[Value]) -> Result<Value> {
         let filepath = root.join("graph.dot");
-        eprintln!("generating dot file at {:?}", filepath);
-        let mut file = OpenOptions::new()
-            .truncate(true)
-            .write(true)
-            .create(true)
-            .open(filepath)
-            .unwrap();
+
+        info!("generating dot file"; "path" => filepath.as_os_str().to_str());
+
+        let mut file = OpenOptions::new().truncate(true).write(true).create(true).open(filepath).unwrap();
 
         let mut write_data_closure = || -> Result<(), std::io::Error> {
             let graph = self.graph.as_ref();
 
             file.seek(std::io::SeekFrom::Start(0))?;
-            file.write_all(dot::Dot::new(&graph.borrow().graph).to_string().as_bytes())?;
+            file.write_all("digraph {\n\tgraph [splines=ortho]\n\tnode [shape=box]\n".as_bytes())?;
+            file.write_all(dot::Dot::with_config(&graph.borrow().graph, &[Config::GraphContentOnly]).to_string().as_bytes())?;
+            file.write_all("\n}".as_bytes())?;
             file.flush()?;
             file.seek(std::io::SeekFrom::Start(0))?;
             Ok(())
         };
 
         match write_data_closure() {
-            Err(err) => Err(format_err!("Error generating graphviz data: {}", err)),
-            _ => Ok(Value::Null)
+            Err(err) => Err(format_err!("error generating graphviz data: {}", err)),
+            _ => Ok(Value::Null),
         }
     }
 }
 
 pub struct VirtualMergedDocument {
-    pub graph: Rc<RefCell<CachedStableGraph>>
+    pub graph: Rc<RefCell<CachedStableGraph>>,
 }
 
 impl VirtualMergedDocument {
@@ -111,7 +113,7 @@ impl VirtualMergedDocument {
 
             let source = match fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(e) => return Err(format_err!("error reading {:?}: {}", path, e))
+                Err(e) => return Err(format_err!("error reading {:?}: {}", path, e)),
             };
             let source = source.replace("\r\n", "\n");
             sources.insert(path.clone(), source);
@@ -122,7 +124,7 @@ impl VirtualMergedDocument {
 }
 
 impl Invokeable for VirtualMergedDocument {
-    fn run_command(&self, root: &Path, arguments: Vec<Value>) -> Result<Value> {
+    fn run_command(&self, root: &Path, arguments: &[Value]) -> Result<Value> {
         let path = PathBuf::from_json(arguments.get(0).unwrap())?;
 
         let file_ancestors = match self.get_file_toplevel_ancestors(&path) {
@@ -132,15 +134,15 @@ impl Invokeable for VirtualMergedDocument {
             },
             Err(e) => return Err(e),
         };
-        
-        //eprintln!("ancestors for {}:\n\t{:?}", path, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
+
+        //info!("ancestors for {}:\n\t{:?}", path, file_ancestors.iter().map(|e| self.graph.borrow().graph.node_weight(*e).unwrap().clone()).collect::<Vec<String>>());
 
         // the set of all filepath->content. TODO: change to Url?
         let mut all_sources: HashMap<PathBuf, String> = HashMap::new();
 
         // if we are a top-level file (this has to be one of the set defined by Optifine, right?)
         if file_ancestors.is_empty() {
-            // gather the list of all descendants 
+            // gather the list of all descendants
             let root = self.graph.borrow_mut().find_node(&path).unwrap();
             let tree = match self.get_dfs_for_node(root) {
                 Ok(tree) => tree,
@@ -149,7 +151,7 @@ impl Invokeable for VirtualMergedDocument {
 
             let sources = match self.load_sources(&tree) {
                 Ok(s) => s,
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             };
             all_sources.extend(sources);
 
@@ -157,6 +159,9 @@ impl Invokeable for VirtualMergedDocument {
             let view = merge_views::generate_merge_list(&tree, &all_sources, &graph);
             return Ok(serde_json::value::Value::String(view));
         }
-        return Err(format_err!("{:?} is not a top-level file aka has ancestors", path.strip_prefix(root).unwrap()))
+        return Err(format_err!(
+            "{:?} is not a top-level file aka has ancestors",
+            path.strip_prefix(root).unwrap()
+        ));
     }
 }

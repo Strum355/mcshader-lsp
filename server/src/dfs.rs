@@ -10,19 +10,19 @@ struct VisitCount {
     children: usize,
 }
 
-/// Performs a depth-first search with duplicates 
+/// Performs a depth-first search with duplicates
 pub struct Dfs<'a> {
     stack: Vec<NodeIndex>,
     graph: &'a CachedStableGraph,
-    cycle: Vec<VisitCount>
+    cycle: Vec<VisitCount>,
 }
 
-impl <'a> Dfs<'a> {
+impl<'a> Dfs<'a> {
     pub fn new(graph: &'a CachedStableGraph, start: NodeIndex) -> Self {
         Dfs {
             stack: vec![start],
             graph,
-            cycle: Vec::new()
+            cycle: Vec::new(),
         }
     }
 
@@ -42,49 +42,44 @@ impl <'a> Dfs<'a> {
             for child in children {
                 if prev.node == *child {
                     let cycle_nodes: Vec<NodeIndex> = self.cycle.iter().map(|n| n.node).collect();
-                    return Err(
-                        error::CycleError::new(&cycle_nodes, *child, self.graph)
-                    );
+                    return Err(error::CycleError::new(&cycle_nodes, *child, self.graph));
                 }
             }
         }
         Ok(())
-    }   
+    }
 }
 
-impl <'a> Iterator for Dfs<'a> {
+impl<'a> Iterator for Dfs<'a> {
     type Item = Result<(NodeIndex, Option<NodeIndex>), error::CycleError>;
 
     fn next(&mut self) -> Option<Result<(NodeIndex, Option<NodeIndex>), error::CycleError>> {
-        let parent = match self.cycle.last() {
-            Some(p) => Some(p.node),
-            None => None,
-        };
+        let parent = self.cycle.last().map(|p| p.node);
 
         if let Some(node) = self.stack.pop() {
-            self.cycle.push(VisitCount{
+            self.cycle.push(VisitCount {
                 node,
                 children: self.graph.graph.edges(node).count(),
                 touch: 1,
             });
 
             let mut children = self.graph.child_node_indexes(node);
-            
+
             if !children.is_empty() {
                 // sort by line number in parent
                 children.sort_by(|x, y| {
                     let graph = &self.graph.graph;
                     let edge1 = graph.edge_weight(graph.find_edge(node, *x).unwrap()).unwrap();
                     let edge2 = graph.edge_weight(graph.find_edge(node, *y).unwrap()).unwrap();
-    
+
                     edge2.line.cmp(&edge1.line)
                 });
-    
+
                 match self.check_for_cycle(&children) {
                     Ok(_) => {}
                     Err(e) => return Some(Err(e)),
                 };
-    
+
                 for child in children {
                     self.stack.push(child);
                 }
@@ -101,9 +96,13 @@ impl <'a> Iterator for Dfs<'a> {
 pub mod error {
     use petgraph::stable_graph::NodeIndex;
 
-    use std::{fmt::{Debug, Display}, path::PathBuf, error::Error as StdError};
+    use std::{
+        error::Error as StdError,
+        fmt::{Debug, Display},
+        path::PathBuf,
+    };
 
-    use crate::{graph::CachedStableGraph, consts};
+    use crate::{consts, graph::CachedStableGraph};
 
     use rust_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
@@ -111,7 +110,7 @@ pub mod error {
     pub struct CycleError(Vec<PathBuf>);
 
     impl StdError for CycleError {}
-    
+
     impl CycleError {
         pub fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph) -> Self {
             let mut resolved_nodes: Vec<PathBuf> = nodes.iter().map(|i| graph.get_node(*i)).collect();
@@ -119,22 +118,22 @@ pub mod error {
             CycleError(resolved_nodes)
         }
     }
-    
+
     impl Display for CycleError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let mut disp = String::new();
             disp.push_str(format!("Include cycle detected:\n{:?} imports ", self.0[0]).as_str());
-            for p in &self.0[1..self.0.len()-1] {
+            for p in &self.0[1..self.0.len() - 1] {
                 disp.push_str(format!("\n{:?}, which imports ", *p).as_str());
             }
-            disp.push_str(format!("\n{:?}", self.0[self.0.len()-1]).as_str());
+            disp.push_str(format!("\n{:?}", self.0[self.0.len() - 1]).as_str());
             f.write_str(disp.as_str())
         }
     }
 
     impl From<CycleError> for Diagnostic {
         fn from(e: CycleError) -> Diagnostic {
-            Diagnostic{
+            Diagnostic {
                 severity: Some(DiagnosticSeverity::Error),
                 range: Range::new(Position::new(0, 0), Position::new(0, 500)),
                 source: Some(consts::SOURCE.into()),

@@ -1,9 +1,13 @@
-use petgraph::stable_graph::StableDiGraph;
-use petgraph::stable_graph::NodeIndex;
-use petgraph::Direction;
 use petgraph::stable_graph::EdgeIndex;
+use petgraph::stable_graph::NodeIndex;
+use petgraph::stable_graph::StableDiGraph;
+use petgraph::Direction;
 
-use std::{collections::{HashMap, HashSet}, path::{Path, PathBuf}, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use super::IncludePosition;
 
@@ -16,14 +20,14 @@ pub struct CachedStableGraph {
     pub graph: StableDiGraph<String, IncludePosition>,
     cache: HashMap<PathBuf, NodeIndex>,
     // Maps a node index to its abstracted string representation.
-    // Mainly used as the graph is based on NodeIndex and 
+    // Mainly used as the graph is based on NodeIndex.
     reverse_index: HashMap<NodeIndex, PathBuf>,
 }
 
 impl CachedStableGraph {
     #[allow(clippy::new_without_default)]
     pub fn new() -> CachedStableGraph {
-        CachedStableGraph{
+        CachedStableGraph {
             graph: StableDiGraph::new(),
             cache: HashMap::new(),
             reverse_index: HashMap::new(),
@@ -91,15 +95,21 @@ impl CachedStableGraph {
 
     #[allow(dead_code)]
     pub fn child_node_names(&self, node: NodeIndex) -> Vec<PathBuf> {
-        self.graph.neighbors(node).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
+        self.graph
+            .neighbors(node)
+            .map(|n| self.reverse_index.get(&n).unwrap().clone())
+            .collect()
     }
 
     pub fn child_node_meta(&self, node: NodeIndex) -> Vec<(PathBuf, IncludePosition)> {
-        self.graph.neighbors(node).map(|n| {
-            let edge = self.graph.find_edge(node, n).unwrap();
-            let edge_meta = self.graph.edge_weight(edge).unwrap();
-            return (self.reverse_index.get(&n).unwrap().clone(), edge_meta.clone())
-        }).collect()
+        self.graph
+            .neighbors(node)
+            .map(|n| {
+                let edge = self.graph.find_edge(node, n).unwrap();
+                let edge_meta = self.graph.edge_weight(edge).unwrap();
+                return (self.reverse_index.get(&n).unwrap().clone(), edge_meta.clone());
+            })
+            .collect()
     }
 
     pub fn child_node_indexes(&self, node: NodeIndex) -> Vec<NodeIndex> {
@@ -108,7 +118,10 @@ impl CachedStableGraph {
 
     #[allow(dead_code)]
     pub fn parent_node_names(&self, node: NodeIndex) -> Vec<PathBuf> {
-        self.graph.neighbors_directed(node, Direction::Incoming).map(|n| self.reverse_index.get(&n).unwrap().clone()).collect()
+        self.graph
+            .neighbors_directed(node, Direction::Incoming)
+            .map(|n| self.reverse_index.get(&n).unwrap().clone())
+            .collect()
     }
 
     pub fn parent_node_indexes(&self, node: NodeIndex) -> Vec<NodeIndex> {
@@ -129,7 +142,7 @@ impl CachedStableGraph {
         if node == initial && !visited.is_empty() {
             return vec![];
         }
-        
+
         let parents = self.parent_node_indexes(node);
         let mut collection = Vec::with_capacity(parents.len());
 
