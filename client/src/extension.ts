@@ -48,6 +48,7 @@ export class Extension {
     this.registerCommand('graphDot', commands.generateGraphDot)
     this.registerCommand('restart', commands.restartExtension)
     this.registerCommand('virtualMerge', commands.virtualMergedDocument)
+    this.registerCommand('parseTree', commands.parseTree)
 
     log.info('starting language server...')
 

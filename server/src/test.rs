@@ -50,6 +50,7 @@ fn new_temp_server(opengl_context: Option<Box<dyn opengl::ShaderValidator>>) -> 
         command_provider: None,
         opengl_context: context.into(),
         log_guard: Some(guard),
+        tree_sitter: Rc::new(RefCell::new(Parser::new())),
     }
 }
 

@@ -7,6 +7,7 @@ use petgraph::stable_graph::NodeIndex;
 use serde::Deserialize;
 use serde_json::{from_value, Value};
 
+use tree_sitter::Parser;
 use url_norm::FromUrl;
 
 use walkdir::WalkDir;
@@ -65,12 +66,16 @@ fn main() {
 
     let cache_graph = graph::CachedStableGraph::new();
 
+    let mut parser = Parser::new();
+    parser.set_language(tree_sitter_glsl::language()).unwrap();
+
     let mut langserver = MinecraftShaderLanguageServer {
         endpoint: endpoint_output.clone(),
         graph: Rc::new(RefCell::new(cache_graph)),
         root: "".into(),
         command_provider: None,
         opengl_context: Rc::new(opengl::OpenGlContext::new()),
+        tree_sitter: Rc::new(RefCell::new(parser)),
         log_guard: Some(guard),
     };
 
@@ -87,6 +92,12 @@ fn main() {
                 graph: langserver.graph.clone(),
             }),
         ),
+        (
+            "parseTree",
+            Box::new(commands::parse_tree::TreeSitterSExpr {
+                tree_sitter: langserver.tree_sitter.clone(),
+            }),
+        ),
     ]));
 
     LSPEndpoint::run_server_from_input(&mut stdin().lock(), endpoint_output, langserver);
@@ -98,6 +109,7 @@ struct MinecraftShaderLanguageServer {
     root: PathBuf,
     command_provider: Option<commands::CustomCommandProvider>,
     opengl_context: Rc<dyn opengl::ShaderValidator>,
+    tree_sitter: Rc<RefCell<Parser>>,
     log_guard: Option<slog_scope::GlobalLoggerGuard>,
 }
 

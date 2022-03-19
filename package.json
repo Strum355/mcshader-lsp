@@ -41,6 +41,11 @@
         "command": "mcglsl.virtualMerge",
         "title": "Show flattened file",
         "category": "Minecraft Shader"
+      },
+      {
+        "command": "mcglsl.parseTree",
+        "title": "Show parse tree for file",
+        "category": "Minecraft Shader"
       }
     ],
     "languages": [
