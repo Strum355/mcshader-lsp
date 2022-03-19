@@ -9,6 +9,7 @@ use mockall::automock;
 #[cfg_attr(test, automock)]
 pub trait ShaderValidator {
     fn validate(&self, tree_type: super::TreeType, source: String) -> Option<String>;
+    fn vendor(&self) -> String;
 }
 
 pub struct OpenGlContext {
@@ -102,5 +103,9 @@ impl ShaderValidator for OpenGlContext {
         }
 
         result
+    }
+
+    fn vendor(&self) -> String {
+        unsafe { String::from_utf8(CStr::from_ptr(gl::GetString(gl::VENDOR) as *const _).to_bytes().to_vec()).unwrap() }
     }
 }

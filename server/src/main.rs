@@ -39,6 +39,7 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 mod commands;
+mod diagnostics_parser;
 mod configuration;
 mod consts;
 mod dfs;
@@ -53,7 +54,6 @@ mod url_norm;
 mod test;
 
 lazy_static! {
-    static ref RE_DIAGNOSTIC: Regex = Regex::new(r#"^(?P<filepath>[^?<>*|"]+)\((?P<linenum>\d+)\) : (?P<severity>error|warning) [A-C]\d+: (?P<output>.+)"#).unwrap();
     static ref RE_VERSION: Regex = Regex::new(r#"#version [\d]{3}"#).unwrap();
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
     static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
@@ -352,7 +352,7 @@ impl MinecraftShaderLanguageServer {
                     return Ok(diagnostics);
                 }
             };
-            diagnostics.extend(self.parse_validator_stdout(uri, stdout, ""));
+            diagnostics.extend(diagnostics_parser::parse_diagnostics_output(stdout, uri, self.opengl_context.as_ref()));
         } else {
             let mut all_trees: Vec<(TreeType, Vec<(NodeIndex, Option<_>)>)> = Vec::new();
 
@@ -402,84 +402,12 @@ impl MinecraftShaderLanguageServer {
                     Some(s) => s,
                     None => continue,
                 };
-                diagnostics.extend(self.parse_validator_stdout(uri, stdout, ""));
+                diagnostics.extend(diagnostics_parser::parse_diagnostics_output(stdout, uri, self.opengl_context.as_ref()));
             }
         };
 
         back_fill(&all_sources, &mut diagnostics);
         Ok(diagnostics)
-    }
-
-    fn parse_validator_stdout(&self, uri: &Path, stdout: String, _source: &str) -> HashMap<Url, Vec<Diagnostic>> {
-        let stdout_lines = stdout.split('\n');
-        let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::with_capacity(stdout_lines.count());
-        let stdout_lines = stdout.split('\n');
-        
-        for line in stdout_lines {
-            let diagnostic_capture = match RE_DIAGNOSTIC.captures(line) {
-                Some(d) => d,
-                None => continue
-            };
-
-            eprintln!("match {:?}", diagnostic_capture);
-            
-            let msg = diagnostic_capture.name("output").unwrap().as_str();
-
-            let line = match diagnostic_capture.name("linenum") {
-                Some(c) => c.as_str().parse::<u32>().unwrap_or(0),
-                None => 0,
-            } - 2;
-
-            // TODO: line matching maybe
-            /* let line_text = source_lines[line as usize];
-            let leading_whitespace = line_text.len() - line_text.trim_start().len(); */
-
-            let severity = match diagnostic_capture.name("severity") {
-                Some(c) => match c.as_str() {
-                    "error" => DiagnosticSeverity::Error,
-                    "warning" => DiagnosticSeverity::Warning,
-                    _ => DiagnosticSeverity::Information,
-                }
-                _ => DiagnosticSeverity::Information,
-            };
-
-            let origin = match diagnostic_capture.name("filepath") {
-                Some(o) => {
-                    if o.as_str() == "0" {
-                        uri.to_str().unwrap().to_string()
-                    } else {
-                        o.as_str().to_string()
-                    }
-                },
-                None => uri.to_str().unwrap().to_string(),
-            };
-
-            let diagnostic = Diagnostic {
-                range: Range::new(
-                    /* Position::new(line, leading_whitespace as u64),
-                    Position::new(line, line_text.len() as u64) */
-                    Position::new(line, 0),
-                    Position::new(line, 1000),
-                ),
-                code: None,
-                severity: Some(severity),
-                source: Some(consts::SOURCE.into()),
-                message: msg.trim().into(),
-                related_information: None,
-                tags: None,
-                code_description: Option::None,
-                data: Option::None,
-            };
-
-            let origin_url = Url::from_file_path(origin).unwrap();
-            match diagnostics.get_mut(&origin_url) {
-                Some(d) => d.push(diagnostic),
-                None => {
-                    diagnostics.insert(origin_url, vec![diagnostic]);
-                },
-            };
-        }
-        diagnostics
     }
 
     pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<(NodeIndex, Option<NodeIndex>)>, dfs::error::CycleError> {

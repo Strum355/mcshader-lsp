@@ -6,8 +6,8 @@ use std::io::Result;
 use hamcrest2::prelude::*;
 use pretty_assertions::assert_eq;
 
-use slog::Logger;
 use slog::o;
+use slog::Logger;
 use tempdir::TempDir;
 
 use petgraph::algo::is_cyclic_directed;
@@ -898,11 +898,12 @@ fn test_nvidia_diagnostics() {
 
     let output = "/home/noah/.minecraft/shaderpacks/test/shaders/final.fsh(9) : error C0000: syntax error, unexpected '}', expecting ',' or ';' at token \"}\"";
 
-    let results = server.parse_validator_stdout(
-        &PathBuf::from_str("/home/noah/.minecraft/shaderpacks/test").unwrap(),
+    let results = diagnostics_parser::parse_diagnostics_output(
         output.to_string(),
-        "",
+        &PathBuf::from_str("/home/noah/.minecraft/shaderpacks/test").unwrap(),
+        server.opengl_context.as_ref(),
     );
+
     assert_eq!(results.len(), 1);
     let first = results.into_iter().next().unwrap();
     assert_eq!(
@@ -923,7 +924,11 @@ ERROR: 0:10: '' : syntax error: #line
 ERROR: 0:15: 'varying' : syntax error: syntax error
 ";
 
-    let results = server.parse_validator_stdout(&PathBuf::from_str("/home/test").unwrap(), output.to_string(), "");
+    let results = diagnostics_parser::parse_diagnostics_output(
+        output.to_string(),
+        &PathBuf::from_str("/home/test").unwrap(),
+        server.opengl_context.as_ref(),
+    );
     assert_eq!(results.len(), 1);
     let first = results.into_iter().next().unwrap();
     assert_eq!(first.1.len(), 3);
