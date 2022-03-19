@@ -8,7 +8,7 @@
     "@rollup/plugin-json": "^4.1.0",
     "adm-zip": "^0.5.9",
     "encoding": "^0.1.13",
-    "node-fetch": "^3.2.3",
+    "node-fetch": "^2.6.7",
     "vscode-languageclient": "^7.0.0"
   },
   "devDependencies": {

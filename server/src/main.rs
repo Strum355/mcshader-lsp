@@ -5,7 +5,7 @@ use rust_lsp::lsp_types::{notification::*, *};
 use petgraph::stable_graph::NodeIndex;
 
 use serde::Deserialize;
-use serde_json::{Value, from_value};
+use serde_json::{from_value, Value};
 
 use url_norm::FromUrl;
 
@@ -38,14 +38,14 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 mod commands;
+mod configuration;
 mod consts;
 mod dfs;
-mod configuration;
 mod graph;
+mod logging;
 mod lsp_ext;
 mod merge_views;
 mod opengl;
-mod logging;
 mod url_norm;
 
 #[cfg(test)]
@@ -61,7 +61,6 @@ lazy_static! {
 fn main() {
     let guard = logging::set_logger_with_level(Level::Info);
 
-    let stdin = stdin();
     let endpoint_output = LSPEndpoint::create_lsp_output_with_output_stream(stdout);
 
     let cache_graph = graph::CachedStableGraph::new();
@@ -72,25 +71,25 @@ fn main() {
         root: "".into(),
         command_provider: None,
         opengl_context: Rc::new(opengl::OpenGlContext::new()),
-        _log_guard: Some(guard),
+        log_guard: Some(guard),
     };
 
     langserver.command_provider = Some(commands::CustomCommandProvider::new(vec![
         (
             "graphDot",
-            Box::new(commands::GraphDotCommand {
-                graph: Rc::clone(&langserver.graph),
+            Box::new(commands::graph_dot::GraphDotCommand {
+                graph: langserver.graph.clone(),
             }),
         ),
         (
             "virtualMerge",
-            Box::new(commands::VirtualMergedDocument {
-                graph: Rc::clone(&langserver.graph),
+            Box::new(commands::merged_includes::VirtualMergedDocument {
+                graph: langserver.graph.clone(),
             }),
         ),
     ]));
 
-    LSPEndpoint::run_server_from_input(&mut stdin.lock(), endpoint_output, langserver);
+    LSPEndpoint::run_server_from_input(&mut stdin().lock(), endpoint_output, langserver);
 }
 
 struct MinecraftShaderLanguageServer {
@@ -99,7 +98,7 @@ struct MinecraftShaderLanguageServer {
     root: PathBuf,
     command_provider: Option<commands::CustomCommandProvider>,
     opengl_context: Rc<dyn opengl::ShaderValidator>,
-    _log_guard: Option<slog_scope::GlobalLoggerGuard>,
+    log_guard: Option<slog_scope::GlobalLoggerGuard>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -607,17 +606,17 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         logging::slog_with_trace_id(|| {
             #[derive(Deserialize)]
             struct Configuration {
-                #[serde(alias ="logLevel")]
-                log_level: String
+                #[serde(alias = "logLevel")]
+                log_level: String,
             }
 
             let config: Configuration = from_value(params.settings.as_object().unwrap().get("mcglsl").unwrap().to_owned()).unwrap();
 
             info!("got updated configuration"; "config" => params.settings.as_object().unwrap().get("mcglsl").unwrap().to_string());
-            
+
             configuration::handle_log_level_change(config.log_level, |level| {
-                self._log_guard = None; // set to None so Drop is invoked
-                self._log_guard = Some(logging::set_logger_with_level(level));
+                self.log_guard = None; // set to None so Drop is invoked
+                self.log_guard = Some(logging::set_logger_with_level(level));
             })
         });
     }
@@ -629,6 +628,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             if !path.starts_with(&self.root) {
                 return;
             }
+
             if self.graph.borrow_mut().find_node(&path) == None {
                 self.add_file_and_includes_to_graph(&path);
             }

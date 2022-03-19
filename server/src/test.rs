@@ -49,7 +49,7 @@ fn new_temp_server(opengl_context: Option<Box<dyn opengl::ShaderValidator>>) -> 
         root: "".into(),
         command_provider: None,
         opengl_context: context.into(),
-        _log_guard: Some(guard),
+        log_guard: Some(guard),
     }
 }
 

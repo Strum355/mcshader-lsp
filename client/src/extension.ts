@@ -1,6 +1,6 @@
 import { mkdirSync, promises as fs } from 'fs'
 import * as vscode from 'vscode'
-import * as lsp from 'vscode-languageclient'
+import * as lsp from 'vscode-languageclient/node'
 import * as commands from './commands'
 import { log } from './log'
 import { LanguageClient } from './lspClient'
@@ -54,7 +54,7 @@ export class Extension {
     const lspBinary = process.env['MCSHADER_DEBUG'] ? 
       this.context.asAbsolutePath(path.join('server', 'target', 'debug', 'mcshader-lsp')) + 
         (process.platform === 'win32' ? '.exe' : '') :
-        path.join(this.context.globalStoragePath, 'mcshader-lsp')
+        path.join(this.context.globalStorageUri.fsPath, 'mcshader-lsp')
 
     const filewatcherGlob = this.fileAssociationsToGlob(this.getGLSLFileAssociations())
   

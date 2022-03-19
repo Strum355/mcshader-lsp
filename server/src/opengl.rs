@@ -103,6 +103,4 @@ impl ShaderValidator for OpenGlContext {
 
         result
     }
-
-    }
 }
