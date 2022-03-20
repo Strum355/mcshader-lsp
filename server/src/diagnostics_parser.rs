@@ -14,7 +14,7 @@ where
     T: opengl::ShaderValidator + ?Sized,
 {
     RE_DIAGNOSTIC.get_or_init(|| match vendor.vendor().as_str() {
-        "NVIDIA" => {
+        "NVIDIA Corporation" => {
             Regex::new(r#"^(?P<filepath>[^?<>*|"]+)\((?P<linenum>\d+)\) : (?P<severity>error|warning) [A-C]\d+: (?P<output>.+)"#).unwrap()
         }
         _ => {

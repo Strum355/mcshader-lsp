@@ -893,7 +893,7 @@ fn test_generate_merge_list_04() {
 #[test]
 fn test_nvidia_diagnostics() {
     let mut mockgl = opengl::MockShaderValidator::new();
-    mockgl.expect_vendor().returning(|| "NVIDIA".into());
+    mockgl.expect_vendor().returning(|| "NVIDIA Corporation".into());
     let server = new_temp_server(Some(Box::new(mockgl)));
 
     let output = "/home/noah/.minecraft/shaderpacks/test/shaders/final.fsh(9) : error C0000: syntax error, unexpected '}', expecting ',' or ';' at token \"}\"";

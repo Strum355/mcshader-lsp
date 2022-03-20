@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use std::ptr;
 
-use slog_scope::{debug, info};
+use slog_scope::info;
 
 #[cfg(test)]
 use mockall::automock;
@@ -32,7 +32,7 @@ impl OpenGlContext {
         let gl_ctx = OpenGlContext { _ctx: gl_window };
 
         unsafe {
-            debug!(
+            info!(
                 "OpenGL device";
                 "vendor" => gl_ctx.vendor(),
                 "version" => String::from_utf8(CStr::from_ptr(gl::GetString(gl::VERSION) as *const _).to_bytes().to_vec()).unwrap(),

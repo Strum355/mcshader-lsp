@@ -7,7 +7,7 @@ use petgraph::stable_graph::NodeIndex;
 use serde::Deserialize;
 use serde_json::{from_value, Value};
 
-use tree_sitter::Parser;
+use tree_sitter::{Parser, Point};
 use url_norm::FromUrl;
 
 use walkdir::WalkDir;
@@ -39,10 +39,10 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 mod commands;
-mod diagnostics_parser;
 mod configuration;
 mod consts;
 mod dfs;
+mod diagnostics_parser;
 mod graph;
 mod logging;
 mod lsp_ext;
@@ -352,7 +352,11 @@ impl MinecraftShaderLanguageServer {
                     return Ok(diagnostics);
                 }
             };
-            diagnostics.extend(diagnostics_parser::parse_diagnostics_output(stdout, uri, self.opengl_context.as_ref()));
+            diagnostics.extend(diagnostics_parser::parse_diagnostics_output(
+                stdout,
+                uri,
+                self.opengl_context.as_ref(),
+            ));
         } else {
             let mut all_trees: Vec<(TreeType, Vec<(NodeIndex, Option<_>)>)> = Vec::new();
 
@@ -402,7 +406,11 @@ impl MinecraftShaderLanguageServer {
                     Some(s) => s,
                     None => continue,
                 };
-                diagnostics.extend(diagnostics_parser::parse_diagnostics_output(stdout, uri, self.opengl_context.as_ref()));
+                diagnostics.extend(diagnostics_parser::parse_diagnostics_output(
+                    stdout,
+                    uri,
+                    self.opengl_context.as_ref(),
+                ));
             }
         };
 
@@ -488,6 +496,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             info!("starting server...");
 
             let capabilities = ServerCapabilities {
+                definition_provider: Some(OneOf::Left(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: None,
                     work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
@@ -660,7 +669,23 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         completable.complete(Err(Self::error_not_available(())));
     }
 
-    fn goto_definition(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Vec<Location>>) {
+    fn goto_definition(&mut self, params: TextDocumentPositionParams, completable: LSCompletable<Vec<Location>>) {
+        let source = fs::read_to_string(params.text_document.uri.path()).unwrap();
+        let tree = self.tree_sitter.borrow_mut().parse(source, None).unwrap();
+
+        let node_at_pos = tree.root_node().named_descendant_for_point_range(
+            Point {
+                row: params.position.line as usize,
+                column: params.position.character as usize,
+            },
+            Point {
+                row: params.position.line as usize,
+                column: (params.position.character + 1) as usize,
+            },
+        );
+
+        info!("found a node"; "node" => format!("{:?}", node_at_pos));
+
         completable.complete(Err(Self::error_not_available(())));
     }
 
