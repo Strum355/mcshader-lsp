@@ -9,7 +9,7 @@
     "adm-zip": "^0.5.9",
     "encoding": "^0.1.13",
     "node-fetch": "^2.6.7",
-    "vscode-languageclient": "^7.0.0"
+    "vscode-languageclient": "^6.1.4"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^21.0.2",
