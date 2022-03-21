@@ -7,7 +7,7 @@ use petgraph::stable_graph::NodeIndex;
 use serde::Deserialize;
 use serde_json::{from_value, Value};
 
-use tree_sitter::{Parser, Point};
+use tree_sitter::Parser;
 use url_norm::FromUrl;
 
 use walkdir::WalkDir;
@@ -48,6 +48,7 @@ mod logging;
 mod lsp_ext;
 mod merge_views;
 mod opengl;
+mod navigation;
 mod url_norm;
 
 #[cfg(test)]
@@ -670,23 +671,26 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     }
 
     fn goto_definition(&mut self, params: TextDocumentPositionParams, completable: LSCompletable<Vec<Location>>) {
-        let source = fs::read_to_string(params.text_document.uri.path()).unwrap();
-        let tree = self.tree_sitter.borrow_mut().parse(source, None).unwrap();
-
-        let node_at_pos = tree.root_node().named_descendant_for_point_range(
-            Point {
-                row: params.position.line as usize,
-                column: params.position.character as usize,
-            },
-            Point {
-                row: params.position.line as usize,
-                column: (params.position.character + 1) as usize,
-            },
-        );
-
-        info!("found a node"; "node" => format!("{:?}", node_at_pos));
-
-        completable.complete(Err(Self::error_not_available(())));
+        logging::slog_with_trace_id(|| {
+            let parser = &mut self.tree_sitter.borrow_mut();
+            let parser_ctx = match navigation::ParserContext::new(parser, params.text_document.uri.clone()) {
+                Ok(ctx) => ctx,
+                Err(e) => return completable.complete(Err(MethodError{
+                    code: 42069,
+                    message: format!("error building parser context: {}", e),
+                    data: (),
+                })),
+            };
+    
+            match parser_ctx.find_definitions(params.text_document.uri, params.position) {
+                Ok(locations) => completable.complete(Ok(locations)),
+                Err(e) => completable.complete(Err(MethodError {
+                    code: 42069,
+                    message: format!("error finding definitions: {}", e),
+                    data: (),
+                })),
+            }
+        });
     }
 
     fn references(&mut self, _: ReferenceParams, completable: LSCompletable<Vec<Location>>) {
