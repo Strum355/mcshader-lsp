@@ -153,3 +153,184 @@ pub mod error {
         }
     }
 }
+
+#[cfg(test)]
+mod dfs_test {
+    use std::path::PathBuf;
+
+    use hamcrest2::prelude::*;
+    use hamcrest2::{assert_that, ok};
+    use petgraph::{algo::is_cyclic_directed, graph::NodeIndex};
+
+    use crate::graph::CachedStableGraph;
+    use crate::{dfs, IncludePosition};
+
+    #[test]
+    fn test_graph_dfs() {
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+            graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+
+            let dfs = dfs::Dfs::new(&graph, idx0);
+
+            let mut collection = Vec::new();
+
+            for i in dfs {
+                assert_that!(&i, ok());
+                collection.push(i.unwrap());
+            }
+
+            let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.0).collect();
+            let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.1).collect();
+            //          0
+            //        /  \
+            //      1     2
+            //     /
+            //    3
+            let expected_nodes = vec![idx0, idx1, idx3, idx2];
+
+            assert_eq!(expected_nodes, nodes);
+
+            let expected_parents = vec![None, Some(idx0), Some(idx1), Some(idx0)];
+
+            assert_eq!(expected_parents, parents);
+
+            assert!(!is_cyclic_directed(&graph.graph));
+        }
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+            let idx4 = graph.add_node(&PathBuf::from("4"));
+            let idx5 = graph.add_node(&PathBuf::from("5"));
+            let idx6 = graph.add_node(&PathBuf::from("6"));
+            let idx7 = graph.add_node(&PathBuf::from("7"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+            graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+            graph.add_edge(idx1, idx4, IncludePosition { line: 6, start: 0, end: 0 });
+            graph.add_edge(idx2, idx4, IncludePosition { line: 5, start: 0, end: 0 });
+            graph.add_edge(idx2, idx5, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx3, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx4, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx6, idx7, IncludePosition { line: 4, start: 0, end: 0 });
+
+            let dfs = dfs::Dfs::new(&graph, idx0);
+
+            let mut collection = Vec::new();
+
+            for i in dfs {
+                assert_that!(&i, ok());
+                collection.push(i.unwrap());
+            }
+
+            let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.0).collect();
+            let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.1).collect();
+            //          0
+            //        /  \
+            //      1     2
+            //     / \   / \
+            //    3    4    5
+            //     \ /
+            //      6 - 7
+            let expected_nodes = vec![idx0, idx1, idx3, idx6, idx7, idx4, idx6, idx7, idx2, idx5, idx4, idx6, idx7];
+
+            assert_eq!(expected_nodes, nodes);
+
+            let expected_parents = vec![
+                None,
+                Some(idx0),
+                Some(idx1),
+                Some(idx3),
+                Some(idx6),
+                Some(idx1),
+                Some(idx4),
+                Some(idx6),
+                Some(idx0),
+                Some(idx2),
+                Some(idx2),
+                Some(idx4),
+                Some(idx6),
+            ];
+
+            assert_eq!(expected_parents, parents);
+
+            assert!(!is_cyclic_directed(&graph.graph));
+        }
+    }
+
+    #[test]
+    fn test_graph_dfs_cycle() {
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+            let idx4 = graph.add_node(&PathBuf::from("4"));
+            let idx5 = graph.add_node(&PathBuf::from("5"));
+            let idx6 = graph.add_node(&PathBuf::from("6"));
+            let idx7 = graph.add_node(&PathBuf::from("7"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+            graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+            graph.add_edge(idx1, idx4, IncludePosition { line: 6, start: 0, end: 0 });
+            graph.add_edge(idx2, idx4, IncludePosition { line: 5, start: 0, end: 0 });
+            graph.add_edge(idx2, idx5, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx3, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx4, idx6, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx6, idx7, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx7, idx4, IncludePosition { line: 4, start: 0, end: 0 });
+
+            let mut dfs = dfs::Dfs::new(&graph, idx0);
+
+            for _ in 0..5 {
+                if let Some(i) = dfs.next() {
+                    assert_that!(&i, ok());
+                }
+            }
+
+            //          0
+            //        /  \
+            //      1     2
+            //     / \   / \
+            //    3    4    5
+            //     \ /  \
+            //      6 - 7
+
+            assert!(is_cyclic_directed(&graph.graph));
+
+            let next = dfs.next().unwrap();
+            assert_that!(next, err());
+        }
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx1, idx0, IncludePosition { line: 2, start: 0, end: 0 });
+
+            let mut dfs = dfs::Dfs::new(&graph, idx1);
+
+            println!("{:?}", dfs.next());
+            println!("{:?}", dfs.next());
+            println!("{:?}", dfs.next());
+        }
+    }
+}

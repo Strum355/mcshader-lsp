@@ -108,3 +108,55 @@ where
     }
     diagnostics
 }
+
+#[cfg(test)]
+mod diagnostics_test {
+    use std::{path::PathBuf, str::FromStr};
+
+    use crate::{diagnostics_parser::parse_diagnostics_output, opengl::MockShaderValidator, test::new_temp_server};
+
+    #[test]
+    fn test_nvidia_diagnostics() {
+        let mut mockgl = MockShaderValidator::new();
+        mockgl.expect_vendor().returning(|| "NVIDIA Corporation".into());
+        let server = new_temp_server(Some(Box::new(mockgl)));
+
+        let output = "/home/noah/.minecraft/shaderpacks/test/shaders/final.fsh(9) : error C0000: syntax error, unexpected '}', expecting ',' or ';' at token \"}\"";
+
+        let results = parse_diagnostics_output(
+            output.to_string(),
+            &PathBuf::from_str("/home/noah/.minecraft/shaderpacks/test").unwrap(),
+            server.opengl_context.as_ref(),
+        );
+
+        assert_eq!(results.len(), 1);
+        let first = results.into_iter().next().unwrap();
+        assert_eq!(
+            first.0,
+            url::Url::from_file_path("/home/noah/.minecraft/shaderpacks/test/shaders/final.fsh").unwrap()
+        );
+        server.endpoint.request_shutdown();
+    }
+
+    #[test]
+    fn test_amd_diagnostics() {
+        let mut mockgl = MockShaderValidator::new();
+        mockgl.expect_vendor().returning(|| "ATI Technologies".into());
+        let server = new_temp_server(Some(Box::new(mockgl)));
+
+        let output = "ERROR: 0:1: '' : syntax error: #line
+ERROR: 0:10: '' : syntax error: #line
+ERROR: 0:15: 'varying' : syntax error: syntax error
+";
+
+        let results = parse_diagnostics_output(
+            output.to_string(),
+            &PathBuf::from_str("/home/test").unwrap(),
+            server.opengl_context.as_ref(),
+        );
+        assert_eq!(results.len(), 1);
+        let first = results.into_iter().next().unwrap();
+        assert_eq!(first.1.len(), 3);
+        server.endpoint.request_shutdown();
+    }
+}

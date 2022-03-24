@@ -104,7 +104,7 @@ fn main() {
     LSPEndpoint::run_server_from_input(&mut stdin().lock(), endpoint_output, langserver);
 }
 
-struct MinecraftShaderLanguageServer {
+pub struct MinecraftShaderLanguageServer {
     endpoint: Endpoint,
     graph: Rc<RefCell<graph::CachedStableGraph>>,
     root: PathBuf,

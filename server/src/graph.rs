@@ -162,3 +162,177 @@ impl CachedStableGraph {
         collection
     }
 }
+
+#[cfg(test)]
+mod graph_test {
+    use std::path::PathBuf;
+
+    use crate::{graph::CachedStableGraph, IncludePosition};
+
+    #[test]
+    fn test_graph_two_connected_nodes() {
+        let mut graph = CachedStableGraph::new();
+
+        let idx1 = graph.add_node(&PathBuf::from("sample"));
+        let idx2 = graph.add_node(&PathBuf::from("banana"));
+        graph.add_edge(idx1, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+
+        let children = graph.child_node_names(idx1);
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0], Into::<PathBuf>::into("banana".to_string()));
+
+        let children = graph.child_node_indexes(idx1);
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0], idx2);
+
+        let parents = graph.parent_node_names(idx1);
+        assert_eq!(parents.len(), 0);
+
+        let parents = graph.parent_node_names(idx2);
+        assert_eq!(parents.len(), 1);
+        assert_eq!(parents[0], Into::<PathBuf>::into("sample".to_string()));
+
+        let parents = graph.parent_node_indexes(idx2);
+        assert_eq!(parents.len(), 1);
+        assert_eq!(parents[0], idx1);
+
+        let ancestors = graph.collect_root_ancestors(idx2);
+        assert_eq!(ancestors.len(), 1);
+        assert_eq!(ancestors[0], idx1);
+
+        let ancestors = graph.collect_root_ancestors(idx1);
+        assert_eq!(ancestors.len(), 0);
+
+        graph.remove_node(&PathBuf::from("sample"));
+        assert_eq!(graph.graph.node_count(), 1);
+        assert!(graph.find_node(&PathBuf::from("sample")).is_none());
+        let neighbors = graph.child_node_names(idx2);
+        assert_eq!(neighbors.len(), 0);
+    }
+
+    #[test]
+    fn test_collect_root_ancestors() {
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx1, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+            graph.add_edge(idx3, idx1, IncludePosition { line: 4, start: 0, end: 0 });
+
+            //       0  3
+            //       |/
+            //       1
+            //       |
+            //       2
+
+            let roots = graph.collect_root_ancestors(idx2);
+            assert_eq!(roots, vec![idx3, idx0]);
+
+            let roots = graph.collect_root_ancestors(idx1);
+            assert_eq!(roots, vec![idx3, idx0]);
+
+            let roots = graph.collect_root_ancestors(idx0);
+            assert_eq!(roots, vec![]);
+
+            let roots = graph.collect_root_ancestors(idx3);
+            assert_eq!(roots, vec![]);
+        }
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx0, idx2, IncludePosition { line: 3, start: 0, end: 0 });
+            graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+
+            //       0
+            //      / \
+            //     1   2
+            //    /
+            //   3
+
+            let roots = graph.collect_root_ancestors(idx3);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx2);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx1);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx0);
+            assert_eq!(roots, vec![]);
+        }
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx2, idx3, IncludePosition { line: 3, start: 0, end: 0 });
+            graph.add_edge(idx1, idx3, IncludePosition { line: 5, start: 0, end: 0 });
+
+            //       0
+            //       |
+            //       1
+            //       \
+            //     2  \
+            //      \ /
+            //       3
+
+            let roots = graph.collect_root_ancestors(idx3);
+            assert_eq!(roots, vec![idx0, idx2]);
+
+            let roots = graph.collect_root_ancestors(idx2);
+            assert_eq!(roots, vec![]);
+
+            let roots = graph.collect_root_ancestors(idx1);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx0);
+            assert_eq!(roots, vec![]);
+        }
+        {
+            let mut graph = CachedStableGraph::new();
+
+            let idx0 = graph.add_node(&PathBuf::from("0"));
+            let idx1 = graph.add_node(&PathBuf::from("1"));
+            let idx2 = graph.add_node(&PathBuf::from("2"));
+            let idx3 = graph.add_node(&PathBuf::from("3"));
+
+            graph.add_edge(idx0, idx1, IncludePosition { line: 2, start: 0, end: 0 });
+            graph.add_edge(idx1, idx2, IncludePosition { line: 4, start: 0, end: 0 });
+            graph.add_edge(idx1, idx3, IncludePosition { line: 6, start: 0, end: 0 });
+
+            //       0
+            //       |
+            //       1
+            //      / \
+            //     2   3
+
+            let roots = graph.collect_root_ancestors(idx3);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx2);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx1);
+            assert_eq!(roots, vec![idx0]);
+
+            let roots = graph.collect_root_ancestors(idx0);
+            assert_eq!(roots, vec![]);
+        }
+    }
+}
