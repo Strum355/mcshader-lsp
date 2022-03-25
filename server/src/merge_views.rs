@@ -34,8 +34,20 @@ pub fn generate_merge_list<'a>(nodes: &'a [FilialTuple], sources: &'a HashMap<Pa
     // invariant: nodes_iter always has _at least_ one element. Can't save a not-file :B
     let first = nodes_iter.next().unwrap().0;
     let first_path = graph.get_node(first);
+    let first_source = sources.get(&first_path).unwrap();
 
-    last_offset_set.insert((first, None), 0);
+    let version_line_offset = find_version_offset(first_source);
+    let version_char_offsets = char_offset_for_line(version_line_offset, first_source);
+    add_preamble(
+        version_line_offset,
+        version_char_offsets.1,
+        first_path.to_str().unwrap(),
+        first_source,
+        &mut merge_list,
+        &mut extra_lines,
+    );
+
+    last_offset_set.insert((first, None), version_char_offsets.1);
 
     // stack to keep track of the depth first traversal
     let mut stack = VecDeque::<NodeIndex>::new();
@@ -53,8 +65,8 @@ pub fn generate_merge_list<'a>(nodes: &'a [FilialTuple], sources: &'a HashMap<Pa
     // now we add a view of the remainder of the root file
     let offset = *last_offset_set.get(&(first, None)).unwrap();
 
-    let len = sources.get(&first_path).unwrap().len();
-    merge_list.push_back(&sources.get(&first_path).unwrap()[min(offset, len)..]);
+    let len = first_source.len();
+    merge_list.push_back(&first_source[min(offset, len)..]);
 
     let total_len = merge_list.iter().fold(0, |a, b| a + b.len());
 
@@ -171,6 +183,30 @@ fn char_offset_for_line(line_num: usize, source: &str) -> (usize, usize) {
     (char_for_line, char_following_line)
 }
 
+fn find_version_offset(source: &str) -> usize {
+    source
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.starts_with("#version "))
+        .map_or(0, |(i, _)| i)
+}
+
+fn add_preamble<'a>(
+    version_line_offset: usize, version_char_offset: usize, path: &str, source: &'a str, merge_list: &mut LinkedList<&'a str>,
+    extra_lines: &mut Vec<String>,
+) {
+    // TODO: Optifine #define preabmle
+    merge_list.push_back(&source[..version_char_offset]);
+    let google_line_directive = format!(
+        "#extension GL_GOOGLE_cpp_style_line_directive : enable\n#line {} \"{}\"\n",
+        // +2 because 0 indexed but #line is 1 indexed and references the *following* line
+        version_line_offset + 2,
+        path,
+    );
+    extra_lines.push(google_line_directive);
+    unsafe_get_and_insert(merge_list, extra_lines);
+}
+
 fn add_opening_line_directive(path: &Path, merge_list: &mut LinkedList<&str>, extra_lines: &mut Vec<String>) {
     let line_directive = format!("#line 1 \"{}\"\n", path.to_str().unwrap().replace('\\', "\\\\"));
     extra_lines.push(line_directive);
@@ -244,6 +280,11 @@ mod merge_view_test {
         let mut truth = fs::read_to_string(merge_file).unwrap();
         truth = truth.replacen(
             "!!",
+            &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+            1,
+        );
+        truth = truth.replacen(
+            "!!",
             &tmp_path.join("shaders").join("common.glsl").to_str().unwrap().replace('\\', "\\\\"),
             1,
         );
@@ -305,6 +346,12 @@ mod merge_view_test {
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
         let mut truth = fs::read_to_string(merge_file).unwrap();
+
+        truth = truth.replacen(
+            "!!",
+            &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+            1,
+        );
 
         for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
             let path = tmp_path.clone();
@@ -379,6 +426,12 @@ mod merge_view_test {
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
         let mut truth = fs::read_to_string(merge_file).unwrap();
+
+        truth = truth.replacen(
+            "!!",
+            &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+            1,
+        );
 
         for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
             let path = tmp_path.clone();
@@ -464,6 +517,7 @@ mod merge_view_test {
         let mut truth = fs::read_to_string(merge_file).unwrap();
 
         for file in &[
+            PathBuf::new().join("final.fsh").to_str().unwrap(),
             PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
             PathBuf::new().join("utils").join("stuff1.glsl").to_str().unwrap(),
             PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),

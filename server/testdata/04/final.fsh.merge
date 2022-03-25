@@ -1,4 +1,6 @@
 #version 120
+#extension GL_GOOGLE_cpp_style_line_directive : enable
+#line 2 "!!"
 
 #line 1 "!!"
 #line 1 "!!"
