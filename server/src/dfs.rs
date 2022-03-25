@@ -1,6 +1,6 @@
 use petgraph::stable_graph::NodeIndex;
 
-use crate::graph::CachedStableGraph;
+use crate::{graph::CachedStableGraph, merge_views::FilialTuple};
 
 use anyhow::Result;
 
@@ -51,9 +51,9 @@ impl<'a> Dfs<'a> {
 }
 
 impl<'a> Iterator for Dfs<'a> {
-    type Item = Result<(NodeIndex, Option<NodeIndex>), error::CycleError>;
+    type Item = Result<FilialTuple, error::CycleError>;
 
-    fn next(&mut self) -> Option<Result<(NodeIndex, Option<NodeIndex>), error::CycleError>> {
+    fn next(&mut self) -> Option<Result<FilialTuple, error::CycleError>> {
         let parent = self.cycle.last().map(|p| p.node);
 
         if let Some(node) = self.stack.pop() {

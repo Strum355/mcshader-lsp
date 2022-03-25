@@ -14,6 +14,7 @@ use anyhow::{format_err, Result};
 use std::fs;
 
 use crate::dfs;
+use crate::merge_views::FilialTuple;
 use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJson};
 
 use super::Invokeable;
@@ -36,7 +37,7 @@ impl VirtualMergedDocument {
         Ok(Some(roots))
     }
 
-    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<(NodeIndex, Option<NodeIndex>)>, dfs::error::CycleError> {
+    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<FilialTuple>, dfs::error::CycleError> {
         let graph_ref = self.graph.borrow();
 
         let dfs = dfs::Dfs::new(&graph_ref, root);
@@ -44,7 +45,7 @@ impl VirtualMergedDocument {
         dfs.collect::<Result<Vec<_>, _>>()
     }
 
-    pub fn load_sources(&self, nodes: &[(NodeIndex, Option<NodeIndex>)]) -> Result<HashMap<PathBuf, String>> {
+    pub fn load_sources(&self, nodes: &[FilialTuple]) -> Result<HashMap<PathBuf, String>> {
         let mut sources = HashMap::new();
 
         for node in nodes {

@@ -1,3 +1,4 @@
+use merge_views::FilialTuple;
 use rust_lsp::jsonrpc::{method_types::*, *};
 use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::{notification::*, *};
@@ -47,8 +48,8 @@ mod graph;
 mod logging;
 mod lsp_ext;
 mod merge_views;
-mod opengl;
 mod navigation;
+mod opengl;
 mod url_norm;
 
 #[cfg(test)]
@@ -419,7 +420,7 @@ impl MinecraftShaderLanguageServer {
         Ok(diagnostics)
     }
 
-    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<(NodeIndex, Option<NodeIndex>)>, dfs::error::CycleError> {
+    pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<FilialTuple>, dfs::error::CycleError> {
         let graph_ref = self.graph.borrow();
 
         let dfs = dfs::Dfs::new(&graph_ref, root);
@@ -427,7 +428,7 @@ impl MinecraftShaderLanguageServer {
         dfs.collect::<Result<_, _>>()
     }
 
-    pub fn load_sources(&self, nodes: &[(NodeIndex, Option<NodeIndex>)]) -> Result<HashMap<PathBuf, String>> {
+    pub fn load_sources(&self, nodes: &[FilialTuple]) -> Result<HashMap<PathBuf, String>> {
         let mut sources = HashMap::new();
 
         for node in nodes {
@@ -675,13 +676,15 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             let parser = &mut self.tree_sitter.borrow_mut();
             let parser_ctx = match navigation::ParserContext::new(parser, params.text_document.uri.clone()) {
                 Ok(ctx) => ctx,
-                Err(e) => return completable.complete(Err(MethodError{
-                    code: 42069,
-                    message: format!("error building parser context: {}", e),
-                    data: (),
-                })),
+                Err(e) => {
+                    return completable.complete(Err(MethodError {
+                        code: 42069,
+                        message: format!("error building parser context: {}", e),
+                        data: (),
+                    }))
+                }
             };
-    
+
             match parser_ctx.find_definitions(params.text_document.uri, params.position) {
                 Ok(locations) => completable.complete(Ok(locations)),
                 Err(e) => completable.complete(Err(MethodError {
