@@ -5,8 +5,6 @@ use std::io::Result;
 
 use pretty_assertions::assert_eq;
 
-use slog::o;
-use slog::Logger;
 use tempdir::TempDir;
 
 use fs_extra::{copy_items, dir};
@@ -37,8 +35,6 @@ pub fn new_temp_server(opengl_context: Option<Box<dyn opengl::ShaderValidator>>)
     let endpoint = LSPEndpoint::create_lsp_output_with_output_stream(|| StdoutNewline { s: Box::new(io::sink()) });
 
     let context = opengl_context.unwrap_or_else(|| Box::new(opengl::MockShaderValidator::new()));
-    let logger = Logger::root(slog::Discard, o!());
-    let guard = slog_scope::set_global_logger(logger);
 
     MinecraftShaderLanguageServer {
         endpoint,
@@ -46,7 +42,7 @@ pub fn new_temp_server(opengl_context: Option<Box<dyn opengl::ShaderValidator>>)
         root: "".into(),
         command_provider: None,
         opengl_context: context.into(),
-        log_guard: Some(guard),
+        log_guard: None,
         tree_sitter: Rc::new(RefCell::new(Parser::new())),
     }
 }
@@ -82,6 +78,7 @@ fn copy_to_tmp_dir(test_path: &str) -> (Rc<TempDir>, PathBuf) {
 
 #[allow(deprecated)]
 #[test]
+#[logging_macro::log_scope]
 fn test_empty_initialize() {
     let mut server = new_temp_server(None);
 
@@ -130,6 +127,7 @@ fn test_empty_initialize() {
 
 #[allow(deprecated)]
 #[test]
+#[logging_macro::log_scope]
 fn test_01_initialize() {
     let mut server = new_temp_server(None);
 
@@ -189,7 +187,9 @@ fn test_01_initialize() {
     assert_eq!(server.graph.borrow().graph.edge_weight(edge).unwrap().line, 2);
 }
 
+#[allow(deprecated)]
 #[test]
+#[logging_macro::log_scope]
 fn test_05_initialize() {
     let mut server = new_temp_server(None);
 

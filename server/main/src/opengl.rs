@@ -8,7 +8,7 @@ use mockall::automock;
 
 #[cfg_attr(test, automock)]
 pub trait ShaderValidator {
-    fn validate(&self, tree_type: super::TreeType, source: String) -> Option<String>;
+    fn validate(&self, tree_type: super::TreeType, source: &str) -> Option<String>;
     fn vendor(&self) -> String;
 }
 
@@ -42,7 +42,7 @@ impl OpenGlContext {
         gl_ctx
     }
 
-    unsafe fn compile_and_get_shader_log(&self, shader: gl::types::GLuint, source: String) -> Option<String> {
+    unsafe fn compile_and_get_shader_log(&self, shader: gl::types::GLuint, source: &str) -> Option<String> {
         let mut success = i32::from(gl::FALSE);
         let c_str_frag = CString::new(source).unwrap();
         gl::ShaderSource(shader, 1, &c_str_frag.as_ptr(), ptr::null());
@@ -71,8 +71,8 @@ impl OpenGlContext {
 }
 
 impl ShaderValidator for OpenGlContext {
-    fn validate(&self, tree_type: super::TreeType, source: String) -> Option<String> {
-        let result = unsafe {
+    fn validate(&self, tree_type: super::TreeType, source: &str) -> Option<String> {
+        unsafe {
             match tree_type {
                 crate::TreeType::Fragment => {
                     // Fragment shader
@@ -95,14 +95,7 @@ impl ShaderValidator for OpenGlContext {
                     self.compile_and_get_shader_log(compute_shader, source)
                 }
             }
-        };
-
-        match &result {
-            Some(output) => info!("compilation errors reported"; "errors" => format!("`{}`", output.replace('\n', "\\n"))),
-            None => info!("compilation reported no errors"),
         }
-
-        result
     }
 
     fn vendor(&self) -> String {

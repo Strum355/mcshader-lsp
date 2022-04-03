@@ -24,7 +24,7 @@ pub struct ParserContext<'a> {
 }
 
 impl<'a> ParserContext<'a> {
-    pub fn new(parser: &'a mut Parser, document_uri: Url) -> Result<Self> {
+    pub fn new(parser: &'a mut Parser, document_uri: &Url) -> Result<Self> {
         let source = read_to_string(document_uri.path())?;
 
         let tree = parser.parse(&source, None).unwrap();
@@ -32,7 +32,7 @@ impl<'a> ParserContext<'a> {
         Ok(ParserContext { source, tree, parser })
     }
 
-    pub fn find_definitions(&self, document_uri: Url, point: Position) -> Result<Vec<Location>> {
+    pub fn find_definitions(&self, document_uri: &Url, point: Position) -> Result<Vec<Location>> {
         let current_node = match self.find_node_at_point(point) {
             Some(node) => node,
             None => return Ok(vec![]),

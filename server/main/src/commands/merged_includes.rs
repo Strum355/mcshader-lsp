@@ -15,6 +15,7 @@ use std::fs;
 
 use crate::dfs;
 use crate::merge_views::FilialTuple;
+use crate::source_mapper::SourceMapper;
 use crate::{graph::CachedStableGraph, merge_views, url_norm::FromJson};
 
 use super::Invokeable;
@@ -100,8 +101,9 @@ impl Invokeable for VirtualMergedDocument {
             };
             all_sources.extend(sources);
 
+            let mut source_mapper = SourceMapper::new(all_sources.len());
             let graph = self.graph.borrow();
-            let view = merge_views::generate_merge_list(&tree, &all_sources, &graph);
+            let view = merge_views::generate_merge_list(&tree, &all_sources, &graph, &mut source_mapper);
             return Ok(serde_json::value::Value::String(view));
         }
         return Err(format_err!(

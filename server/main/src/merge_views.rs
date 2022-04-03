@@ -10,13 +10,16 @@ use core::slice::Iter;
 use petgraph::stable_graph::NodeIndex;
 
 use crate::graph::CachedStableGraph;
+use crate::source_mapper::SourceMapper;
 
 /// FilialTuple represents a tuple with a child at index 0
 /// and a parent at index 1. Parent can be nullable in the case of
 /// the child being a top level node in the tree.
 pub type FilialTuple = (NodeIndex, Option<NodeIndex>);
 
-pub fn generate_merge_list<'a>(nodes: &'a [FilialTuple], sources: &'a HashMap<PathBuf, String>, graph: &'a CachedStableGraph) -> String {
+pub fn generate_merge_list<'a>(
+    nodes: &'a [FilialTuple], sources: &'a HashMap<PathBuf, String>, graph: &'a CachedStableGraph, source_mapper: &mut SourceMapper,
+) -> String {
     // contains additionally inserted lines such as #line and other directives, preamble defines etc
     let mut extra_lines: Vec<String> = Vec::new();
     extra_lines.reserve((nodes.len() * 2) + 2);
@@ -36,18 +39,24 @@ pub fn generate_merge_list<'a>(nodes: &'a [FilialTuple], sources: &'a HashMap<Pa
     let first_path = graph.get_node(first);
     let first_source = sources.get(&first_path).unwrap();
 
+    // seed source_mapper with top-level file
+    source_mapper.get_num(first);
+
     let version_line_offset = find_version_offset(first_source);
     let version_char_offsets = char_offset_for_line(version_line_offset, first_source);
-    add_preamble(
-        version_line_offset,
-        version_char_offsets.1,
-        first_path.to_str().unwrap(),
-        first_source,
-        &mut merge_list,
-        &mut extra_lines,
-    );
+    // add_preamble(
+    //     version_line_offset,
+    //     version_char_offsets.1,
+    //     &first_path,
+    //     first,
+    //     first_source,
+    //     &mut merge_list,
+    //     &mut extra_lines,
+    //     source_mapper,
+    // );
 
-    last_offset_set.insert((first, None), version_char_offsets.1);
+    // last_offset_set.insert((first, None), version_char_offsets.1);
+    last_offset_set.insert((first, None), 0);
 
     // stack to keep track of the depth first traversal
     let mut stack = VecDeque::<NodeIndex>::new();
@@ -60,6 +69,7 @@ pub fn generate_merge_list<'a>(nodes: &'a [FilialTuple], sources: &'a HashMap<Pa
         sources,
         &mut extra_lines,
         &mut stack,
+        source_mapper,
     );
 
     // now we add a view of the remainder of the root file
@@ -79,6 +89,7 @@ pub fn generate_merge_list<'a>(nodes: &'a [FilialTuple], sources: &'a HashMap<Pa
 fn create_merge_views<'a>(
     nodes: &mut Peekable<Iter<FilialTuple>>, merge_list: &mut LinkedList<&'a str>, last_offset_set: &mut HashMap<FilialTuple, usize>,
     graph: &'a CachedStableGraph, sources: &'a HashMap<PathBuf, String>, extra_lines: &mut Vec<String>, stack: &mut VecDeque<NodeIndex>,
+    source_mapper: &mut SourceMapper,
 ) {
     loop {
         let n = match nodes.next() {
@@ -100,7 +111,7 @@ fn create_merge_views<'a>(
             .insert((parent, stack.back().copied()), char_following_line)
             .get_or_insert(0);
         merge_list.push_back(&parent_source[offset..char_for_line]);
-        add_opening_line_directive(&child_path, merge_list, extra_lines);
+        add_opening_line_directive(&child_path, child, merge_list, extra_lines, source_mapper);
 
         match nodes.peek() {
             Some(next) => {
@@ -118,7 +129,7 @@ fn create_merge_views<'a>(
                     merge_list.push_back(&child_source[..offset]);
                     last_offset_set.insert((child, Some(parent)), 0);
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                    add_closing_line_directive(edge.line + 2, &parent_path, merge_list, extra_lines);
+                    add_closing_line_directive(edge.line + 2, &parent_path, parent, merge_list, extra_lines, source_mapper);
                     // if the next pair's parent is not the current pair's parent, we need to bubble up
                     if stack.contains(&next.1.unwrap()) {
                         return;
@@ -127,7 +138,16 @@ fn create_merge_views<'a>(
                 }
 
                 stack.push_back(parent);
-                create_merge_views(nodes, merge_list, last_offset_set, graph, sources, extra_lines, stack);
+                create_merge_views(
+                    nodes,
+                    merge_list,
+                    last_offset_set,
+                    graph,
+                    sources,
+                    extra_lines,
+                    stack,
+                    source_mapper,
+                );
                 stack.pop_back();
 
                 let offset = *last_offset_set.get(&(child, Some(parent))).unwrap();
@@ -144,7 +164,7 @@ fn create_merge_views<'a>(
                 }
 
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                add_closing_line_directive(edge.line + 2, &parent_path, merge_list, extra_lines);
+                add_closing_line_directive(edge.line + 2, &parent_path, parent, merge_list, extra_lines, source_mapper);
 
                 // we need to check the next item at the point of original return further down the callstack
                 if nodes.peek().is_some() && stack.contains(&nodes.peek().unwrap().1.unwrap()) {
@@ -161,7 +181,7 @@ fn create_merge_views<'a>(
                 merge_list.push_back(&child_source[..offset]);
                 last_offset_set.insert((child, Some(parent)), 0);
                 // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
-                add_closing_line_directive(edge.line + 2, &parent_path, merge_list, extra_lines);
+                add_closing_line_directive(edge.line + 2, &parent_path, parent, merge_list, extra_lines, source_mapper);
             }
         }
     }
@@ -191,38 +211,63 @@ fn find_version_offset(source: &str) -> usize {
         .map_or(0, |(i, _)| i)
 }
 
-fn add_preamble<'a>(
-    version_line_offset: usize, version_char_offset: usize, path: &str, source: &'a str, merge_list: &mut LinkedList<&'a str>,
-    extra_lines: &mut Vec<String>,
-) {
-    // TODO: Optifine #define preabmle
-    merge_list.push_back(&source[..version_char_offset]);
-    let google_line_directive = format!(
-        "#extension GL_GOOGLE_cpp_style_line_directive : enable\n#line {} \"{}\"\n",
-        // +2 because 0 indexed but #line is 1 indexed and references the *following* line
-        version_line_offset + 2,
-        path,
-    );
-    extra_lines.push(google_line_directive);
-    unsafe_get_and_insert(merge_list, extra_lines);
-}
+// fn add_preamble<'a>(
+//     version_line_offset: usize, version_char_offset: usize, path: &Path, node: NodeIndex, source: &'a str,
+//     merge_list: &mut LinkedList<&'a str>, extra_lines: &mut Vec<String>, source_mapper: &mut SourceMapper,
+// ) {
+//     // TODO: Optifine #define preabmle
+//     merge_list.push_back(&source[..version_char_offset]);
+//     let google_line_directive = format!(
+//         "#extension GL_GOOGLE_cpp_style_line_directive : enable\n#line {} {} // {}\n",
+//         // +2 because 0 indexed but #line is 1 indexed and references the *following* line
+//         version_line_offset + 2,
+//         source_mapper.get_num(node),
+//         path.to_str().unwrap().replace('\\', "\\\\"),
+//     );
+//     extra_lines.push(google_line_directive);
+//     unsafe_get_and_insert(merge_list, extra_lines);
+// }
 
-fn add_opening_line_directive(path: &Path, merge_list: &mut LinkedList<&str>, extra_lines: &mut Vec<String>) {
-    let line_directive = format!("#line 1 \"{}\"\n", path.to_str().unwrap().replace('\\', "\\\\"));
+fn add_opening_line_directive(
+    path: &Path, node: NodeIndex, merge_list: &mut LinkedList<&str>, extra_lines: &mut Vec<String>, source_mapper: &mut SourceMapper,
+) {
+    let line_directive = format!(
+        "#line 1 {} // {}\n",
+        source_mapper.get_num(node),
+        path.to_str().unwrap().replace('\\', "\\\\")
+    );
     extra_lines.push(line_directive);
     unsafe_get_and_insert(merge_list, extra_lines);
 }
 
-fn add_closing_line_directive(line: usize, path: &Path, merge_list: &mut LinkedList<&str>, extra_lines: &mut Vec<String>) {
+fn add_closing_line_directive(
+    line: usize, path: &Path, node: NodeIndex, merge_list: &mut LinkedList<&str>, extra_lines: &mut Vec<String>,
+    source_mapper: &mut SourceMapper,
+) {
     // Optifine doesn't seem to add a leading newline if the previous line was a #line directive
     let line_directive = if let Some(l) = merge_list.back() {
         if l.trim().starts_with("#line") {
-            format!("#line {} \"{}\"\n", line, path.to_str().unwrap().replace('\\', "\\\\"))
+            format!(
+                "#line {} {} // {}\n",
+                line,
+                source_mapper.get_num(node),
+                path.to_str().unwrap().replace('\\', "\\\\")
+            )
         } else {
-            format!("\n#line {} \"{}\"\n", line, path.to_str().unwrap().replace('\\', "\\\\"))
+            format!(
+                "\n#line {} {} // {}\n",
+                line,
+                source_mapper.get_num(node),
+                path.to_str().unwrap().replace('\\', "\\\\")
+            )
         }
     } else {
-        format!("\n#line {} \"{}\"\n", line, path.to_str().unwrap().replace('\\', "\\\\"))
+        format!(
+            "\n#line {} {} // {}\n",
+            line,
+            source_mapper.get_num(node),
+            path.to_str().unwrap().replace('\\', "\\\\")
+        )
     };
 
     extra_lines.push(line_directive);
@@ -243,10 +288,12 @@ mod merge_view_test {
     use std::path::PathBuf;
 
     use crate::merge_views::generate_merge_list;
+    use crate::source_mapper::SourceMapper;
     use crate::test::{copy_to_and_set_root, new_temp_server};
     use crate::IncludePosition;
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_generate_merge_list_01() {
         let mut server = new_temp_server(None);
 
@@ -273,16 +320,17 @@ mod merge_view_test {
         let sources = server.load_sources(&nodes).unwrap();
 
         let graph_borrow = server.graph.borrow();
-        let result = generate_merge_list(&nodes, &sources, &graph_borrow);
+        let mut source_mapper = SourceMapper::new(0);
+        let result = generate_merge_list(&nodes, &sources, &graph_borrow, &mut source_mapper);
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
         let mut truth = fs::read_to_string(merge_file).unwrap();
-        truth = truth.replacen(
-            "!!",
-            &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
-            1,
-        );
+        // truth = truth.replacen(
+        //     "!!",
+        //     &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+        //     1,
+        // );
         truth = truth.replacen(
             "!!",
             &tmp_path.join("shaders").join("common.glsl").to_str().unwrap().replace('\\', "\\\\"),
@@ -297,6 +345,7 @@ mod merge_view_test {
     }
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_generate_merge_list_02() {
         let mut server = new_temp_server(None);
 
@@ -341,17 +390,18 @@ mod merge_view_test {
         let sources = server.load_sources(&nodes).unwrap();
 
         let graph_borrow = server.graph.borrow();
-        let result = generate_merge_list(&nodes, &sources, &graph_borrow);
+        let mut source_mapper = SourceMapper::new(0);
+        let result = generate_merge_list(&nodes, &sources, &graph_borrow, &mut source_mapper);
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
         let mut truth = fs::read_to_string(merge_file).unwrap();
 
-        truth = truth.replacen(
-            "!!",
-            &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
-            1,
-        );
+        // truth = truth.replacen(
+        //     "!!",
+        //     &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+        //     1,
+        // );
 
         for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
             let path = tmp_path.clone();
@@ -377,6 +427,7 @@ mod merge_view_test {
     }
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_generate_merge_list_03() {
         let mut server = new_temp_server(None);
 
@@ -421,17 +472,18 @@ mod merge_view_test {
         let sources = server.load_sources(&nodes).unwrap();
 
         let graph_borrow = server.graph.borrow();
-        let result = generate_merge_list(&nodes, &sources, &graph_borrow);
+        let mut source_mapper = SourceMapper::new(0);
+        let result = generate_merge_list(&nodes, &sources, &graph_borrow, &mut source_mapper);
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
         let mut truth = fs::read_to_string(merge_file).unwrap();
 
-        truth = truth.replacen(
-            "!!",
-            &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
-            1,
-        );
+        // truth = truth.replacen(
+        //     "!!",
+        //     &tmp_path.join("shaders").join("final.fsh").to_str().unwrap().replace('\\', "\\\\"),
+        //     1,
+        // );
 
         for file in &["sample.glsl", "burger.glsl", "sample.glsl", "test.glsl", "sample.glsl"] {
             let path = tmp_path.clone();
@@ -457,6 +509,7 @@ mod merge_view_test {
     }
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_generate_merge_list_04() {
         let mut server = new_temp_server(None);
 
@@ -510,14 +563,15 @@ mod merge_view_test {
         let sources = server.load_sources(&nodes).unwrap();
 
         let graph_borrow = server.graph.borrow();
-        let result = generate_merge_list(&nodes, &sources, &graph_borrow);
+        let mut source_mapper = SourceMapper::new(0);
+        let result = generate_merge_list(&nodes, &sources, &graph_borrow, &mut source_mapper);
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
         let mut truth = fs::read_to_string(merge_file).unwrap();
 
         for file in &[
-            PathBuf::new().join("final.fsh").to_str().unwrap(),
+            // PathBuf::new().join("final.fsh").to_str().unwrap(),
             PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
             PathBuf::new().join("utils").join("stuff1.glsl").to_str().unwrap(),
             PathBuf::new().join("utils").join("utilities.glsl").to_str().unwrap(),
@@ -528,7 +582,6 @@ mod merge_view_test {
             PathBuf::new().join("final.fsh").to_str().unwrap(),
         ] {
             let path = tmp_path.clone();
-            //path.f
             truth = truth.replacen("!!", &path.join("shaders").join(file).to_str().unwrap().replace('\\', "\\\\"), 1);
         }
 

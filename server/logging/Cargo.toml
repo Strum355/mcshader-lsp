@@ -1,0 +1,13 @@
+[package]
+name = "logging"
+version = "0.9.5"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2021"
+
+[dependencies]
+slog = { version = "2.7", features = [ "max_level_trace", "release_max_level_trace" ] }
+slog-term = "2.9"
+slog-scope = "4.4"
+slog-atomic = "3.1"
+rand = "0.8"
+lazy_static = "1.4"

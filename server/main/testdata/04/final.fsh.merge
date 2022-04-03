@@ -1,0 +1,23 @@
+#version 120
+
+#line 1 1 // !!
+#line 1 2 // !!
+void stuff1() {
+	
+}
+#line 2 1 // !!
+#line 1 3 // !!
+void stuff2() {
+	
+}
+#line 3 1 // !!
+#line 4 0 // !!
+#line 1 4 // !!
+void matrix() {
+	
+}
+#line 5 0 // !!
+
+void main() {
+	
+}

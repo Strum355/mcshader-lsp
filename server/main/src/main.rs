@@ -1,3 +1,5 @@
+#![feature(once_cell)]
+
 use merge_views::FilialTuple;
 use rust_lsp::jsonrpc::{method_types::*, *};
 use rust_lsp::lsp::*;
@@ -45,11 +47,11 @@ mod consts;
 mod dfs;
 mod diagnostics_parser;
 mod graph;
-mod logging;
 mod lsp_ext;
 mod merge_views;
 mod navigation;
 mod opengl;
+mod source_mapper;
 mod url_norm;
 
 #[cfg(test)]
@@ -317,9 +319,11 @@ impl MinecraftShaderLanguageServer {
 
             all_sources.extend(self.load_sources(&tree)?);
 
+            let mut source_mapper = source_mapper::SourceMapper::new(all_sources.len());
+
             let view = {
                 let graph = self.graph.borrow();
-                merge_views::generate_merge_list(&tree, &all_sources, &graph)
+                merge_views::generate_merge_list(&tree, &all_sources, &graph, &mut source_mapper)
             };
 
             let root_path = self.graph.borrow().get_node(root);
@@ -347,18 +351,17 @@ impl MinecraftShaderLanguageServer {
                 return Ok(diagnostics);
             };
 
-            let stdout = match self.opengl_context.clone().validate(tree_type, view) {
+            let stdout = match self.compile_shader_source(&view, tree_type, &root_path) {
                 Some(s) => s,
                 None => {
                     back_fill(&all_sources, &mut diagnostics);
                     return Ok(diagnostics);
                 }
             };
-            diagnostics.extend(diagnostics_parser::parse_diagnostics_output(
-                stdout,
-                uri,
-                self.opengl_context.as_ref(),
-            ));
+
+            let diagnostics_parser = diagnostics_parser::DiagnosticsParser::new(self.opengl_context.as_ref());
+
+            diagnostics.extend(diagnostics_parser.parse_diagnostics_output(stdout, uri, &source_mapper, &self.graph.borrow()));
         } else {
             let mut all_trees: Vec<(TreeType, Vec<(NodeIndex, Option<_>)>)> = Vec::new();
 
@@ -399,25 +402,38 @@ impl MinecraftShaderLanguageServer {
             }
 
             for tree in all_trees {
+                // bit over-zealous in allocation but better than having to resize
+                let mut source_mapper = source_mapper::SourceMapper::new(all_sources.len());
                 let view = {
                     let graph = self.graph.borrow();
-                    merge_views::generate_merge_list(&tree.1, &all_sources, &graph)
+                    merge_views::generate_merge_list(&tree.1, &all_sources, &graph, &mut source_mapper)
                 };
 
-                let stdout = match self.opengl_context.clone().validate(tree.0, view) {
+                let root_path = self.graph.borrow().get_node(tree.1[0].0);
+                let stdout = match self.compile_shader_source(&view, tree.0, &root_path) {
                     Some(s) => s,
                     None => continue,
                 };
-                diagnostics.extend(diagnostics_parser::parse_diagnostics_output(
-                    stdout,
-                    uri,
-                    self.opengl_context.as_ref(),
-                ));
+
+                let diagnostics_parser = diagnostics_parser::DiagnosticsParser::new(self.opengl_context.as_ref());
+
+                diagnostics.extend(diagnostics_parser.parse_diagnostics_output(stdout, uri, &source_mapper, &self.graph.borrow()));
             }
         };
 
         back_fill(&all_sources, &mut diagnostics);
         Ok(diagnostics)
+    }
+
+    fn compile_shader_source(&self, source: &str, tree_type: TreeType, path: &Path) -> Option<String> {
+        let result = self.opengl_context.clone().validate(tree_type, source);
+        match &result {
+            Some(output) => {
+                info!("compilation errors reported"; "errors" => format!("`{}`", output.replace('\n', "\\n")), "tree_root" => path.to_str().unwrap())
+            }
+            None => info!("compilation reported no errors"; "tree_root" => path.to_str().unwrap()),
+        };
+        result
     }
 
     pub fn get_dfs_for_node(&self, root: NodeIndex) -> Result<Vec<FilialTuple>, dfs::error::CycleError> {
@@ -674,22 +690,22 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn goto_definition(&mut self, params: TextDocumentPositionParams, completable: LSCompletable<Vec<Location>>) {
         logging::slog_with_trace_id(|| {
             let parser = &mut self.tree_sitter.borrow_mut();
-            let parser_ctx = match navigation::ParserContext::new(parser, params.text_document.uri.clone()) {
+            let parser_ctx = match navigation::ParserContext::new(parser, &params.text_document.uri) {
                 Ok(ctx) => ctx,
                 Err(e) => {
                     return completable.complete(Err(MethodError {
                         code: 42069,
-                        message: format!("error building parser context: {}", e),
+                        message: format!("error building parser context: {}", e.context(params.text_document.uri)),
                         data: (),
                     }))
                 }
             };
 
-            match parser_ctx.find_definitions(params.text_document.uri, params.position) {
+            match parser_ctx.find_definitions(&params.text_document.uri, params.position) {
                 Ok(locations) => completable.complete(Ok(locations)),
                 Err(e) => completable.complete(Err(MethodError {
                     code: 42069,
-                    message: format!("error finding definitions: {}", e),
+                    message: format!("error finding definitions: {}", e.context(params.text_document.uri)),
                     data: (),
                 })),
             }

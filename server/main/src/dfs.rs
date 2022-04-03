@@ -166,6 +166,7 @@ mod dfs_test {
     use crate::{dfs, IncludePosition};
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_graph_dfs() {
         {
             let mut graph = CachedStableGraph::new();
@@ -272,6 +273,7 @@ mod dfs_test {
     }
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_graph_dfs_cycle() {
         {
             let mut graph = CachedStableGraph::new();

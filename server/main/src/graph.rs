@@ -170,6 +170,7 @@ mod graph_test {
     use crate::{graph::CachedStableGraph, IncludePosition};
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_graph_two_connected_nodes() {
         let mut graph = CachedStableGraph::new();
 
@@ -211,6 +212,7 @@ mod graph_test {
     }
 
     #[test]
+    #[logging_macro::log_scope]
     fn test_collect_root_ancestors() {
         {
             let mut graph = CachedStableGraph::new();

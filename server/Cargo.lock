@@ -62,21 +62,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
 
 [[package]]
-name = "bit-set"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e11e16035ea35e4e5997b393eacbf6f63983188f7a2ad25bfb13465f5ad59de"
-dependencies = [
- "bit-vec",
-]
-
-[[package]]
-name = "bit-vec"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
-
-[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -129,15 +114,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ced0551234e87afee12411d535648dd89d2e7f34c78b753395567aff3d447ff"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "chan"
-version = "0.1.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d14956a3dae065ffaa0d92ece848ab4ced88d32361e7fdfbfd653a5c454a1ed8"
-dependencies = [
- "rand 0.3.23",
 ]
 
 [[package]]
@@ -701,6 +677,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "logging"
+version = "0.9.5"
+dependencies = [
+ "lazy_static",
+ "rand 0.8.5",
+ "slog",
+ "slog-atomic",
+ "slog-scope",
+ "slog-term",
+]
+
+[[package]]
+name = "logging_macro"
+version = "0.9.5"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "lsp-types"
 version = "0.86.0"
 source = "git+https://github.com/gluon-lang/lsp-types?branch=master#1be3254cd8589950a224d92456840c369cd1553a"
@@ -739,30 +735,25 @@ name = "mcshader-lsp"
 version = "0.9.5"
 dependencies = [
  "anyhow",
- "arc-swap",
- "bit-set",
- "chan",
- "ctor",
  "fs_extra",
  "gl",
  "glutin",
  "hamcrest2",
  "lazy_static",
+ "logging",
+ "logging_macro",
  "mockall",
  "once_cell",
  "path-slash",
  "percent-encoding",
  "petgraph",
  "pretty_assertions",
- "rand 0.8.5",
  "regex",
  "rust_lsp",
  "serde",
  "serde_json",
  "slog",
- "slog-atomic",
  "slog-scope",
- "slog-term",
  "tempdir",
  "thiserror",
  "tree-sitter",
@@ -1203,16 +1194,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "864d3e96a899863136fc6e99f3d7cae289dafe43bf2c5ac19b70df7210c0a145"
 dependencies = [
  "proc-macro2",
-]
-
-[[package]]
-name = "rand"
-version = "0.3.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ac302d8f83c0c1974bf758f6b041c6c8ada916fbb44a609158ca8b064cc76c"
-dependencies = [
- "libc",
- "rand 0.4.6",
 ]
 
 [[package]]
