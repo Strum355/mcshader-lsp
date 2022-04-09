@@ -47,6 +47,7 @@ mod consts;
 mod dfs;
 mod diagnostics_parser;
 mod graph;
+mod linemap;
 mod lsp_ext;
 mod merge_views;
 mod navigation;
@@ -515,6 +516,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
             let capabilities = ServerCapabilities {
                 definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: None,
                     work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
@@ -689,31 +691,60 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
     fn goto_definition(&mut self, params: TextDocumentPositionParams, completable: LSCompletable<Vec<Location>>) {
         logging::slog_with_trace_id(|| {
+            let path = PathBuf::from_url(params.text_document.uri);
+            if !path.starts_with(&self.root) {
+                return;
+            }
             let parser = &mut self.tree_sitter.borrow_mut();
-            let parser_ctx = match navigation::ParserContext::new(parser, &params.text_document.uri) {
+            let parser_ctx = match navigation::ParserContext::new(parser, &path) {
                 Ok(ctx) => ctx,
                 Err(e) => {
                     return completable.complete(Err(MethodError {
                         code: 42069,
-                        message: format!("error building parser context: {}", e.context(params.text_document.uri)),
+                        message: format!("error building parser context: error={}, path={:?}", e, path),
                         data: (),
                     }))
                 }
             };
 
-            match parser_ctx.find_definitions(&params.text_document.uri, params.position) {
-                Ok(locations) => completable.complete(Ok(locations)),
+            match parser_ctx.find_definitions(&path, params.position) {
+                Ok(locations) => completable.complete(Ok(locations.unwrap_or_default())),
                 Err(e) => completable.complete(Err(MethodError {
                     code: 42069,
-                    message: format!("error finding definitions: {}", e.context(params.text_document.uri)),
+                    message: format!("error finding definitions: error={}, path={:?}", e, path),
                     data: (),
                 })),
             }
         });
     }
 
-    fn references(&mut self, _: ReferenceParams, completable: LSCompletable<Vec<Location>>) {
-        completable.complete(Err(Self::error_not_available(())));
+    fn references(&mut self, params: ReferenceParams, completable: LSCompletable<Vec<Location>>) {
+        logging::slog_with_trace_id(|| {
+            let path = PathBuf::from_url(params.text_document_position.text_document.uri);
+            if !path.starts_with(&self.root) {
+                return;
+            }
+            let parser = &mut self.tree_sitter.borrow_mut();
+            let parser_ctx = match navigation::ParserContext::new(parser, &path) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    return completable.complete(Err(MethodError {
+                        code: 42069,
+                        message: format!("error building parser context: error={}, path={:?}", e, path),
+                        data: (),
+                    }))
+                }
+            };
+
+            match parser_ctx.find_references(&path, params.text_document_position.position) {
+                Ok(locations) => completable.complete(Ok(locations.unwrap_or_default())),
+                Err(e) => completable.complete(Err(MethodError {
+                    code: 42069,
+                    message: format!("error finding definitions: error={}, path={:?}", e, path),
+                    data: (),
+                })),
+            }
+        });
     }
 
     fn document_highlight(&mut self, _: TextDocumentPositionParams, completable: LSCompletable<Vec<DocumentHighlight>>) {
@@ -743,7 +774,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
     fn document_link(&mut self, params: DocumentLinkParams, completable: LSCompletable<Vec<DocumentLink>>) {
         logging::slog_with_trace_id(|| {
             // node for current document
-            let curr_doc = params.text_document.uri.to_file_path().unwrap();
+            let curr_doc = PathBuf::from_url(params.text_document.uri);
             let node = match self.graph.borrow_mut().find_node(&curr_doc) {
                 Some(n) => n,
                 None => {
