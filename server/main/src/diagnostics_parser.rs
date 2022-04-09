@@ -32,7 +32,7 @@ impl<'a, T: opengl::ShaderValidator + ?Sized> DiagnosticsParser<'a, T> {
             "NVIDIA Corporation" => {
                 Regex::new(r#"^(?P<filepath>\d+)\((?P<linenum>\d+)\) : (?P<severity>error|warning) [A-C]\d+: (?P<output>.+)"#).unwrap()
             }
-            _ => Regex::new(r#"^(?P<severity>ERROR|WARNING): (?P<filepath>[^?<>*|"\n]+):(?P<linenum>\d+): '[a-z]*' : (?P<output>.+)$"#)
+            _ => Regex::new(r#"^(?P<severity>ERROR|WARNING): (?P<filepath>[^?<>*|"\n]+):(?P<linenum>\d+): (?:'.*' :|[a-z]+\(#\d+\)) +(?P<output>.+)$"#)
                 .unwrap(),
         })
     }
@@ -122,7 +122,7 @@ impl<'a, T: opengl::ShaderValidator + ?Sized> DiagnosticsParser<'a, T> {
 mod diagnostics_test {
     use std::path::PathBuf;
 
-    use slog::{slog_o, Level};
+    use slog::slog_o;
     use url::Url;
 
     use crate::{
