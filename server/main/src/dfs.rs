@@ -134,7 +134,7 @@ pub mod error {
     impl From<CycleError> for Diagnostic {
         fn from(e: CycleError) -> Diagnostic {
             Diagnostic {
-                severity: Some(DiagnosticSeverity::Error),
+                severity: Some(DiagnosticSeverity::ERROR),
                 range: Range::new(Position::new(0, 0), Position::new(0, 500)),
                 source: Some(consts::SOURCE.into()),
                 message: e.into(),

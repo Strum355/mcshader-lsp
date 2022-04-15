@@ -1,4 +1,5 @@
 #![feature(once_cell)]
+#![feature(option_get_or_insert_default)]
 
 use merge_views::FilialTuple;
 use rust_lsp::jsonrpc::{method_types::*, *};
@@ -517,6 +518,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
             let capabilities = ServerCapabilities {
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: None,
                     work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
@@ -529,7 +531,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                     open_close: Some(true),
                     will_save: None,
                     will_save_wait_until: None,
-                    change: Some(TextDocumentSyncKind::Full),
+                    change: Some(TextDocumentSyncKind::FULL),
                     save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions { include_text: Some(true) })),
                 })),
                 ..ServerCapabilities::default()
@@ -661,7 +663,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                         .send_notification(
                             ShowMessage::METHOD,
                             ShowMessageParams {
-                                typ: MessageType::Info,
+                                typ: MessageType::INFO,
                                 message: format!("Command {} executed successfully.", params.command),
                             },
                         )
@@ -674,7 +676,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                         .send_notification(
                             ShowMessage::METHOD,
                             ShowMessageParams {
-                                typ: MessageType::Error,
+                                typ: MessageType::ERROR,
                                 message: format!("Failed to execute `{}`. Reason: {}", params.command, err),
                             },
                         )
@@ -751,11 +753,38 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
         completable.complete(Err(Self::error_not_available(())));
     }
 
-    fn document_symbols(&mut self, _: DocumentSymbolParams, completable: LSCompletable<Vec<SymbolInformation>>) {
-        completable.complete(Err(Self::error_not_available(())));
+    fn document_symbols(&mut self, params: DocumentSymbolParams, completable: LSCompletable<DocumentSymbolResponse>) {
+        logging::slog_with_trace_id(|| {
+            let path = PathBuf::from_url(params.text_document.uri);
+            if !path.starts_with(&self.root) {
+                return;
+            }
+            let parser = &mut self.tree_sitter.borrow_mut();
+            let parser_ctx = match navigation::ParserContext::new(parser, &path) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    return completable.complete(Err(MethodError {
+                        code: 42069,
+                        message: format!("error building parser context: error={}, path={:?}", e, path),
+                        data: (),
+                    }))
+                }
+            };
+
+            match parser_ctx.list_symbols(&path) {
+                Ok(symbols) => completable.complete(Ok(DocumentSymbolResponse::from(symbols.unwrap_or_default()))),
+                Err(e) => {
+                    return completable.complete(Err(MethodError {
+                        code: 42069,
+                        message: format!("error finding definitions: error={}, path={:?}", e, path),
+                        data: (),
+                    }))
+                }
+            }
+        });
     }
 
-    fn workspace_symbols(&mut self, _: WorkspaceSymbolParams, completable: LSCompletable<Vec<SymbolInformation>>) {
+    fn workspace_symbols(&mut self, _: WorkspaceSymbolParams, completable: LSCompletable<DocumentSymbolResponse>) {
         completable.complete(Err(Self::error_not_available(())));
     }
 

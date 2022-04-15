@@ -73,11 +73,11 @@ impl<'a, T: opengl::ShaderValidator + ?Sized> DiagnosticsParser<'a, T> {
 
             let severity = match diagnostic_capture.name("severity") {
                 Some(c) => match c.as_str().to_lowercase().as_str() {
-                    "error" => DiagnosticSeverity::Error,
-                    "warning" => DiagnosticSeverity::Warning,
-                    _ => DiagnosticSeverity::Information,
+                    "error" => DiagnosticSeverity::ERROR,
+                    "warning" => DiagnosticSeverity::WARNING,
+                    _ => DiagnosticSeverity::INFORMATION,
                 },
-                _ => DiagnosticSeverity::Information,
+                _ => DiagnosticSeverity::INFORMATION,
             };
 
             let origin = match diagnostic_capture.name("filepath") {
