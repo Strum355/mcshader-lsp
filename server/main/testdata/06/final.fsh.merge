@@ -1,0 +1,17 @@
+#version 120
+
+#ifdef BANANA
+#line 1 1 // !!
+int test() {
+	return 1;
+}
+#line 5 0 // !!
+#else
+#line 1 1 // !!
+int test() {
+	return 1;
+}
+#line 7 0 // !!
+#endif
+
+void main() {}

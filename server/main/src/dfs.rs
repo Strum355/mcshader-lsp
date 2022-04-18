@@ -56,21 +56,21 @@ impl<'a> Iterator for Dfs<'a> {
     fn next(&mut self) -> Option<Result<FilialTuple, error::CycleError>> {
         let parent = self.cycle.last().map(|p| p.node);
 
-        if let Some(node) = self.stack.pop() {
+        if let Some(child) = self.stack.pop() {
             self.cycle.push(VisitCount {
-                node,
-                children: self.graph.graph.edges(node).count(),
+                node: child,
+                children: self.graph.graph.edges(child).count(),
                 touch: 1,
             });
 
-            let mut children = self.graph.child_node_indexes(node);
+            let mut children: Vec<NodeIndex> = self.graph.child_node_indexes(child).collect();
 
             if !children.is_empty() {
                 // sort by line number in parent
                 children.sort_by(|x, y| {
                     let graph = &self.graph.graph;
-                    let edge1 = graph.edge_weight(graph.find_edge(node, *x).unwrap()).unwrap();
-                    let edge2 = graph.edge_weight(graph.find_edge(node, *y).unwrap()).unwrap();
+                    let edge1 = graph.edge_weight(graph.find_edge(child, *x).unwrap()).unwrap();
+                    let edge2 = graph.edge_weight(graph.find_edge(child, *y).unwrap()).unwrap();
 
                     edge2.line.cmp(&edge1.line)
                 });
@@ -87,7 +87,7 @@ impl<'a> Iterator for Dfs<'a> {
                 self.reset_path_to_branch();
             }
 
-            return Some(Ok((node, parent)));
+            return Some(Ok(FilialTuple { child, parent }));
         }
         None
     }
@@ -189,8 +189,8 @@ mod dfs_test {
                 collection.push(i.unwrap());
             }
 
-            let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.0).collect();
-            let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.1).collect();
+            let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.child).collect();
+            let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.parent).collect();
             //          0
             //        /  \
             //      1     2
@@ -237,8 +237,8 @@ mod dfs_test {
                 collection.push(i.unwrap());
             }
 
-            let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.0).collect();
-            let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.1).collect();
+            let nodes: Vec<NodeIndex> = collection.iter().map(|n| n.child).collect();
+            let parents: Vec<Option<NodeIndex>> = collection.iter().map(|n| n.parent).collect();
             //          0
             //        /  \
             //      1     2

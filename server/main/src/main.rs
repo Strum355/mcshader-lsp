@@ -16,7 +16,6 @@ use url_norm::FromUrl;
 
 use walkdir::WalkDir;
 
-use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
@@ -60,9 +59,7 @@ mod url_norm;
 mod test;
 
 lazy_static! {
-    static ref RE_VERSION: Regex = Regex::new(r#"#version [\d]{3}"#).unwrap();
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
-    static ref RE_INCLUDE_EXTENSION: Regex = Regex::new(r#"#extension GL_GOOGLE_include_directive ?: ?require"#).unwrap();
 }
 
 fn main() {
@@ -119,10 +116,13 @@ pub struct MinecraftShaderLanguageServer {
     log_guard: Option<slog_scope::GlobalLoggerGuard>,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IncludePosition {
+    // the 0-indexed line on which the include lives.
     line: usize,
+    // the 0-indexed char offset defining the start of the include path string.
     start: usize,
+    // the 0-indexed char offset defining the end of the include path string.
     end: usize,
 }
 
@@ -178,8 +178,8 @@ impl MinecraftShaderLanguageServer {
                     None => return None,
                 };
 
-                // TODO: include user added extensions
-                if ext != "vsh" && ext != "fsh" && ext != "glsl" && ext != "inc" {
+                // TODO: include user added extensions with a set
+                if ext != "vsh" && ext != "fsh" && ext  != "csh" && ext != "gsh" && ext != "glsl" && ext != "inc" {
                     return None;
                 }
 
@@ -251,8 +251,8 @@ impl MinecraftShaderLanguageServer {
             Some(n) => n,
         };
 
-        let prev_children: HashSet<_, RandomState> = HashSet::from_iter(self.graph.borrow().child_node_meta(idx));
-        let new_children: HashSet<_, RandomState> = includes.iter().cloned().collect();
+        let prev_children: HashSet<_> = HashSet::from_iter(self.graph.borrow().child_node_metas(idx));
+        let new_children: HashSet<_> = includes.iter().cloned().collect();
 
         let to_be_added = new_children.difference(&prev_children);
         let to_be_removed = prev_children.difference(&new_children);
@@ -265,7 +265,7 @@ impl MinecraftShaderLanguageServer {
 
         for removal in to_be_removed {
             let child = self.graph.borrow_mut().find_node(&removal.0).unwrap();
-            self.graph.borrow_mut().remove_edge(idx, child);
+            self.graph.borrow_mut().remove_edge(idx, child, removal.1);
         }
 
         for insertion in to_be_added {
@@ -325,7 +325,10 @@ impl MinecraftShaderLanguageServer {
 
             let view = {
                 let graph = self.graph.borrow();
-                merge_views::generate_merge_list(&tree, &all_sources, &graph, &mut source_mapper)
+                let merged_string = {
+                    merge_views::MergeViewBuilder::new(&tree, &all_sources, &graph, &mut source_mapper).build()
+                };
+                merged_string
             };
 
             let root_path = self.graph.borrow().get_node(root);
@@ -365,7 +368,7 @@ impl MinecraftShaderLanguageServer {
 
             diagnostics.extend(diagnostics_parser.parse_diagnostics_output(stdout, uri, &source_mapper, &self.graph.borrow()));
         } else {
-            let mut all_trees: Vec<(TreeType, Vec<(NodeIndex, Option<_>)>)> = Vec::new();
+            let mut all_trees: Vec<(TreeType, Vec<FilialTuple>)> = Vec::new();
 
             for root in &file_ancestors {
                 let nodes = match self.get_dfs_for_node(*root) {
@@ -408,10 +411,13 @@ impl MinecraftShaderLanguageServer {
                 let mut source_mapper = source_mapper::SourceMapper::new(all_sources.len());
                 let view = {
                     let graph = self.graph.borrow();
-                    merge_views::generate_merge_list(&tree.1, &all_sources, &graph, &mut source_mapper)
+                    let merged_string = {
+                        merge_views::MergeViewBuilder::new(&tree.1, &all_sources, &graph, &mut source_mapper).build()
+                    };
+                    merged_string
                 };
 
-                let root_path = self.graph.borrow().get_node(tree.1[0].0);
+                let root_path = self.graph.borrow().get_node(tree.1.first().unwrap().child);
                 let stdout = match self.compile_shader_source(&view, tree.0, &root_path) {
                     Some(s) => s,
                     None => continue,
@@ -451,7 +457,7 @@ impl MinecraftShaderLanguageServer {
 
         for node in nodes {
             let graph = self.graph.borrow();
-            let path = graph.get_node(node.0);
+            let path = graph.get_node(node.child);
 
             if sources.contains_key(&path) {
                 continue;
@@ -817,29 +823,30 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 .graph
                 .borrow()
                 .child_node_indexes(node)
-                .into_iter()
-                .filter_map(|child| {
+                .filter_map::<Vec<DocumentLink>, _>(|child| {
                     let graph = self.graph.borrow();
-                    let value = graph.get_edge_meta(node, child);
-                    let path = graph.get_node(child);
-                    let url = match Url::from_file_path(&path) {
-                        Ok(url) => url,
-                        Err(e) => {
-                            error!("error converting into url"; "path" => path.to_str().unwrap(), "error" => format!("{:?}", e));
-                            return None;
-                        }
-                    };
-
-                    Some(DocumentLink {
-                        range: Range::new(
-                            Position::new(u32::try_from(value.line).unwrap(), u32::try_from(value.start).unwrap()),
-                            Position::new(u32::try_from(value.line).unwrap(), u32::try_from(value.end).unwrap()),
-                        ),
-                        target: Some(url.clone()),
-                        tooltip: Some(url.path().to_string()),
-                        data: None,
-                    })
+                    graph.get_edge_metas(node, child).map(|value| {
+                        let path = graph.get_node(child);
+                        let url = match Url::from_file_path(&path) {
+                            Ok(url) => url,
+                            Err(e) => {
+                                error!("error converting into url"; "path" => path.to_str().unwrap(), "error" => format!("{:?}", e));
+                                return None;
+                            }
+                        };
+    
+                        Some(DocumentLink {
+                            range: Range::new(
+                                Position::new(u32::try_from(value.line).unwrap(), u32::try_from(value.start).unwrap()),
+                                Position::new(u32::try_from(value.line).unwrap(), u32::try_from(value.end).unwrap()),
+                            ),
+                            target: Some(url.clone()),
+                            tooltip: Some(url.path().to_string()),
+                            data: None,
+                        })
+                    }).collect()
                 })
+                .flatten()
                 .collect();
             debug!("document link results";
                 "links" => format!("{:?}", edges.iter().map(|e| (e.range, e.target.as_ref().unwrap().path())).collect::<Vec<_>>()),

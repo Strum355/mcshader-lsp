@@ -51,7 +51,7 @@ impl VirtualMergedDocument {
 
         for node in nodes {
             let graph = self.graph.borrow();
-            let path = graph.get_node(node.0);
+            let path = graph.get_node(node.child);
 
             if sources.contains_key(&path) {
                 continue;
@@ -103,7 +103,7 @@ impl Invokeable for VirtualMergedDocument {
 
             let mut source_mapper = SourceMapper::new(all_sources.len());
             let graph = self.graph.borrow();
-            let view = merge_views::generate_merge_list(&tree, &all_sources, &graph, &mut source_mapper);
+            let view = merge_views::MergeViewBuilder::new(&tree, &all_sources, &graph, &mut source_mapper).build();
             return Ok(serde_json::value::Value::String(view));
         }
         return Err(format_err!(

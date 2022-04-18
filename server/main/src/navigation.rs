@@ -28,7 +28,11 @@ impl SymbolName {
                 }
                 ("struct_specifier", "field_declaration_list") => {
                     let struct_ident = node.child_by_field_name("name").unwrap();
-                    fqname.push(format!("{}[{}]", struct_ident.utf8_text(source.as_bytes()).unwrap(), struct_ident.id()));
+                    fqname.push(format!(
+                        "{}[{}]",
+                        struct_ident.utf8_text(source.as_bytes()).unwrap(),
+                        struct_ident.id()
+                    ));
                 }
                 _ => (),
             }
