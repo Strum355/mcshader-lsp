@@ -12,5 +12,5 @@ export const status = new lsp.NotificationType<StatusParams>(statusMethod)
 export const updateConfigMethod = 'mc-glsl/updateConfig'
 
 export type ConfigUpdateParams = {
-  kv: {key: string, value: string}[]
+  kv: { key: string, value: string }[]
 }

@@ -9,33 +9,33 @@ export const log = new class {
 
   // Hint: the type [T, ...T[]] means a non-empty array
   debug(...msg: [unknown, ...unknown[]]): void {
-      log.write('DEBUG', ...msg)
+    log.write('DEBUG', ...msg)
   }
 
   info(...msg: [unknown, ...unknown[]]): void {
-      log.write('INFO ', ...msg)
+    log.write('INFO ', ...msg)
   }
 
   warn(...msg: [unknown, ...unknown[]]): void {
-      log.write('WARN ', ...msg)
+    log.write('WARN ', ...msg)
   }
 
   error(...msg: [unknown, ...unknown[]]): void {
-      log.write('ERROR', ...msg)
+    log.write('ERROR', ...msg)
   }
 
   write(label: string, ...messageParts: unknown[]): void {
-      const message = messageParts.map(log.stringify).join(' ')
-      const dateTime = new Date().toLocaleString()
-      log.output.appendLine(`${label} [${dateTime}]: ${message}`)
+    const message = messageParts.map(log.stringify).join(' ')
+    const dateTime = new Date().toLocaleString()
+    log.output.appendLine(`${label} [${dateTime}]: ${message}`)
   }
 
   private stringify(val: unknown): string {
-      if (typeof val === 'string') return val
+    if (typeof val === 'string') return val
       return inspect(val, {
-          colors: false,
-          depth: 6, // heuristic
-      })
+        colors: false,
+        depth: 6, // heuristic
+    })
   }
 }
 

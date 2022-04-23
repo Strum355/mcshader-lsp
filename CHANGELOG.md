@@ -4,6 +4,13 @@ All notable changes to the "vscode-mc-shader" extension will be documented in th
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## [0.9.7]
+
+### Fixed
+
+- Fixed bad release tag format
+- Fixed extension silently failing on activation
+
 ## [0.9.6]
 
 ### Added

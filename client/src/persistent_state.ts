@@ -12,6 +12,6 @@ export class PersistentState {
   }
 
   async updateServerVersion(value: string | undefined) {
-      await this.state.update('serverVersion', value)
+    await this.state.update('serverVersion', value)
   }
 }

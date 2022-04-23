@@ -11,7 +11,7 @@ export class LanguageClient extends lsp.LanguageClient {
     super('vscode-mc-shader', 'VSCode MC Shader', {
       command: lspBinary
     }, {
-      documentSelector: [{scheme: 'file', language: 'glsl'}],
+      documentSelector: [{ scheme: 'file', language: 'glsl' }],
       outputChannel: lspOutputChannel,
       synchronize: {
         configurationSection: 'mcglsl',
@@ -28,10 +28,10 @@ export class LanguageClient extends lsp.LanguageClient {
     this.extension.context.subscriptions.push(this.start())
 
     await this.onReady()
-    
+
     this.onNotification(updateConfigMethod, this.onUpdateConfig)
     this.onNotification(statusMethod, this.onStatusChange)
-    
+
     return this
   }
 

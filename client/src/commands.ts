@@ -56,7 +56,7 @@ export function virtualMergedDocument(e: Extension): Command {
       + vscode.window.activeTextEditor.document.uri.path
         .slice(vscode.window.activeTextEditor.document.uri.path.lastIndexOf('.') + 1)
     const path = vscode.Uri.parse(`mcglsl:${uri}`)
-    
+
     const doc = await vscode.workspace.openTextDocument(path)
     docProvider.onDidChangeEmitter.fire(path)
     await vscode.window.showTextDocument(doc, {
@@ -83,7 +83,7 @@ export function parseTree(e: Extension): Command {
     onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>()
     onDidChange = this.onDidChangeEmitter.event
 
-    provideTextDocumentContent(uri: vscode.Uri, __: vscode.CancellationToken): vscode.ProviderResult<string> {
+    provideTextDocumentContent(uri: vscode.Uri, _: vscode.CancellationToken): vscode.ProviderResult<string> {
       if (uri.path.includes('.flattened.')) return ''
       return getVirtualDocument(uri.path.substring(0, uri.path.lastIndexOf('.')))
     }
@@ -96,7 +96,7 @@ export function parseTree(e: Extension): Command {
 
     const uri = vscode.window.activeTextEditor.document.uri
     const path = vscode.Uri.parse(`mcglsl:${uri.path}.ast`)
-    
+
     const doc = await vscode.workspace.openTextDocument(path)
     docProvider.onDidChangeEmitter.fire(path)
     await vscode.window.showTextDocument(doc, {
