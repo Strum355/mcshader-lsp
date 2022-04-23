@@ -16,7 +16,6 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 - Another `#include` merging bug when a file is imported twice into another file at different lines
 
-
 ## [0.9.5]
 
 ### Added

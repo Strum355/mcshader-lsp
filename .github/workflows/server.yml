@@ -48,4 +48,3 @@ jobs:
         path: ${{ matrix.platforms.dir }}
     - name: Run tests
       run: cargo test --target ${{ matrix.platforms.target }}
-      if: ${{ matrix.platforms.target != 'aarch64-apple-darwin' }}

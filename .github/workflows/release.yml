@@ -34,20 +34,20 @@ jobs:
         platforms:
         - os: ubuntu-18.04
           target: x86_64-unknown-linux-gnu
-          artifact: x86_64-unknown-linux-gnu
           dir: server/mcshader-lsp
+          artifact: x86_64-unknown-linux-gnu
         - os: windows-latest
           target: x86_64-pc-windows-msvc
-          artifact: x86_64-windows-msvc.exe
           dir: server/mcshader-lsp.exe
+          artifact: x86_64-windows-msvc.exe
         - os: macos-11
           target: x86_64-apple-darwin
-          artifact: x86_64-apple-darwin
           dir: server/mcshader-lsp
+          artifact: x86_64-apple-darwin
         - os: macos-11
           target: aarch64-apple-darwin
-          artifact: aarch64-apple-darwin
           dir: server/mcshader-lsp
+          artifact: aarch64-apple-darwin
     steps:
     - uses: actions/checkout@v2
     - name: Install latest nightly
@@ -55,6 +55,8 @@ jobs:
       with:
           toolchain: nightly
           default: true
+          target: ${{ matrix.platforms.target }}
+          override: true
     - name: Build server
       run: cargo build --release --target ${{ matrix.platforms.target }} --out-dir . -Z unstable-options
     - name: Upload release file
