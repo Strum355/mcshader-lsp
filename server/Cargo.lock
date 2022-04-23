@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "logging"
-version = "0.9.5"
+version = "0.9.6"
 dependencies = [
  "lazy_static",
  "rand 0.8.5",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "logging_macro"
-version = "0.9.5"
+version = "0.9.6"
 dependencies = [
  "quote",
  "syn",
@@ -703,7 +703,7 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "mcshader-lsp"
-version = "0.9.5"
+version = "0.9.6"
 dependencies = [
  "anyhow",
  "fs_extra",

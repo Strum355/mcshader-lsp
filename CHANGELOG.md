@@ -4,6 +4,19 @@ All notable changes to the "vscode-mc-shader" extension will be documented in th
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## [0.9.6]
+
+### Added
+
+- MacOS M1 binary releases
+- AMD OpenGL driver diagnostics output support. AMD linting is a-go 🚀
+- Tree-sitter based go-to-definition/find-references/document symbols. Currently disabled until stabilized
+
+### Fixed
+
+- Another `#include` merging bug when a file is imported twice into another file at different lines
+
+
 ## [0.9.5]
 
 ### Added
