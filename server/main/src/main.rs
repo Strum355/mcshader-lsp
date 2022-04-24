@@ -60,6 +60,54 @@ mod test;
 
 lazy_static! {
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
+    static ref TOPLEVEL_FILES: HashSet<PathBuf> = {
+        let mut set = HashSet::with_capacity(6864);
+        for folder in ["shaders/", "shaders/world0/", "shaders/world1/", "shaders/world-1/"] {
+            for ext in ["fsh", "vsh", "gsh", "csh"] {
+                set.insert(format!("{}composite.{}", folder, ext).into());
+                for i in 1..=99 {
+                    set.insert(format!("{}composite{}.{}", folder, i, ext).into());
+                    set.insert(format!("{}deferred{}.{}", folder, i, ext).into());
+                    set.insert(format!("{}prepare{}.{}", folder, i, ext).into());
+                    set.insert(format!("{}shadowcomp{}.{}", folder, i, ext).into());
+                }
+                set.insert(format!("{}composite_pre.{}", folder, ext).into());
+                set.insert(format!("{}deferred.{}", folder, ext).into());
+                set.insert(format!("{}deferred_pre.{}", folder, ext).into());
+                set.insert(format!("{}final.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_armor_glint.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_basic.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_beaconbeam.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_block.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_clouds.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_damagedblock.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_entities.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_entities_glowing.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_hand.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_hand.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_hand_water.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_item.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_line.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_skybasic.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_skytextured.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_spidereyes.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_terrain.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_terrain_cutout.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_terrain_cutout_mip.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_terrain_solid.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_textured.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_textured_lit.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_water.{}", folder, ext).into());
+                set.insert(format!("{}gbuffers_weather.{}", folder, ext).into());
+                set.insert(format!("{}prepare.{}", folder, ext).into());
+                set.insert(format!("{}shadow.{}", folder, ext).into());
+                set.insert(format!("{}shadow_cutout.{}", folder, ext).into());
+                set.insert(format!("{}shadow_solid.{}", folder, ext).into());
+                set.insert(format!("{}shadowcomp.{}", folder, ext).into());
+            }
+        }
+        set
+    };
 }
 
 fn main() {
@@ -156,7 +204,7 @@ impl MinecraftShaderLanguageServer {
         }
     }
 
-    pub fn gen_initial_graph(&self) {
+    fn build_initial_graph(&self) {
         info!("generating graph for current root"; "root" => self.root.to_str().unwrap());
 
         // filter directories and files not ending in any of the 3 extensions
@@ -341,6 +389,13 @@ impl MinecraftShaderLanguageServer {
                     return Ok(diagnostics);
                 }
             };
+
+            if !TOPLEVEL_FILES.contains(root_path.strip_prefix(&self.root).unwrap()) {
+                warn!("got a non-valid toplevel file"; "root_ancestor" => root_path.to_str().unwrap(), "stripped" => root_path.strip_prefix(&self.root).unwrap().to_str().unwrap());
+                back_fill(&all_sources, &mut diagnostics);
+                return Ok(diagnostics);
+            }
+
             let tree_type = if ext == "fsh" {
                 TreeType::Fragment
             } else if ext == "vsh" {
@@ -350,12 +405,7 @@ impl MinecraftShaderLanguageServer {
             } else if ext == "csh" {
                 TreeType::Compute
             } else {
-                warn!(
-                    "got a non fsh|vsh|gsh|csh as a file root ancestor, skipping lint";
-                    "extension" => ext, "root_ancestor" => root_path.to_str().unwrap()
-                );
-                back_fill(&all_sources, &mut diagnostics);
-                return Ok(diagnostics);
+                unreachable!();
             };
 
             let stdout = match self.compile_shader_source(&view, tree_type, &root_path) {
@@ -387,6 +437,12 @@ impl MinecraftShaderLanguageServer {
                     Some(ext) => ext.to_str().unwrap(),
                     None => continue,
                 };
+
+                if !TOPLEVEL_FILES.contains(root_path.strip_prefix(&self.root).unwrap()) {
+                    warn!("got a non-valid toplevel file"; "root_ancestor" => root_path.to_str().unwrap(), "stripped" => root_path.strip_prefix(&self.root).unwrap().to_str().unwrap());
+                    continue;
+                }
+
                 let tree_type = if ext == "fsh" {
                     TreeType::Fragment
                 } else if ext == "vsh" {
@@ -396,11 +452,7 @@ impl MinecraftShaderLanguageServer {
                 } else if ext == "csh" {
                     TreeType::Compute
                 } else {
-                    warn!(
-                        "got a non fsh|vsh|gsh|csh as a file root ancestor, skipping lint";
-                        "extension" => ext, "root_ancestor" => root_path.to_str().unwrap()
-                    );
-                    continue;
+                    unreachable!();
                 };
 
                 let sources = self.load_sources(&nodes)?;
@@ -566,7 +618,8 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
 
             self.root = root;
 
-            self.gen_initial_graph();
+
+            self.build_initial_graph();
 
             self.set_status("ready", "Project initialized", "$(check)");
         });
