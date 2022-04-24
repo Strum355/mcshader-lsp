@@ -40,7 +40,7 @@ impl<'a, T: opengl::ShaderValidator + ?Sized> DiagnosticsParser<'a, T> {
     fn get_line_offset(&self) -> u32 {
         *self.line_offset.get_or_init(|| match self.vendor_querier.vendor().as_str() {
             "ATI Technologies" => 0,
-            _ => 2,
+            _ => 1,
         })
     }
 
