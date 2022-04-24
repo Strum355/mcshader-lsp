@@ -4,6 +4,14 @@ All notable changes to the "vscode-mc-shader" extension will be documented in th
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## [0.9.8]
+
+### Fixed
+
+- NVIDIA diagnostics line offset off-by-one due to confusion with erroneous (non-proper) GLSL files resulting in both -1 and -2 offsets appearing to be valid when only the former is.
+- Non-toplevel files being treated as toplevel files when they have .fsh/.vsh/etc and not imported into a valid toplevel file.
+- Fix issue in the depth-first-search iterator when a file is imported twice into another file with a different include in between.
+
 ## [0.9.7]
 
 ### Fixed
