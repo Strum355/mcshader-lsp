@@ -251,7 +251,9 @@ impl MinecraftShaderLanguageServer {
             Some(n) => n,
         };
 
-        let prev_children: HashSet<_> = HashSet::from_iter(self.graph.borrow().child_node_metas(idx));
+        let prev_children: HashSet<_> = HashSet::from_iter(self.graph.borrow().get_all_child_positions(idx).map(|tup| {
+            (self.graph.borrow().get_node(tup.0), tup.1)
+        }));
         let new_children: HashSet<_> = includes.iter().cloned().collect();
 
         let to_be_added = new_children.difference(&prev_children);
@@ -825,7 +827,7 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 .child_node_indexes(node)
                 .filter_map::<Vec<DocumentLink>, _>(|child| {
                     let graph = self.graph.borrow();
-                    graph.get_edge_metas(node, child).map(|value| {
+                    graph.get_child_positions(node, child).map(|value| {
                         let path = graph.get_node(child);
                         let url = match Url::from_file_path(&path) {
                             Ok(url) => url,

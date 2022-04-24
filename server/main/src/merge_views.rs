@@ -8,6 +8,7 @@ use std::{
 use core::slice::Iter;
 
 use petgraph::stable_graph::NodeIndex;
+use slog_scope::debug;
 
 use crate::graph::CachedStableGraph;
 use crate::source_mapper::SourceMapper;
@@ -88,13 +89,7 @@ impl<'a> MergeViewBuilder<'a> {
         // );
 
         // last_offset_set.insert((first, None), version_char_offsets.1);
-        self.last_offset_set.insert(
-            FilialTuple {
-                child: first,
-                parent: None,
-            },
-            0,
-        );
+        self.set_last_offset_for_tuple(None, first, 0);
 
         // stack to keep track of the depth first traversal
         let mut stack = VecDeque::<NodeIndex>::new();
@@ -102,13 +97,8 @@ impl<'a> MergeViewBuilder<'a> {
         self.create_merge_views(&mut merge_list, &mut extra_lines, &mut stack);
 
         // now we add a view of the remainder of the root file
-        let offset = *self
-            .last_offset_set
-            .get(&FilialTuple {
-                child: first,
-                parent: None,
-            })
-            .unwrap();
+
+        let offset = self.get_last_offset_for_tuple(None, first).unwrap();
 
         let len = first_source.len();
         merge_list.push_back(&first_source[min(offset, len)..]);
@@ -135,8 +125,8 @@ impl<'a> MergeViewBuilder<'a> {
                 .parent_child_edge_iterator
                 .entry(*n)
                 .or_insert_with(|| {
-                    let edge_metas = self.graph.get_edge_metas(parent, child);
-                    Box::new(edge_metas)
+                    let child_positions = self.graph.get_child_positions(parent, child);
+                    Box::new(child_positions)
                 })
                 .next()
                 .unwrap();
@@ -147,15 +137,16 @@ impl<'a> MergeViewBuilder<'a> {
             let (char_for_line, char_following_line) = self.char_offset_for_line(edge.line, parent_source);
 
             let offset = *self
-                .last_offset_set
-                .insert(
-                    FilialTuple {
-                        child: parent,
-                        parent: stack.back().copied(),
-                    },
-                    char_following_line,
-                )
+                .set_last_offset_for_tuple(stack.back().copied(), parent, char_following_line)
                 .get_or_insert(0);
+
+            debug!("creating view to start child file";
+                "parent" => parent_path.to_str().unwrap(), "child" => child_path.to_str().unwrap(),
+                "grandparent" => stack.back().copied().map(|g| self.graph.get_node(g).to_str().unwrap().to_string()), // self.graph.get_node().to_str().unwrap(),
+                "last_parent_offset" => offset, "line" => edge.line, "char_for_line" => char_for_line,
+                "char_following_line" => char_following_line,
+            );
+
             merge_list.push_back(&parent_source[offset..char_for_line]);
             self.add_opening_line_directive(&child_path, child, merge_list, extra_lines);
 
@@ -173,13 +164,7 @@ impl<'a> MergeViewBuilder<'a> {
                             }
                         };
                         merge_list.push_back(&child_source[..offset]);
-                        self.last_offset_set.insert(
-                            FilialTuple {
-                                child,
-                                parent: Some(parent),
-                            },
-                            0,
-                        );
+                        self.set_last_offset_for_tuple(Some(parent), child, 0);
                         // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                         self.add_closing_line_directive(edge.line + 2, &parent_path, parent, merge_list, extra_lines);
                         // if the next pair's parent is not the current pair's parent, we need to bubble up
@@ -193,29 +178,17 @@ impl<'a> MergeViewBuilder<'a> {
                     self.create_merge_views(merge_list, extra_lines, stack);
                     stack.pop_back();
 
-                    let offset = *self
-                        .last_offset_set
-                        .get(&FilialTuple {
-                            child,
-                            parent: Some(parent),
-                        })
-                        .unwrap();
+                    let offset = self.get_last_offset_for_tuple(Some(parent), child).unwrap();
                     let child_source = self.sources.get(&child_path).unwrap();
                     // this evaluates to false once the file contents have been exhausted aka offset = child_source.len() + 1
                     let end_offset = match child_source.ends_with('\n') {
-                        true => 1,  /* child_source.len()-1 */
-                        false => 0, /* child_source.len() */
+                        true => 1,
+                        false => 0,
                     };
                     if offset < child_source.len() - end_offset {
                         // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
-                        merge_list.push_back(&child_source[offset../* std::cmp::max( */child_source.len()-end_offset/* , offset) */]);
-                        self.last_offset_set.insert(
-                            FilialTuple {
-                                child,
-                                parent: Some(parent),
-                            },
-                            0,
-                        );
+                        merge_list.push_back(&child_source[offset..child_source.len() - end_offset]);
+                        self.set_last_offset_for_tuple(Some(parent), child, 0);
                     }
 
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
@@ -234,18 +207,24 @@ impl<'a> MergeViewBuilder<'a> {
                         false => child_source.len(),
                     };
                     merge_list.push_back(&child_source[..offset]);
-                    self.last_offset_set.insert(
-                        FilialTuple {
-                            child,
-                            parent: Some(parent),
-                        },
-                        0,
-                    );
+                    self.set_last_offset_for_tuple(Some(parent), child, 0);
                     // +2 because edge.line is 0 indexed but #line is 1 indexed and references the *following* line
                     self.add_closing_line_directive(edge.line + 2, &parent_path, parent, merge_list, extra_lines);
                 }
             }
         }
+    }
+
+    fn set_last_offset_for_tuple(&mut self, parent: Option<NodeIndex>, child: NodeIndex, offset: usize) -> Option<usize> {
+        debug!("inserting last offset";
+            "parent" => parent.map(|p| self.graph.get_node(p).to_str().unwrap().to_string()),
+            "child" => self.graph.get_node(child).to_str().unwrap().to_string(),
+            "offset" => offset);
+        self.last_offset_set.insert(FilialTuple { child, parent }, offset)
+    }
+
+    fn get_last_offset_for_tuple(&self, parent: Option<NodeIndex>, child: NodeIndex) -> Option<usize> {
+        self.last_offset_set.get(&FilialTuple { child, parent }).copied()
     }
 
     // returns the character offset + 1 of the end of line number `line` and the character

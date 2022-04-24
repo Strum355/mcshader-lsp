@@ -59,9 +59,9 @@ impl CachedStableGraph {
         PathBuf::from_str(&self.graph[node]).unwrap()
     }
 
-    /// returns an iterator over all the `IncludePosition`'s between a parent and its child for all the positions
+    /// Returns an iterator over all the `IncludePosition`'s between a parent and its child for all the positions
     /// that the child may be imported into the parent, in order of import.
-    pub fn get_edge_metas(&self, parent: NodeIndex, child: NodeIndex) -> impl Iterator<Item = IncludePosition> + '_ {
+    pub fn get_child_positions(&self, parent: NodeIndex, child: NodeIndex) -> impl Iterator<Item = IncludePosition> + '_ {
         let mut edges = self
             .graph
             .edges(parent)
@@ -74,6 +74,18 @@ impl CachedStableGraph {
             })
             .collect::<Vec<IncludePosition>>();
         edges.sort_by(|x, y| x.line.cmp(&y.line));
+        edges.into_iter()
+    }
+
+    /// Returns an iterator over all the `(NodeIndex, IncludePosition)` tuples between a node and all its children, in order
+    /// of import.
+    pub fn get_all_child_positions(&self, node: NodeIndex) -> impl Iterator<Item = (NodeIndex, IncludePosition)> + '_ {
+        let mut edges = self.graph.edges(node).map(|edge| {
+            let child = self.graph.edge_endpoints(edge.id()).unwrap().1;
+            (child, self.graph[edge.id()])
+        })
+        .collect::<Vec<_>>();
+        edges.sort_by(|x, y| x.1.line.cmp(&y.1.line));
         edges.into_iter()
     }
 
@@ -97,14 +109,6 @@ impl CachedStableGraph {
             .find(|edge| self.graph.edge_endpoints(edge.id()).unwrap().1 == child && *edge.weight() == position)
             .map(|edge| edge.id())
             .and_then(|edge| self.graph.remove_edge(edge));
-    }
-
-    pub fn child_node_metas(&self, node: NodeIndex) -> impl Iterator<Item = (PathBuf, IncludePosition)> + '_ {
-        self.graph.neighbors(node).map(move |n| {
-            let edge = self.graph.find_edge(node, n).unwrap();
-            let edge_meta = self.graph.edge_weight(edge).unwrap();
-            return (self.reverse_index.get(&n).unwrap().clone(), *edge_meta);
-        })
     }
 
     pub fn child_node_indexes(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + '_ {
@@ -236,9 +240,9 @@ mod graph_test {
         //    / \
         //   1   1
 
-        assert_eq!(2, graph.get_edge_metas(idx0, idx1).count());
+        assert_eq!(2, graph.get_child_positions(idx0, idx1).count());
 
-        let mut edge_metas = graph.get_edge_metas(idx0, idx1);
+        let mut edge_metas = graph.get_child_positions(idx0, idx1);
         assert_eq!(Some(IncludePosition { line: 2, start: 0, end: 0 }), edge_metas.next());
         assert_eq!(Some(IncludePosition { line: 4, start: 0, end: 0 }), edge_metas.next());
     }

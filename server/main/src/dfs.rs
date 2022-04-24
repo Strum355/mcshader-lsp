@@ -63,25 +63,22 @@ impl<'a> Iterator for Dfs<'a> {
                 touch: 1,
             });
 
-            let mut children: Vec<NodeIndex> = self.graph.child_node_indexes(child).collect();
+            let mut children: Vec<_> = self
+                .graph
+                .get_all_child_positions(child)
+                .collect();
+            children.reverse();
 
             if !children.is_empty() {
-                // sort by line number in parent
-                children.sort_by(|x, y| {
-                    let graph = &self.graph.graph;
-                    let edge1 = graph.edge_weight(graph.find_edge(child, *x).unwrap()).unwrap();
-                    let edge2 = graph.edge_weight(graph.find_edge(child, *y).unwrap()).unwrap();
 
-                    edge2.line.cmp(&edge1.line)
-                });
-
-                match self.check_for_cycle(&children) {
+                let child_indexes: Vec<_> = children.iter().map(|c| c.0).collect();
+                match self.check_for_cycle(&child_indexes) {
                     Ok(_) => {}
                     Err(e) => return Some(Err(e)),
                 };
 
                 for child in children {
-                    self.stack.push(child);
+                    self.stack.push(child.0);
                 }
             } else {
                 self.reset_path_to_branch();
@@ -314,10 +311,10 @@ mod dfs_test {
             //     \ /  \
             //      6 - 7
 
-            assert!(is_cyclic_directed(&graph.graph));
-
             let next = dfs.next().unwrap();
             assert_that!(next, err());
+
+            assert!(is_cyclic_directed(&graph.graph));
         }
         {
             let mut graph = CachedStableGraph::new();
