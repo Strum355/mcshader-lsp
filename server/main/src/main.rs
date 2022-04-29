@@ -58,53 +58,61 @@ mod url_norm;
 #[cfg(test)]
 mod test;
 
+pub fn is_top_level(path: &Path) -> bool {
+    let path = path.as_os_str().to_str().unwrap().replace("\\", "/");
+    if !RE_WORLD_FOLDER.is_match(&path) {
+        return false;
+    }
+    let parts: Vec<&str> = path.split("/").collect();
+    let len = parts.len();
+    (len == 3 || len == 2) && TOPLEVEL_FILES.contains(parts[len - 1])
+}
+
 lazy_static! {
     static ref RE_INCLUDE: Regex = Regex::new(r#"^(?:\s)*?(?:#include) "(.+)"\r?"#).unwrap();
-    static ref TOPLEVEL_FILES: HashSet<PathBuf> = {
-        let mut set = HashSet::with_capacity(6864);
-        for folder in ["shaders/", "shaders/world0/", "shaders/world1/", "shaders/world-1/"] {
-            for ext in ["fsh", "vsh", "gsh", "csh"] {
-                set.insert(format!("{}composite.{}", folder, ext).into());
-                for i in 1..=99 {
-                    set.insert(format!("{}composite{}.{}", folder, i, ext).into());
-                    set.insert(format!("{}deferred{}.{}", folder, i, ext).into());
-                    set.insert(format!("{}prepare{}.{}", folder, i, ext).into());
-                    set.insert(format!("{}shadowcomp{}.{}", folder, i, ext).into());
-                }
-                set.insert(format!("{}composite_pre.{}", folder, ext).into());
-                set.insert(format!("{}deferred.{}", folder, ext).into());
-                set.insert(format!("{}deferred_pre.{}", folder, ext).into());
-                set.insert(format!("{}final.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_armor_glint.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_basic.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_beaconbeam.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_block.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_clouds.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_damagedblock.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_entities.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_entities_glowing.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_hand.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_hand.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_hand_water.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_item.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_line.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_skybasic.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_skytextured.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_spidereyes.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_terrain.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_terrain_cutout.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_terrain_cutout_mip.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_terrain_solid.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_textured.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_textured_lit.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_water.{}", folder, ext).into());
-                set.insert(format!("{}gbuffers_weather.{}", folder, ext).into());
-                set.insert(format!("{}prepare.{}", folder, ext).into());
-                set.insert(format!("{}shadow.{}", folder, ext).into());
-                set.insert(format!("{}shadow_cutout.{}", folder, ext).into());
-                set.insert(format!("{}shadow_solid.{}", folder, ext).into());
-                set.insert(format!("{}shadowcomp.{}", folder, ext).into());
+    static ref RE_WORLD_FOLDER: Regex = Regex::new(r#"^shaders(/world-?\d+)?"#).unwrap();
+    static ref TOPLEVEL_FILES: HashSet<String> = {
+        let mut set = HashSet::with_capacity(1716);
+        for ext in ["fsh", "vsh", "gsh", "csh"] {
+            set.insert(format!("composite.{}", ext));
+            set.insert(format!("deferred.{}", ext));
+            set.insert(format!("prepare.{}", ext));
+            set.insert(format!("shadowcomp.{}", ext));
+            for i in 1..=99 {
+                set.insert(format!("composite{}.{}", i, ext));
+                set.insert(format!("deferred{}.{}", i, ext));
+                set.insert(format!("prepare{}.{}", i, ext));
+                set.insert(format!("shadowcomp{}.{}", i, ext));
             }
+            set.insert(format!("composite_pre.{}", ext));
+            set.insert(format!("deferred_pre.{}", ext));
+            set.insert(format!("final.{}", ext));
+            set.insert(format!("gbuffers_armor_glint.{}", ext));
+            set.insert(format!("gbuffers_basic.{}", ext));
+            set.insert(format!("gbuffers_beaconbeam.{}", ext));
+            set.insert(format!("gbuffers_block.{}", ext));
+            set.insert(format!("gbuffers_clouds.{}", ext));
+            set.insert(format!("gbuffers_damagedblock.{}", ext));
+            set.insert(format!("gbuffers_entities.{}", ext));
+            set.insert(format!("gbuffers_entities_glowing.{}", ext));
+            set.insert(format!("gbuffers_hand.{}", ext));
+            set.insert(format!("gbuffers_hand_water.{}", ext));
+            set.insert(format!("gbuffers_item.{}", ext));
+            set.insert(format!("gbuffers_line.{}", ext));
+            set.insert(format!("gbuffers_skybasic.{}", ext));
+            set.insert(format!("gbuffers_skytextured.{}", ext));
+            set.insert(format!("gbuffers_spidereyes.{}", ext));
+            set.insert(format!("gbuffers_terrain.{}", ext));
+            set.insert(format!("gbuffers_terrain_cutout.{}", ext));
+            set.insert(format!("gbuffers_terrain_cutout_mip.{}", ext));
+            set.insert(format!("gbuffers_terrain_solid.{}", ext));
+            set.insert(format!("gbuffers_textured.{}", ext));
+            set.insert(format!("gbuffers_textured_lit.{}", ext));
+            set.insert(format!("gbuffers_water.{}", ext));
+            set.insert(format!("gbuffers_weather.{}", ext));
+            set.insert(format!("shadow.{}", ext));
+            set.insert(format!("shadow_cutout.{}", ext));
+            set.insert(format!("shadow_solid.{}", ext));
         }
         set
     };
@@ -390,7 +398,7 @@ impl MinecraftShaderLanguageServer {
                 }
             };
 
-            if !TOPLEVEL_FILES.contains(root_path.strip_prefix(&self.root).unwrap()) {
+            if !is_top_level(root_path.strip_prefix(&self.root).unwrap()) {
                 warn!("got a non-valid toplevel file"; "root_ancestor" => root_path.to_str().unwrap(), "stripped" => root_path.strip_prefix(&self.root).unwrap().to_str().unwrap());
                 back_fill(&all_sources, &mut diagnostics);
                 return Ok(diagnostics);
@@ -438,7 +446,7 @@ impl MinecraftShaderLanguageServer {
                     None => continue,
                 };
 
-                if !TOPLEVEL_FILES.contains(root_path.strip_prefix(&self.root).unwrap()) {
+                if !is_top_level(root_path.strip_prefix(&self.root).unwrap()) {
                     warn!("got a non-valid toplevel file"; "root_ancestor" => root_path.to_str().unwrap(), "stripped" => root_path.strip_prefix(&self.root).unwrap().to_str().unwrap());
                     continue;
                 }
