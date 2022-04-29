@@ -7,6 +7,7 @@ use rust_lsp::lsp::*;
 use rust_lsp::lsp_types::{notification::*, *};
 
 use petgraph::stable_graph::NodeIndex;
+use path_slash::PathExt;
 
 use serde::Deserialize;
 use serde_json::{from_value, Value};
@@ -59,7 +60,7 @@ mod url_norm;
 mod test;
 
 pub fn is_top_level(path: &Path) -> bool {
-    let path = path.as_os_str().to_str().unwrap().replace("\\", "/");
+    let path = path.to_slash().unwrap();
     if !RE_WORLD_FOLDER.is_match(&path) {
         return false;
     }
