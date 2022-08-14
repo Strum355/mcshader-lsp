@@ -1,6 +1,4 @@
 use rand::{rngs, Rng};
-use slog::slog_o;
-use slog_scope::GlobalLoggerGuard;
 use slog_term::{FullFormat, PlainSyncDecorator};
 use std::{cell::RefCell, sync::Arc};
 
@@ -10,16 +8,18 @@ use lazy_static::lazy_static;
 use slog::*;
 use slog_atomic::*;
 
-fn new_trace_id() -> String {
+pub use logging_macro::*;
+pub use slog_scope::{scope, logger, error, warn, info, trace, debug, GlobalLoggerGuard};
+pub use slog::{slog_o, FnValue, Level, Value, Record, Key, Serializer, Result};
+pub use slog_scope_futures::FutureExt;
+
+pub fn new_trace_id() -> String {
     let rng = CURRENT_RNG.with(|rng| rng.borrow_mut().gen::<[u8; 4]>());
     return format!("{:04x}", u32::from_be_bytes(rng));
 }
 
-pub fn slog_with_trace_id<F: FnOnce()>(f: F) {
-    slog_scope::scope(&slog_scope::logger().new(slog_o!("trace" => new_trace_id())), f)
-}
-
-pub fn set_logger_with_level(level: Level) -> GlobalLoggerGuard {
+pub fn set_level(level: Level) -> GlobalLoggerGuard {
+    slog_stdlog::init_with_level(log::Level::Trace).err().or(None);
     let drain = Arc::new(logger_base(level).fuse());
     DRAIN_SWITCH.ctrl().set(drain.clone());
     slog_scope::set_global_logger(Logger::root(drain, o!()))

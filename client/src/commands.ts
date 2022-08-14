@@ -1,6 +1,6 @@
 import path = require('path')
 import * as vscode from 'vscode'
-import * as lsp from 'vscode-languageclient'
+import * as lsp from 'vscode-languageclient/node'
 import { Extension } from './extension'
 import { log } from './log'
 
@@ -10,7 +10,7 @@ export function generateGraphDot(e: Extension): Command {
   return async () => {
     await e.lspClient.sendRequest(lsp.ExecuteCommandRequest.type.method, {
       command: 'graphDot',
-      arguments: [vscode.workspace.workspaceFolders[0].uri.path],
+      arguments: [vscode.window.activeTextEditor.document.uri.path],
     })
   }
 }
@@ -26,6 +26,7 @@ export function restartExtension(e: Extension): Command {
 export function virtualMergedDocument(e: Extension): Command {
   const getVirtualDocument = async (path: string): Promise<string | null> => {
     let content: string = ''
+    log.info(path)
     try {
       content = await e.lspClient.sendRequest<string>(lsp.ExecuteCommandRequest.type.method, {
         command: 'virtualMerge',

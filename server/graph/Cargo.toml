@@ -1,0 +1,25 @@
+[package]
+name = "graph"
+version = "0.9.8"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2021"
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow = "1.0"
+petgraph = "0.6"
+logging = { path = "../logging" }
+logging_macro = { path = "../logging_macro" }
+slog = { version = "2.7", features = [ "max_level_trace", "release_max_level_trace" ] }
+slog-scope = "4.4"
+sourcefile = { path = "../sourcefile" }
+tower-lsp = "0.17.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempdir = "0.3"
+fs_extra = "1.2"
+hamcrest2 = "*"
+pretty_assertions = "1.1"

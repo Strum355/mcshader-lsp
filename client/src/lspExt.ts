@@ -1,4 +1,4 @@
-import * as lsp from 'vscode-languageclient'
+import * as lsp from 'vscode-languageclient/node'
 
 export type StatusParams = {
   status: 'loading' | 'ready' | 'failed' | 'clear'
@@ -6,11 +6,10 @@ export type StatusParams = {
   icon: string
 }
 
-export const statusMethod = 'mc-glsl/status'
-export const status = new lsp.NotificationType<StatusParams>(statusMethod)
+export const statusMethod = new lsp.NotificationType<StatusParams>('mc-glsl/status')
 
-export const updateConfigMethod = 'mc-glsl/updateConfig'
+/* export const updateConfigMethod = 'mc-glsl/updateConfig'
 
 export type ConfigUpdateParams = {
   kv: { key: string, value: string }[]
-}
+} */

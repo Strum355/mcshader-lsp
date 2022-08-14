@@ -1,6 +1,6 @@
 import { mkdirSync, promises as fs } from 'fs'
 import * as vscode from 'vscode'
-import * as lsp from 'vscode-languageclient'
+import * as lsp from 'vscode-languageclient/node'
 import * as commands from './commands'
 import { log } from './log'
 import { LanguageClient } from './lspClient'

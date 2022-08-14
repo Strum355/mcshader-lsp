@@ -1,0 +1,27 @@
+[package]
+name = "workspace_tree"
+version = "0.9.8"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2021"
+
+[lib]
+doctest = false
+
+[dependencies]
+# include_merger = { path = "../include_merger" }
+anyhow = "1.0"
+filesystem = { path = "../filesystem" }
+futures = "0.3.21"
+glob = "0.3"
+graph = { path = "../graph" }
+lazy_static = "1.4"
+logging = { path = "../logging" }
+opengl = { path = "../opengl" }
+path-slash = "0.1"
+regex = "1.4"
+sourcefile = { path = "../sourcefile" }
+thiserror = "1.0"
+tokio = { version = "1.18.0", features = ["sync"] }
+tst = "0.10"
+url = "2.2"
+walkdir = "2.3"

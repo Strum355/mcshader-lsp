@@ -1,0 +1,19 @@
+[package]
+name = "filesystem"
+version = "0.9.8"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2021"
+
+[lib]
+doctest = false
+
+[dependencies]
+path-slash = "0.1"
+anyhow = "1.0"
+url = "2.2"
+percent-encoding = "2.1"
+serde_json = "1.0"
+logging = { path = "../logging" }
+tokio = { version = "1.18", features = ["fs"]}
+regex = "1.4"
+lazy_static = "1.4"

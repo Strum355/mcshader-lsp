@@ -1,0 +1,26 @@
+[package]
+name = "opengl"
+version = "0.9.8"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2021"
+
+[lib]
+doctest = false
+
+[dependencies]
+glutin = "0.28"
+gl = "0.14"
+url = "2.2"
+filesystem = { path = "../filesystem" }
+graph = { path = "../graph" }
+tower-lsp = "0.17.0"
+regex = "1.4"
+mockall = "0.11"
+logging = { path = "../logging" }
+sourcefile = { path = "../sourcefile" }
+
+[dev-dependencies]
+# workspace = { path = "../workspace" }
+logging_macro = { path = "../logging_macro" }
+tokio = { version = "1.18", features = ["fs"]}
+trim-margin = "0.1"

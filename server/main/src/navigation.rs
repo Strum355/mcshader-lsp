@@ -1,12 +1,11 @@
 use std::{collections::HashMap, fs::read_to_string, path::Path, vec};
 
 use anyhow::Result;
-use rust_lsp::lsp_types::{DocumentSymbol, Location, Position, Range, SymbolKind};
-use slog_scope::{debug, info, trace};
+use logging::{trace, debug, info};
+use sourcefile::LineMap;
+use tower_lsp::lsp_types::{DocumentSymbol, Location, Position, Range, SymbolKind};
 use tree_sitter::{Node, Parser, Point, Query, QueryCursor, Tree};
 use url::Url;
-
-use crate::linemap::LineMap;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Default)]
 struct SymbolName(String);
@@ -53,8 +52,8 @@ impl SymbolName {
     }
 }
 
-impl slog::Value for SymbolName {
-    fn serialize(&self, record: &slog::Record, key: slog::Key, serializer: &mut dyn slog::Serializer) -> slog::Result {
+impl logging::Value for SymbolName {
+    fn serialize(&self, record: &logging::Record, key: logging::Key, serializer: &mut dyn logging::Serializer) -> logging::Result {
         self.0.serialize(record, key, serializer)
     }
 }
@@ -161,7 +160,7 @@ impl<'a> ParserContext<'a> {
         })
     }
 
-    pub fn list_symbols(&self, _path: &Path) -> Result<Option<Vec<DocumentSymbol>>> {
+    pub fn list_document_symbols(&self, _path: &Path) -> Result<Option<Vec<DocumentSymbol>>> {
         let query = Query::new(tree_sitter_glsl::language(), LIST_SYMBOLS_STR)?;
         let mut query_cursor = QueryCursor::new();
 
@@ -222,7 +221,6 @@ impl<'a> ParserContext<'a> {
             fqname_to_index.insert(fqname, parent_child_vec.len() - 1);
         }
 
-        // let mut symbols = vec![];
         for i in 1..parent_child_vec.len() {
             let (left, right) = parent_child_vec.split_at_mut(i);
             let parent = &right[0].0;

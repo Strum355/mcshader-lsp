@@ -1,0 +1,37 @@
+#version 120
+#define MC_VERSION 11800
+#define MC_GL_VERSION 320
+#define MC_GLSL_VERSION 150
+#define MC_OS_LINUX
+#define MC_GL_VENDOR_NVIDIA
+#define MC_GL_RENDERER_GEFORCE
+#define MC_NORMAL_MAP
+#define MC_SPECULAR_MAP
+#define MC_RENDER_QUALITY 1.0
+#define MC_SHADOW_QUALITY 1.0
+#define MC_HAND_DEPTH 0.125
+#define MC_OLD_HAND_LIGHT
+#define MC_OLD_LIGHTING
+#line 1 0 // !!
+
+#line 0 1 // !!
+#line 0 2 // !!
+void stuff1() {
+	
+}
+#line 1 1 // !!
+#line 0 3 // !!
+void stuff2() {
+	
+}
+#line 2 1 // !!
+#line 3 0 // !!
+#line 0 4 // !!
+void matrix() {
+	
+}
+#line 4 0 // !!
+
+void main() {
+	
+}

@@ -4,6 +4,7 @@
 	"configurations": [
 		{
 			"type": "extensionHost",
+			"trace": true,
 			"request": "launch",
 			"name": "Launch Client",
 			"runtimeExecutable": "${execPath}",

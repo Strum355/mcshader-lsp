@@ -1,0 +1,29 @@
+[package]
+name = "include_merger"
+version = "0.9.8"
+authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
+edition = "2021"
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow = "1.0"
+tower-lsp = "0.17.0"
+logging = { path = "../logging" }
+logging_macro = { path = "../logging_macro" }
+graph = { path = "../graph" }
+
+filesystem = { path = "../filesystem" }
+tokio = { version = "1.18", features = ["fs"]}
+
+workspace_tree = { path = "../workspace_tree" }
+sourcefile = { path = "../sourcefile" }
+tree-sitter = "0.20.6"
+tree-sitter-glsl = "0.1.2"
+opengl = { path = "../opengl" }
+
+[dev-dependencies]
+tempdir = "0.3"
+fs_extra = "1.2"
+pretty_assertions = "1.2"

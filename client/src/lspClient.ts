@@ -1,18 +1,35 @@
+import { ChildProcess, spawn } from 'child_process'
 import { ConfigurationTarget, workspace } from 'vscode'
-import * as lsp from 'vscode-languageclient'
+import * as lsp from 'vscode-languageclient/node'
+import { PublishDiagnosticsNotification, StreamInfo, TelemetryEventNotification } from 'vscode-languageclient/node'
 import { Extension } from './extension'
-import { log, lspOutputChannel } from './log'
-import { ConfigUpdateParams, statusMethod, StatusParams, updateConfigMethod } from './lspExt'
+import { log, lspOutputChannel, traceOutputChannel } from './log'
+import { statusMethod, StatusParams } from './lspExt'
 
 export class LanguageClient extends lsp.LanguageClient {
   private extension: Extension
 
   constructor(ext: Extension, lspBinary: string, filewatcherGlob: string) {
-    super('vscode-mc-shader', 'VSCode MC Shader', {
-      command: lspBinary
-    }, {
+    const serverOptions = () => new Promise<ChildProcess>((resolve, reject) => {
+      const childProcess = spawn(lspBinary, {
+        env: {
+          'RUST_BACKTRACE': 'true',
+          ...process.env,
+        }
+      })
+      childProcess.stderr.on('data', (data: Buffer) => {
+        lspOutputChannel.appendLine(data.toString().trimRight())
+      })
+      childProcess.on('exit', (code, signal) => {
+        lspOutputChannel.appendLine(`⚠️⚠️⚠️ Language server exited ` + (signal ? `from signal ${signal}` : `with exit code ${code}`) + ' ⚠️⚠️⚠️')
+      })
+      resolve(childProcess)
+    })
+
+    super('mcglsl', '', serverOptions, {
+      traceOutputChannel: traceOutputChannel,
+      diagnosticCollectionName: 'mcglsl',
       documentSelector: [{ scheme: 'file', language: 'glsl' }],
-      outputChannel: lspOutputChannel,
       synchronize: {
         configurationSection: 'mcglsl',
         fileEvents: workspace.createFileSystemWatcher(filewatcherGlob)
@@ -25,17 +42,27 @@ export class LanguageClient extends lsp.LanguageClient {
   }
 
   public startServer = async (): Promise<LanguageClient> => {
-    this.extension.context.subscriptions.push(this.start())
+    // this.extension.context.subscriptions.push(this.start())
+    this.setTrace(lsp.Trace.Verbose)
 
-    await this.onReady()
+    this.extension.context.subscriptions.push(this.onNotification(PublishDiagnosticsNotification.type, (p) => {
+      log.error(JSON.stringify(p))
+    }))
+    this.extension.context.subscriptions.push(this.onNotification(TelemetryEventNotification.type, this.onStatusChange))
 
-    this.onNotification(updateConfigMethod, this.onUpdateConfig)
-    this.onNotification(statusMethod, this.onStatusChange)
+    await this.start()
 
+    // await this.onReady()
+    console.log('banana')
     return this
   }
 
-  onStatusChange = (params: StatusParams) => {
+  onStatusChange = (params: {
+    status: 'loading' | 'ready' | 'failed' | 'clear'
+    message: string
+    icon: string
+  }) => {
+    log.info('bananan')
     switch (params.status) {
       case 'loading':
       case 'ready':
@@ -45,12 +72,6 @@ export class LanguageClient extends lsp.LanguageClient {
       case 'clear':
         this.extension.clearStatus()
         break
-    }
-  }
-
-  onUpdateConfig = (params: ConfigUpdateParams) => {
-    for (const kv of params.kv) {
-      workspace.getConfiguration().update('mcglsl.' + kv.key, kv.value, ConfigurationTarget.Global)
     }
   }
 }
