@@ -651,14 +651,16 @@ impl LanguageServerHandling for MinecraftShaderLanguageServer {
                 log_level: String,
             }
 
-            let config: Configuration = from_value(params.settings.as_object().unwrap().get("mcglsl").unwrap().to_owned()).unwrap();
+            if let Some(settings) = params.settings.as_object().unwrap().get("mcglsl") {
+                let config: Configuration = from_value(settings.to_owned()).unwrap();
 
-            info!("got updated configuration"; "config" => params.settings.as_object().unwrap().get("mcglsl").unwrap().to_string());
+                info!("got updated configuration"; "config" => params.settings.as_object().unwrap().get("mcglsl").unwrap().to_string());
 
-            configuration::handle_log_level_change(config.log_level, |level| {
-                self.log_guard = None; // set to None so Drop is invoked
-                self.log_guard = Some(logging::set_logger_with_level(level));
-            })
+                configuration::handle_log_level_change(config.log_level, |level| {
+                    self.log_guard = None; // set to None so Drop is invoked
+                    self.log_guard = Some(logging::set_logger_with_level(level));
+                })
+            }
         });
     }
 
