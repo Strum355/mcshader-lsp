@@ -3,3 +3,4 @@
 pub mod server;
 pub use server::*;
 mod commands;
+mod workspace;

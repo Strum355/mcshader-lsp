@@ -14,7 +14,7 @@ lazy_static = "1.4"
 regex = "1.4"
 url = "2.2"
 mockall = "0.11"
-path-slash = "0.1"
+path-slash = "0.2"
 glob = "0.3"
 filesystem = { path = "../filesystem" }
 
@@ -34,7 +34,6 @@ tower-lsp = "0.17"
 tokio = { version = "1.18", features = ["full"] }
 futures = "0.3"
 
-workspace = { path = "../workspace" }
 opengl = { path = "../opengl" }
 sourcefile = { path = "../sourcefile" }
 

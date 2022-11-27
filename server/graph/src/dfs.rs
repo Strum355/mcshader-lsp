@@ -21,7 +21,7 @@ struct VisitCount {
 /// Performs a depth-first search with duplicates
 pub struct Dfs<'a, K, V>
 where
-    K: Hash + Clone + ToString + Eq + Debug,
+    K: Hash + Clone + Display + Eq + Debug,
     V: Ord + Copy,
 {
     graph: &'a CachedStableGraph<K, V>,
@@ -32,7 +32,7 @@ where
 
 impl<'a, K, V> Dfs<'a, K, V>
 where
-    K: Hash + Clone + ToString + Eq + Debug,
+    K: Hash + Clone + Display + Eq + Debug,
     V: Ord + Copy,
 {
     pub fn new(graph: &'a CachedStableGraph<K, V>, start: NodeIndex) -> Self {
@@ -54,7 +54,7 @@ where
         }
     }
 
-    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<(), CycleError> {
+    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<(), CycleError<K>> {
         for prev in &self.cycle {
             for child in children {
                 if prev.node == *child {
@@ -69,12 +69,12 @@ where
 
 impl<'a, K, V> Iterator for Dfs<'a, K, V>
 where
-    K: Hash + Clone + ToString + Eq + Debug,
+    K: Hash + Clone + Display + Eq + Debug,
     V: Ord + Copy,
 {
-    type Item = Result<FilialTuple<NodeIndex>, CycleError>;
+    type Item = Result<FilialTuple<NodeIndex>, CycleError<K>>;
 
-    fn next(&mut self) -> Option<Result<FilialTuple<NodeIndex>, CycleError>> {
+    fn next(&mut self) -> Option<Result<FilialTuple<NodeIndex>, CycleError<K>>> {
         let parent = self.cycle.last().map(|p| p.node);
 
         if let Some(child) = self.stack.pop() {
@@ -84,15 +84,16 @@ where
                 touch: 1,
             });
 
-            let children: Vec<_> = self.graph.get_all_children(child).rev().collect();
+            let children: Vec<_> = self.graph.get_all_edges_from(child).rev().collect();
 
             if !children.is_empty() {
-                if let Err(e) = self.check_for_cycle(&children) {
+                let child_nodes: Vec<_> = children.iter().map(|(n, _)| n).copied().collect();
+                if let Err(e) = self.check_for_cycle(&child_nodes) {
                     return Some(Err(e));
                 }
 
                 for child in children {
-                    self.stack.push(child);
+                    self.stack.push(child.0);
                 }
             } else {
                 self.reset_path_to_branch();
@@ -109,36 +110,39 @@ use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 use std::{error::Error as StdError, fmt::Display};
 
 #[derive(Debug)]
-pub struct CycleError(Vec<String>);
+// TODO: how can we include the line-of-import
+pub struct CycleError<K>(Vec<K>);
 
-impl StdError for CycleError {}
+impl<K> StdError for CycleError<K> where K: Display + Debug {}
 
-impl CycleError {
-    pub fn new<K, V>(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph<K, V>) -> Self
+impl<K> CycleError<K>
+where
+    K: Hash + Clone + Eq + Debug,
+{
+    pub fn new<V>(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph<K, V>) -> Self
     where
-        K: Hash + Clone + ToString + Eq + Debug,
         V: Ord + Copy,
     {
         let mut resolved_nodes: Vec<K> = nodes.iter().map(|i| graph[*i].clone()).collect();
         resolved_nodes.push(graph[current_node].clone());
-        CycleError(resolved_nodes.into_iter().map(|p| p.to_string()).collect())
+        CycleError(resolved_nodes.into_iter().collect())
     }
 }
 
-impl Display for CycleError {
+impl<K: Display> Display for CycleError<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut disp = String::new();
-        disp.push_str(format!("Include cycle detected:\n{:?} imports ", self.0[0]).as_str());
+        disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0]).as_str());
         for p in &self.0[1..self.0.len() - 1] {
-            disp.push_str(format!("\n{:?}, which imports ", *p).as_str());
+            disp.push_str(&format!("\n{}, which imports ", *p));
         }
-        disp.push_str(format!("\n{:?}", self.0[self.0.len() - 1]).as_str());
+        disp.push_str(&format!("\n{}", self.0[self.0.len() - 1]));
         f.write_str(disp.as_str())
     }
 }
 
-impl From<CycleError> for Diagnostic {
-    fn from(e: CycleError) -> Diagnostic {
+impl<K: Display> From<CycleError<K>> for Diagnostic {
+    fn from(e: CycleError<K>) -> Diagnostic {
         Diagnostic {
             severity: Some(DiagnosticSeverity::ERROR),
             range: Range::new(Position::new(0, 0), Position::new(0, 500)),
@@ -153,8 +157,8 @@ impl From<CycleError> for Diagnostic {
     }
 }
 
-impl From<CycleError> for String {
-    fn from(e: CycleError) -> String {
+impl<K: Display> From<CycleError<K>> for String {
+    fn from(e: CycleError<K>) -> String {
         format!("{}", e)
     }
 }

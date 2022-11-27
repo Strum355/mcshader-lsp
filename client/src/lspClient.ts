@@ -42,18 +42,10 @@ export class LanguageClient extends lsp.LanguageClient {
   }
 
   public startServer = async (): Promise<LanguageClient> => {
-    // this.extension.context.subscriptions.push(this.start())
-    this.setTrace(lsp.Trace.Verbose)
-
-    this.extension.context.subscriptions.push(this.onNotification(PublishDiagnosticsNotification.type, (p) => {
-      log.error(JSON.stringify(p))
-    }))
     this.extension.context.subscriptions.push(this.onNotification(TelemetryEventNotification.type, this.onStatusChange))
 
     await this.start()
 
-    // await this.onReady()
-    console.log('banana')
     return this
   }
 
@@ -62,7 +54,6 @@ export class LanguageClient extends lsp.LanguageClient {
     message: string
     icon: string
   }) => {
-    log.info('bananan')
     switch (params.status) {
       case 'loading':
       case 'ready':

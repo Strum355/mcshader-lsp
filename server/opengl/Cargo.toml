@@ -8,12 +8,12 @@ edition = "2021"
 doctest = false
 
 [dependencies]
-glutin = "0.28"
+glutin = "0.29"
 gl = "0.14"
 url = "2.2"
 filesystem = { path = "../filesystem" }
 graph = { path = "../graph" }
-tower-lsp = "0.17.0"
+tower-lsp = "0.17"
 regex = "1.4"
 mockall = "0.11"
 logging = { path = "../logging" }

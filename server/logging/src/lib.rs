@@ -15,7 +15,7 @@ pub use slog_scope_futures::FutureExt;
 
 pub fn new_trace_id() -> String {
     let rng = CURRENT_RNG.with(|rng| rng.borrow_mut().gen::<[u8; 4]>());
-    return format!("{:04x}", u32::from_be_bytes(rng));
+    format!("{:04x}", u32::from_be_bytes(rng))
 }
 
 pub fn set_level(level: Level) -> GlobalLoggerGuard {

@@ -1,19 +1,20 @@
-use std::{collections::HashMap, marker::Sync, sync::Arc};
+use std::{collections::HashMap, ffi::OsStr, marker::Sync, path::Path, sync::Arc};
 
 use filesystem::NormalizedPathBuf;
-// use futures::future::join_all;
+use futures::future::join_all;
 use logging::{error, info, logger, trace, warn, FutureExt};
 use serde_json::Value;
 
 use tokio::sync::Mutex;
 
-// #[cfg(test)]
-// use test::Client;
-// #[cfg(not(test))]
+#[cfg(test)]
+use test::Client;
+#[cfg(not(test))]
 use tower_lsp::Client;
 
+use glob::{glob_with, MatchOptions};
 use tower_lsp::{
-    jsonrpc::{Error, ErrorCode, Result},
+    jsonrpc::{Error, ErrorCode},
     lsp_types::{
         notification::{ShowMessage, TelemetryEvent},
         *,
@@ -21,9 +22,11 @@ use tower_lsp::{
     LanguageServer,
 };
 
-use workspace::WorkspaceManager;
+use tst::TSTMap;
 
-// use crate::commands;
+use crate::{commands, workspace::Workspace};
+
+pub struct WorkspaceIndex(usize);
 
 pub struct Server<G: 'static, F: 'static>
 where
@@ -31,7 +34,8 @@ where
     F: Fn() -> G,
 {
     pub client: Arc<Mutex<Client>>,
-    workspace_manager: Arc<Mutex<WorkspaceManager<G, F>>>,
+    workspaces: Arc<Mutex<TSTMap<Arc<Workspace<G>>>>>,
+    gl_factory: F,
 }
 
 impl<G, F> Server<G, F>
@@ -42,74 +46,9 @@ where
     pub fn new(client: Client, gl_factory: F) -> Self {
         Server {
             client: Arc::new(Mutex::new(client)),
-            workspace_manager: Arc::new(Mutex::new(WorkspaceManager::new(gl_factory))),
+            workspaces: Default::default(),
+            gl_factory,
         }
-    }
-
-    fn capabilities() -> ServerCapabilities {
-        ServerCapabilities {
-            definition_provider: Some(OneOf::Left(false)),
-            references_provider: Some(OneOf::Left(false)),
-            document_symbol_provider: Some(OneOf::Left(false)),
-            document_link_provider: /* Some(DocumentLinkOptions {
-                resolve_provider: None,
-                work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
-            }), */
-            None,
-            execute_command_provider: Some(ExecuteCommandOptions {
-                commands: vec!["graphDot".into(), "virtualMerge".into(), "parseTree".into()],
-                work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
-            }),
-            text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
-                open_close: Some(true),
-                will_save: None,
-                will_save_wait_until: None,
-                change: Some(TextDocumentSyncKind::FULL),
-                save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions { include_text: Some(true) })),
-            })),
-            workspace: Some(WorkspaceServerCapabilities {
-                workspace_folders: Some(WorkspaceFoldersServerCapabilities{
-                    supported: Some(true),
-                    change_notifications: Some(OneOf::Left(false)),
-                }),
-                file_operations: None,
-            }),
-            semantic_tokens_provider: Some(
-                SemanticTokensOptions {
-                    work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
-                    legend: SemanticTokensLegend {
-                        token_types: vec![SemanticTokenType::COMMENT],
-                        token_modifiers: vec![],
-                    },
-                    range: None,
-                    full: Some(SemanticTokensFullOptions::Bool(true)),
-                }
-                .into(),
-            ),
-            ..ServerCapabilities::default()
-        }
-    }
-
-    async fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
-        let client = self.client.lock().with_logger(logger()).await;
-        // let mut handles = Vec::with_capacity(diagnostics.len());
-        for (url, diags) in diagnostics {
-            eprintln!("publishing to {:?} {:?}", &url, diags);
-            /* handles.push( */
-            client.publish_diagnostics(url, diags, document_version).with_logger(logger()).await;
-            client
-                .log_message(MessageType::INFO, "PUBLISHING!")
-                .with_logger(logger())
-                .await;
-            // client.send_notification::<PublishDiagnostics>(PublishDiagnosticsParams {
-            //     ri: url,
-            //     diagnostics: diags,
-            //     // version: document_version,
-            //     version: None,
-            // }).await/* ) */;
-        }
-        // join_all(handles).with_logger(logger()).await;
-        eprintln!("published")
     }
 }
 
@@ -120,7 +59,7 @@ where
     F: Fn() -> G + Send + Sync,
 {
     #[logging::with_trace_id]
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> tower_lsp::jsonrpc::Result<InitializeResult> {
         info!("starting server...");
 
         let capabilities = Server::<G, F>::capabilities();
@@ -136,33 +75,31 @@ where
             }
         };
 
-        let mut manager = self.workspace_manager.lock().with_logger(logger()).await;
+        self.client
+            .lock()
+            .with_logger(logger())
+            .await
+            .send_notification::<TelemetryEvent>(serde_json::json!({
+                "status": "loading",
+                "message": "Building dependency graph...",
+                "icon": "$(loading~spin)",
+            }))
+            .with_logger(logger())
+            .await;
 
-        // self.client
-        //     .lock()
-        //     .with_logger(logger())
-        //     .await
-        //     .send_notification::<TelemetryEvent>(serde_json::json!({
-        //         "status": "loading",
-        //         "message": "Building dependency graph...",
-        //         "icon": "$(loading~spin)",
-        //     }))
-        //     .with_logger(logger())
-        //     .await;
+        self.gather_workspaces(&root).with_logger(logger()).await;
 
-        manager.gather_workspaces(&root).with_logger(logger()).await;
-
-        // self.client
-        //     .lock()
-        //     .with_logger(logger())
-        //     .await
-        //     .send_notification::<TelemetryEvent>(serde_json::json!({
-        //         "status": "ready",
-        //         "message": "Project(s) initialized...",
-        //         "icon": "$(check)",
-        //     }))
-        //     .with_logger(logger())
-        //     .await;
+        self.client
+            .lock()
+            .with_logger(logger())
+            .await
+            .send_notification::<TelemetryEvent>(serde_json::json!({
+                "status": "ready",
+                "message": "Project(s) initialized...",
+                "icon": "$(check)",
+            }))
+            .with_logger(logger())
+            .await;
 
         Ok(InitializeResult {
             capabilities,
@@ -180,44 +117,24 @@ where
         //     .await;
     }
 
-    async fn shutdown(&self) -> Result<()> {
+    async fn shutdown(&self) -> tower_lsp::jsonrpc::Result<()> {
         warn!("shutting down language server...");
         Ok(())
     }
 
     #[logging::with_trace_id]
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client
-            .lock()
-            .with_logger(logger())
-            .await
-                .log_message(MessageType::INFO, "OPENED!")
-                .with_logger(logger())
-                .await;
-        self.client
-            .lock()
-            .with_logger(logger())
-            .await
-            .send_notification::<TelemetryEvent>(serde_json::json!({
-                "status": "ready",
-                "message": "Project(s) initialized...",
-                "icon": "$(check)",
-            }))
-            .with_logger(logger())
-            .await;
         info!("opened document"; "uri" => params.text_document.uri.as_str());
 
         let path: NormalizedPathBuf = params.text_document.uri.into();
-        if let Some(workspace) = self
-            .workspace_manager
-            .lock()
-            .with_logger(logger())
-            .await
-            .find_workspace_for_file(&path)
-        {
+
+        if let Some(workspace) = self.workspace_for_file(&path).await {
             trace!("found workspace"; "root" => &workspace.root);
 
-            workspace.refresh_graph_for_file(&path).with_logger(logger()).await;
+            workspace
+                .update_sourcefile(&path, params.text_document.text)
+                .with_logger(logger())
+                .await;
 
             match workspace.lint(&path).with_logger(logger()).await {
                 Ok(diagnostics) => self.publish_diagnostic(diagnostics, None).with_logger(logger()).await,
@@ -231,17 +148,11 @@ where
         info!("saved document"; "uri" => params.text_document.uri.as_str());
 
         let path: NormalizedPathBuf = params.text_document.uri.into();
-        match self
-            .workspace_manager
-            .lock()
-            .with_logger(logger())
-            .await
-            .find_workspace_for_file(&path)
-        {
+        match self.workspace_for_file(&path).await {
             Some(workspace) => {
                 trace!("found workspace"; "root" => &workspace.root);
 
-                workspace.refresh_graph_for_file(&path).with_logger(logger()).await;
+                workspace.update_sourcefile(&path, params.text.unwrap()).with_logger(logger()).await;
 
                 match workspace.lint(&path).with_logger(logger()).await {
                     Ok(diagnostics) => self.publish_diagnostic(diagnostics, None).with_logger(logger()).await,
@@ -253,7 +164,7 @@ where
     }
 
     #[logging::with_trace_id]
-    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
+    async fn execute_command(&self, params: ExecuteCommandParams) -> tower_lsp::jsonrpc::Result<Option<Value>> {
         match params.command.as_str() {
             // "graphDot" => {
             //     let document_path: NormalizedPathBuf = params.arguments.first().unwrap().try_into().unwrap();
@@ -266,20 +177,38 @@ where
             //         data: None,
             //     })
             // }
-            // "virtualMerge" => {
-            //     let document_path: NormalizedPathBuf = params.arguments.first().unwrap().try_into().unwrap();
-            //     let manager = self.workspace_manager.lock().with_logger(logger()).await;
-            //     let workspace = manager.find_workspace_for_file(&document_path).unwrap();
-            //     let mut graph = workspace.graph.lock().with_logger(logger()).await;
-            //     commands::merged_includes::run(&document_path, &mut graph)
-            //         .with_logger(logger())
-            //         .await
-            //         .map_err(|e| Error {
-            //             code: ErrorCode::InternalError,
-            //             message: format!("{:?}", e),
-            //             data: None,
-            //         })
-            // }
+            "virtualMerge" => {
+                let document_path: NormalizedPathBuf = params.arguments.first().unwrap().try_into().unwrap();
+                let workspace = self.workspace_for_file(&document_path).await.unwrap();
+                let mut workspace_view = workspace.workspace_view.lock().with_logger(logger()).await;
+
+                let mut roots = workspace_view.trees_for_entry(&document_path).unwrap();
+                let root = roots.next().unwrap();
+                if roots.next().is_some() {
+                    return Err(Error {
+                        code: ErrorCode::InternalError,
+                        message: "unexpected >1 root".into(),
+                        data: None,
+                    });
+                }
+
+                let sources = root
+                    .unwrap()
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .filter(|res| !matches!(res, Err(workspace::TreeError::FileNotFound { .. })))
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+
+                commands::merged_includes::run(&document_path, &sources)
+                    .with_logger(logger())
+                    .await
+                    .map_err(|e| Error {
+                        code: ErrorCode::InternalError,
+                        message: format!("{:?}", e),
+                        data: None,
+                    })
+            }
             // "parseTree",
             _ => Err(Error {
                 code: ErrorCode::InternalError,
@@ -317,7 +246,7 @@ where
         })
     }
 
-    async fn goto_definition(&self, _params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
+    async fn goto_definition(&self, _params: GotoDefinitionParams) -> tower_lsp::jsonrpc::Result<Option<GotoDefinitionResponse>> {
         /* logging::slog_with_trace_id(|| {
                 let path = PathBuf::from_url(params.text_document.uri);
                 if !path.starts_with(&self.root) {
@@ -348,7 +277,7 @@ where
         Ok(None)
     }
 
-    async fn references(&self, _params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+    async fn references(&self, _params: ReferenceParams) -> tower_lsp::jsonrpc::Result<Option<Vec<Location>>> {
         /* logging::slog_with_trace_id(|| {
             let path = PathBuf::from_url(params.text_document_position.text_document.uri);
             if !path.starts_with(&self.root) {
@@ -378,7 +307,7 @@ where
         Ok(None)
     }
 
-    async fn document_symbol(&self, _params: DocumentSymbolParams) -> Result<Option<DocumentSymbolResponse>> {
+    async fn document_symbol(&self, _params: DocumentSymbolParams) -> tower_lsp::jsonrpc::Result<Option<DocumentSymbolResponse>> {
         /* logging::slog_with_trace_id(|| {
             let path = PathBuf::from_url(params.text_document.uri);
             if !path.starts_with(&self.root) {
@@ -410,7 +339,7 @@ where
         Ok(None)
     }
 
-    async fn document_link(&self, _params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
+    async fn document_link(&self, _params: DocumentLinkParams) -> tower_lsp::jsonrpc::Result<Option<Vec<DocumentLink>>> {
         /* logging::slog_with_trace_id(|| {
             // node for current document
             let curr_doc = PathBuf::from_url(params.text_document.uri);
@@ -462,7 +391,6 @@ where
     }
 
     async fn did_change_configuration(&self, _params: DidChangeConfigurationParams) {
-        eprintln!("got notif");
         /* logging::slog_with_trace_id(|| {
             #[derive(Deserialize)]
             struct Configuration {
@@ -479,6 +407,166 @@ where
                 self.log_guard = Some(logging::set_logger_with_level(level));
             })
         }); */
+    }
+}
+
+impl<G, F> Server<G, F>
+where
+    G: opengl::ShaderValidator + Send,
+    F: Fn() -> G,
+{
+    fn capabilities() -> ServerCapabilities {
+        ServerCapabilities {
+            definition_provider: Some(OneOf::Left(false)),
+            references_provider: Some(OneOf::Left(false)),
+            document_symbol_provider: Some(OneOf::Left(false)),
+            document_link_provider: /* Some(DocumentLinkOptions {
+                resolve_provider: None,
+                work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+            }), */
+            None,
+            execute_command_provider: Some(ExecuteCommandOptions {
+                commands: vec!["graphDot".into(), "virtualMerge".into(), "parseTree".into()],
+                work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+            }),
+            text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
+                open_close: Some(true),
+                will_save: None,
+                will_save_wait_until: None,
+                change: Some(TextDocumentSyncKind::FULL),
+                save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions { include_text: Some(true) })),
+            })),
+            workspace: Some(WorkspaceServerCapabilities {
+                workspace_folders: Some(WorkspaceFoldersServerCapabilities{
+                    supported: Some(true),
+                    change_notifications: Some(OneOf::Left(false)),
+                }),
+                file_operations: None,
+            }),
+            semantic_tokens_provider: Some(
+                SemanticTokensOptions {
+                    work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+                    legend: SemanticTokensLegend {
+                        token_types: vec![SemanticTokenType::COMMENT],
+                        token_modifiers: vec![],
+                    },
+                    range: None,
+                    full: Some(SemanticTokensFullOptions::Bool(true)),
+                }
+                .into(),
+            ),
+            ..ServerCapabilities::default()
+        }
+    }
+
+    pub async fn gather_workspaces(&self, root: &NormalizedPathBuf) {
+        let options = MatchOptions {
+            case_sensitive: true,
+            ..MatchOptions::default()
+        };
+
+        let glob = root.join("**").join("shaders.properties");
+        info!("banana"; "glob" => &glob);
+
+        for entry in glob_with(&glob.to_string(), options).unwrap() {
+            match entry {
+                Ok(path)
+                    if path.file_name().and_then(OsStr::to_str) == Some("shaders.properties")
+                        && path.parent().and_then(Path::file_name).and_then(OsStr::to_str) == Some("shaders") =>
+                {
+                    match path.parent().and_then(Path::parent).map(Into::into) {
+                        Some(shader_root) => self.add_workspace(&shader_root).with_logger(logger()).await,
+                        None => todo!(),
+                    }
+                }
+                Ok(path)
+                    if path.file_name().and_then(OsStr::to_str) == Some("shaders.properties")
+                        && path
+                            .parent()
+                            .and_then(Path::file_name)
+                            .and_then(OsStr::to_str)
+                            .map_or(false, |f| f.starts_with("world"))
+                        && path
+                            .parent()
+                            .and_then(Path::parent)
+                            .and_then(Path::file_name)
+                            .and_then(OsStr::to_str)
+                            == Some("shaders") =>
+                {
+                    match path.parent().and_then(Path::parent).and_then(Path::parent).map(Into::into) {
+                        Some(shader_root) => self.add_workspace(&shader_root).with_logger(logger()).await,
+                        None => todo!(),
+                    }
+                }
+                Ok(path) => {
+                    let path: NormalizedPathBuf = path.into();
+                    error!("shaders.properties found outside ./shaders or ./worldX dir"; "path" => path)
+                }
+                Err(e) => error!("error iterating glob entries"; "error" => format!("{:?}", e)),
+            }
+        }
+
+        let glob = root.join("**").join("shaders");
+        for entry in glob_with(&glob.to_string(), options).unwrap() {
+            match entry {
+                Ok(path)
+                    if !walkdir::WalkDir::new(path.clone()).into_iter().any(|p| {
+                        p.as_ref()
+                            .ok()
+                            .map(|p| p.file_name())
+                            .and_then(|f| f.to_str())
+                            .map_or(false, |f| f == "shaders.properties")
+                    }) =>
+                {
+                    match path.parent().map(Into::into) {
+                        Some(shader_root) => self.add_workspace(&shader_root).with_logger(logger()).await,
+                        None => todo!(),
+                    }
+                }
+                Ok(path) => {
+                    let path: NormalizedPathBuf = path.into();
+                    info!("skipping as already existing"; "path" => path)
+                }
+                Err(e) => error!("error iterating glob entries"; "error" => format!("{:?}", e)),
+            }
+        }
+    }
+
+    async fn add_workspace(&self, root: &NormalizedPathBuf) {
+        let mut search = self.workspaces.lock().with_logger(logger()).await;
+        // let mut workspaces = self.workspaces.lock().with_logger(logger()).await;
+
+        if !search.contains_key(&root.to_string()) {
+            info!("adding workspace"; "root" => &root);
+            let opengl_context = (self.gl_factory)();
+            let workspace = Workspace::new(root.clone(), opengl_context);
+            workspace.build().with_logger(logger()).await;
+            // workspaces.push(workspace);
+            // search.insert(&root.to_string(), WorkspaceIndex(workspaces.len() - 1));
+            search.insert(&root.to_string(), Arc::new(workspace));
+        }
+    }
+
+    async fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
+        let client = self.client.lock().with_logger(logger()).await;
+        let mut handles = Vec::with_capacity(diagnostics.len());
+        for (url, diags) in diagnostics {
+            handles.push(client.publish_diagnostics(url, diags, document_version));
+        }
+        join_all(handles).with_logger(logger()).await;
+    }
+
+    pub async fn workspace_for_file(&self, file: &NormalizedPathBuf) -> Option<Arc<Workspace<G>>> {
+        let search = self.workspaces.lock().with_logger(logger()).await;
+        // let workspaces = self.workspaces.lock().with_logger(logger()).await;
+
+        let file = file.to_string();
+        let prefix = search.longest_prefix(&file);
+        if prefix.is_empty() {
+            return None;
+        }
+
+        search.get(prefix).cloned()
     }
 }
 
@@ -547,11 +635,11 @@ mod test {
                 .canonicalize()
                 .unwrap_or_else(|_| panic!("canonicalizing '{}'", test_path));
             let opts = &dir::CopyOptions::new();
-            let files = fs::read_dir(&test_path)
+            let files = fs::read_dir(test_path)
                 .unwrap()
                 .map(|e| String::from(e.unwrap().path().to_str().unwrap()))
                 .collect::<Vec<String>>();
-            copy_items(&files, &tmp_dir.path().join("shaders"), opts).unwrap();
+            copy_items(&files, tmp_dir.path().join("shaders"), opts).unwrap();
         }
 
         let tmp_path = tmp_dir.path().to_str().unwrap().into();
@@ -571,7 +659,7 @@ mod test {
         let init_resp = Ok(initialize::response());
         assert_exchange!(&server, init_req, init_resp, Server::initialize);
 
-        assert_eq!(server.workspace_manager.lock().await.workspaces().len(), 0);
+        assert_eq!(server.workspaces.lock().await.len(), 0);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -585,10 +673,14 @@ mod test {
         let init_resp = Ok(initialize::response());
         assert_exchange!(&server, init_req, init_resp, Server::initialize);
 
-        let manager = server.workspace_manager.lock().await;
-        let workspaces = manager.workspaces();
         assert_eq!(
-            workspaces.iter().map(|w| w.root.to_string()).collect::<Vec<String>>(),
+            server
+                .workspaces
+                .lock()
+                .await
+                .iter()
+                .map(|(_, w)| w.root.to_string())
+                .collect::<Vec<String>>(),
             vec![tmp_path.to_str().unwrap()]
         );
 
@@ -618,10 +710,14 @@ mod test {
         let init_resp = Ok(initialize::response());
         assert_exchange!(&server, init_req, init_resp, Server::initialize);
 
-        let manager = server.workspace_manager.lock().await;
-        let workspaces = manager.workspaces();
         assert_eq!(
-            workspaces.iter().map(|w| w.root.to_string()).collect::<Vec<String>>(),
+            server
+                .workspaces
+                .lock()
+                .await
+                .iter()
+                .map(|(_, w)| w.root.to_string())
+                .collect::<Vec<String>>(),
             vec![tmp_path.to_str().unwrap()]
         );
 

@@ -17,11 +17,13 @@ graph = { path = "../graph" }
 filesystem = { path = "../filesystem" }
 tokio = { version = "1.18", features = ["fs"]}
 
-workspace_tree = { path = "../workspace_tree" }
+workspace = { path = "../workspace" }
 sourcefile = { path = "../sourcefile" }
 tree-sitter = "0.20.6"
 tree-sitter-glsl = "0.1.2"
 opengl = { path = "../opengl" }
+
+regex = "1.4"
 
 [dev-dependencies]
 tempdir = "0.3"

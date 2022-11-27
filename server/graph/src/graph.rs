@@ -78,12 +78,6 @@ where
         }
     }
 
-    /// Returns all child node indexes for a parent, in order of import. May include duplicates if a child 
-    /// is imported more than once into the parent.
-    pub fn get_all_children(&self, parent: NodeIndex) -> impl DoubleEndedIterator<Item = NodeIndex> + '_ {
-        self.get_all_edges_from(parent).map(|p| p.0)
-    }
-
     /// Returns an iterator over all the edge values of type `V`'s between a parent and its child for all the
     /// positions that the child may be imported into the parent, in order of import.
     pub fn get_edges_between(&self, parent: NodeIndex, child: NodeIndex) -> impl DoubleEndedIterator<Item = V> + '_ {

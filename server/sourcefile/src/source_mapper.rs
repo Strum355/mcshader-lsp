@@ -1,5 +1,7 @@
 use std::{cmp::Eq, collections::HashMap, fmt::Display, hash::Hash};
 
+pub const ROOT_SOURCE_NUM: SourceNum = SourceNum(0);
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceNum(usize);
 

@@ -7,16 +7,21 @@ use core::slice::Iter;
 use filesystem::{LFString, NormalizedPathBuf};
 use graph::FilialTuple;
 use logging::debug;
+use tree_sitter::{Parser, Query, QueryCursor};
+use tree_sitter_glsl::language;
 
 use crate::consts;
-use sourcefile::{IncludeLine, SourceFile, SourceMapper, Version};
+use sourcefile::{IncludeLine, SourceMapper, Sourcefile};
+
+const ERROR_DIRECTIVE: &str = "#error ";
 
 /// Merges the source strings according to the nodes comprising a tree of imports into a GLSL source string
 /// that can be handed off to the GLSL compiler.
 pub struct MergeViewBuilder<'a> {
-    nodes: Peekable<Iter<'a, FilialTuple<&'a SourceFile>>>,
+    root: &'a NormalizedPathBuf,
 
-    // sources: &'a HashMap<NormalizedPathBuf, LFString>,
+    nodes: Peekable<Iter<'a, FilialTuple<&'a Sourcefile>>>,
+
     /// contains additionally inserted lines such as #line and other directives, preamble defines etc
     extra_lines: Vec<String>,
 
@@ -28,30 +33,32 @@ pub struct MergeViewBuilder<'a> {
     /// by the same parent, hence we have to track it for a ((child, parent), line) tuple
     /// instead of just the child or (child, parent).
     last_offset_set: HashMap<FilialTuple<&'a NormalizedPathBuf>, usize>,
-    /// holds, for any given filial tuple, the iterator yielding all the positions at which the child
     /// is included into the parent in line-sorted order. This is necessary for files that are imported
     /// more than once into the same parent, so we can easily get the next include position.
     parent_child_edge_iterator: HashMap<FilialTuple<&'a NormalizedPathBuf>, Box<(dyn Iterator<Item = IncludeLine> + 'a)>>,
-
-    // #line directives need to be adjusted based on GPU vendor + document glsl version
-    gpu_vendor: opengl::GPUVendor,
-    document_glsl_version: sourcefile::Version,
 }
 
 impl<'a> MergeViewBuilder<'a> {
     pub fn new(
-        nodes: &'a [FilialTuple<&'a SourceFile>], source_mapper: &'a mut SourceMapper<NormalizedPathBuf>, gpu_vendor: opengl::GPUVendor,
-        document_glsl_version: sourcefile::Version,
+        root: &'a NormalizedPathBuf, nodes: &'a [FilialTuple<&'a Sourcefile>], source_mapper: &'a mut SourceMapper<NormalizedPathBuf>,
     ) -> Self {
-        println!("{}", nodes.len());
+        let mut all_includes: Vec<_> = nodes
+            .iter()
+            .flat_map(|tup| tup.child.includes().unwrap())
+            .map(|tup| tup.0)
+            .collect();
+        all_includes.sort_unstable();
+        all_includes.dedup();
+
         MergeViewBuilder {
+            root,
             nodes: nodes.iter().peekable(),
-            extra_lines: Vec::with_capacity((nodes.len() * 2) + 2),
+            // 1 start + 1 end #line & 1 preamble + 1 end #line + at worst the amount of #include directives found
+            // TODO: more compatibility inserts
+            extra_lines: Vec::with_capacity((nodes.len() * 2) + 2 + all_includes.len()),
             source_mapper,
             last_offset_set: HashMap::new(),
             parent_child_edge_iterator: HashMap::new(),
-            gpu_vendor,
-            document_glsl_version,
         }
     }
 
@@ -69,11 +76,7 @@ impl<'a> MergeViewBuilder<'a> {
 
         // add the optifine preamble (and extra compatibility mangling eventually)
         let version_line_offset = self.find_version_offset(first_source);
-        let (version_char_for_line, version_char_following_line) = self.char_offset_for_line(version_line_offset, first_source);
-        eprintln!(
-            "line {} char for line {} char after line {}",
-            version_line_offset, version_char_for_line, version_char_following_line
-        );
+        let (_, version_char_following_line) = self.char_offset_for_line(version_line_offset, first_source);
         self.add_preamble(
             version_line_offset,
             version_char_following_line,
@@ -94,7 +97,8 @@ impl<'a> MergeViewBuilder<'a> {
         // now we add a view of the remainder of the root file
         let offset = self.get_last_offset_for_tuple(None, first_path).unwrap();
         let len = first_source.len();
-        merge_list.push_back(&first_source[min(offset, len)..]);
+        self.process_slice_addition(&mut merge_list, first_path, &first_source[min(offset, len)..]);
+        // merge_list.push_back(&first_source[min(offset, len)..]);
 
         // Now merge all the views into one singular String to return
         let total_len = merge_list.iter().fold(0, |a, b| a + b.len());
@@ -122,10 +126,7 @@ impl<'a> MergeViewBuilder<'a> {
                     child: &n.child.path,
                     parent: n.parent.map(|p| &p.path),
                 })
-                .or_insert_with(|| {
-                    // let child_positions = self.graph.get_edges_between(parent, child);
-                    Box::new(parent.includes_of_path(child_path).unwrap())
-                })
+                .or_insert_with(|| Box::new(parent.includes_of_path(child_path).unwrap()))
                 .next()
                 .unwrap();
 
@@ -143,7 +144,9 @@ impl<'a> MergeViewBuilder<'a> {
                 "char_following_line" => char_following_line,
             );
 
-            merge_list.push_back(&parent_source[offset..char_for_line]);
+            self.process_slice_addition(merge_list, parent_path, &parent_source[offset..char_for_line]);
+
+            // merge_list.push_back(&parent_source[offset..char_for_line]);
             self.add_opening_line_directive(child_path, merge_list);
 
             match self.nodes.peek() {
@@ -157,11 +160,11 @@ impl<'a> MergeViewBuilder<'a> {
                             true => child_source.len() - 1,
                             false => child_source.len(),
                         };
-                        merge_list.push_back(&child_source[..double_newline_offset]);
+                        self.process_slice_addition(merge_list, child_path, &child_source[..double_newline_offset]);
+                        // merge_list.push_back(&child_source[..double_newline_offset]);
                         self.set_last_offset_for_tuple(Some(parent_path), child_path, 0);
-                        // +1 because edge.line is 0 indexed ~~but #line is 1 indexed and references the *following* line~~
-                        // turns out #line _is_ 0 indexed too? Im really confused
-                        self.add_closing_line_directive(edge + self.get_line_directive_offset(), parent_path, merge_list);
+                        self.add_closing_line_directive(edge + 1, parent_path, merge_list);
+
                         // if the next pair's parent is not the current pair's parent, we need to bubble up
                         if stack.contains(&&next.parent.unwrap().path) {
                             return;
@@ -182,13 +185,12 @@ impl<'a> MergeViewBuilder<'a> {
                     };
                     if offset < child_source.len() - end_offset {
                         // if ends in \n\n, we want to exclude the last \n for some reason. Ask optilad
-                        merge_list.push_back(&child_source[offset..child_source.len() - end_offset]);
+                        self.process_slice_addition(merge_list, child_path, &child_source[offset..child_source.len() - end_offset]);
+                        // merge_list.push_back(&child_source[offset..child_source.len() - end_offset]);
                         self.set_last_offset_for_tuple(Some(parent_path), child_path, 0);
                     }
 
-                    // +1 because edge.line is 0 indexed ~~but #line is 1 indexed and references the *following* line~~
-                    // turns out #line _is_ 0 indexed too? Im really confused
-                    self.add_closing_line_directive(edge + self.get_line_directive_offset(), parent_path, merge_list);
+                    self.add_closing_line_directive(edge + 1, parent_path, merge_list);
 
                     // we need to check the next item at the point of original return further down the callstack
                     if self.nodes.peek().is_some() && stack.contains(&&self.nodes.peek().unwrap().parent.unwrap().path) {
@@ -203,14 +205,53 @@ impl<'a> MergeViewBuilder<'a> {
                         true => child_source.len() - 1,
                         false => child_source.len(),
                     };
-                    merge_list.push_back(&child_source[..double_newline_offset]);
+                    self.process_slice_addition(merge_list, child_path, &child_source[..double_newline_offset]);
+                    // merge_list.push_back(&child_source[..double_newline_offset]);
                     self.set_last_offset_for_tuple(Some(parent_path), child_path, 0);
-                    // +1 because edge.line is 0 indexed ~~but #line is 1 indexed and references the *following* line~~
-                    // turns out #line _is_ 0 indexed too? Im really confused
-                    self.add_closing_line_directive(edge + self.get_line_directive_offset(), parent_path, merge_list);
+                    self.add_closing_line_directive(edge + 1, parent_path, merge_list);
                 }
             }
         }
+    }
+
+    // process each new view here e.g. to replace #include statements that were not removed by a file existing with
+    // #error etc
+    fn process_slice_addition(&mut self, merge_list: &mut LinkedList<&'a str>, path: &NormalizedPathBuf, slice: &'a str) {
+        let mut parser = Parser::new();
+        parser.set_language(language()).unwrap();
+
+        let query = Query::new(language(), sourcefile::GET_INCLUDES).unwrap();
+        let mut query_cursor = QueryCursor::new();
+
+        let mut start_offset = 0;
+        let mut end_offset = slice.len();
+
+        for (m, _) in query_cursor.captures(&query, parser.parse(slice, None).unwrap().root_node(), slice.as_bytes()) {
+            if m.captures.is_empty() {
+                continue;
+            }
+
+            let include = m.captures[0];
+            let include_str = {
+                let mut string = include.node.utf8_text(slice.as_bytes()).unwrap();
+                string = &string[1..string.len() - 1];
+                if string.starts_with('/') {
+                    self.root.join("shaders").join(string.strip_prefix('/').unwrap())
+                } else {
+                    path.parent().unwrap().join(string)
+                }
+            };
+
+            let line_offset = slice[start_offset..include.node.byte_range().start].rfind('\n').unwrap() + 1;
+            merge_list.push_back(&slice[start_offset..line_offset]);
+            end_offset = include.node.byte_range().end;
+            start_offset = end_offset;
+            merge_list.push_back(ERROR_DIRECTIVE);
+            self.extra_lines.push(format!("Couldn't import file {}\n", include_str));
+            self.unsafe_get_and_insert(merge_list)
+        }
+
+        merge_list.push_back(&slice[start_offset..end_offset]);
     }
 
     fn set_last_offset_for_tuple(
@@ -253,26 +294,15 @@ impl<'a> MergeViewBuilder<'a> {
             .map_or(0, |(i, _)| i)
     }
 
-    #[inline]
-    fn get_line_directive_offset(&self) -> usize {
-        match (self.gpu_vendor, self.document_glsl_version) {
-            (opengl::GPUVendor::NVIDIA, Version::Glsl110)
-            | (opengl::GPUVendor::NVIDIA, Version::Glsl120)
-            | (opengl::GPUVendor::NVIDIA, Version::Glsl130)
-            | (opengl::GPUVendor::NVIDIA, Version::Glsl140)
-            | (opengl::GPUVendor::NVIDIA, Version::Glsl150) => 1,
-            _ => 0,
-        }
-    }
-
     fn add_preamble(
         &mut self, version_line_offset: impl Into<usize>, version_char_offset: usize, path: &NormalizedPathBuf, source: &'a str,
         merge_list: &mut LinkedList<&'a str>,
     ) {
-        merge_list.push_back(&source[..version_char_offset]);
+        self.process_slice_addition(merge_list, path, &source[..version_char_offset]);
+        // merge_list.push_back(&source[..version_char_offset]);
         self.extra_lines.push(consts::OPTIFINE_PREAMBLE.into());
         self.unsafe_get_and_insert(merge_list);
-        self.add_closing_line_directive(version_line_offset.into() + self.get_line_directive_offset(), path, merge_list);
+        self.add_closing_line_directive(version_line_offset.into() + 1, path, merge_list);
     }
 
     fn add_opening_line_directive(&mut self, path: &NormalizedPathBuf, merge_list: &mut LinkedList<&str>) {
@@ -317,11 +347,10 @@ mod test {
 
     use filesystem::{LFString, NormalizedPathBuf};
     use fs_extra::{copy_items, dir};
-    use opengl::GPUVendor;
     use pretty_assertions::assert_str_eq;
-    use sourcefile::{SourceMapper, Version};
+    use sourcefile::SourceMapper;
     use tempdir::TempDir;
-    use workspace_tree::{TreeError, WorkspaceTree};
+    use workspace::{TreeError, WorkspaceTree};
 
     use crate::MergeViewBuilder;
 
@@ -334,11 +363,11 @@ mod test {
                 .canonicalize()
                 .unwrap_or_else(|_| panic!("canonicalizing '{}'", test_path));
             let opts = &dir::CopyOptions::new();
-            let files = fs::read_dir(&test_path)
+            let files = fs::read_dir(test_path)
                 .unwrap()
                 .map(|e| String::from(e.unwrap().path().to_str().unwrap()))
                 .collect::<Vec<String>>();
-            copy_items(&files, &tmp_dir.path().join("shaders"), opts).unwrap();
+            copy_items(&files, tmp_dir.path().join("shaders"), opts).unwrap();
         }
 
         let tmp_path = tmp_dir.path().to_str().unwrap().into();
@@ -373,7 +402,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tree, &mut source_mapper, GPUVendor::NVIDIA, Version::Glsl120).build();
+        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -417,7 +446,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tree, &mut source_mapper, GPUVendor::NVIDIA, Version::Glsl120).build();
+        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -459,7 +488,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tree, &mut source_mapper, GPUVendor::NVIDIA, Version::Glsl120).build();
+        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -501,7 +530,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tree, &mut source_mapper, GPUVendor::NVIDIA, Version::Glsl120).build();
+        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -551,7 +580,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tree, &mut source_mapper, GPUVendor::NVIDIA, Version::Glsl120).build();
+        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 

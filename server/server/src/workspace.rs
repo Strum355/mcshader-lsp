@@ -1,28 +1,28 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
-use filesystem::{LFString, NormalizedPathBuf};
-use graph::{dfs, CachedStableGraph, FilialTuple, NodeIndex};
+use filesystem::NormalizedPathBuf;
 use include_merger::MergeViewBuilder;
 use logging::{info, logger, warn, FutureExt};
-use opengl::{diagnostics_parser::DiagnosticsParser, TreeType};
-use sourcefile::{IncludeLine, SourceFile, SourceMapper};
+use opengl::{diagnostics_parser::DiagnosticsParser, GPUVendor, TreeType};
+use sourcefile::SourceMapper;
 use tokio::sync::Mutex;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 use url::Url;
-use workspace_tree::TreeError;
+use workspace::TreeError;
 
 pub struct Workspace<S: opengl::ShaderValidator> {
     pub root: NormalizedPathBuf,
-    workspace_view: Arc<Mutex<workspace_tree::WorkspaceTree>>,
+    // temporarily public
+    pub workspace_view: Arc<Mutex<workspace::WorkspaceTree>>,
     // graph: Arc<Mutex<CachedStableGraph<NormalizedPathBuf, IncludePosition>>>,
-    gl_context: Arc<Mutex<S>>,
+    pub gl_context: Arc<Mutex<S>>,
 }
 
 impl<S: opengl::ShaderValidator> Workspace<S> {
     pub fn new(root: NormalizedPathBuf, gl: S) -> Self {
         Workspace {
-            workspace_view: Arc::new(Mutex::new(workspace_tree::WorkspaceTree::new(&root))),
+            workspace_view: Arc::new(Mutex::new(workspace::WorkspaceTree::new(&root))),
             root,
             // graph: Arc::new(Mutex::new(CachedStableGraph::new())),
             gl_context: Arc::new(Mutex::new(gl)),
@@ -38,23 +38,28 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
         info!("build graph"; "connected" => tree.num_connected_entries()/* , "disconnected" => tree.num_disconnected_entries() */);
     }
 
-    pub async fn refresh_graph_for_file(&self, path: &NormalizedPathBuf) {
+    pub async fn update_sourcefile(&self, path: &NormalizedPathBuf, text: String) {
         let mut tree = self.workspace_view.lock().with_logger(logger()).await;
 
-        tree.update_sourcefile(path);
+        tree.update_sourcefile(path, text);
     }
 
     pub async fn lint(&self, path: &NormalizedPathBuf) -> Result<HashMap<Url, Vec<Diagnostic>>> {
         let mut workspace = self.workspace_view.lock().with_logger(logger()).await;
 
-        // the set of all filepath->content.
-        let mut all_sources: HashMap<NormalizedPathBuf, LFString> = HashMap::new();
+        // TODO: re-lint any removed files
+
         // the set of filepath->list of diagnostics to report
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
 
         // we want to backfill the diagnostics map with all linked sources
-        let back_fill = |all_sources: &HashMap<NormalizedPathBuf, LFString>, diagnostics: &mut HashMap<Url, Vec<Diagnostic>>| {
-            for path in all_sources.keys() {
+        let back_fill = |all_sources: &[&NormalizedPathBuf], diagnostics: &mut HashMap<Url, Vec<Diagnostic>>| {
+            for path in all_sources {
+                eprintln!(
+                    "BACKFILLING FOR {:?}, EXISTS {}",
+                    path,
+                    diagnostics.contains_key(&Url::from_file_path(path).unwrap())
+                );
                 diagnostics.entry(Url::from_file_path(path).unwrap()).or_default();
             }
         };
@@ -66,11 +71,13 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
                     TreeError::NonTopLevel(e) => warn!("got a non-valid toplevel file"; "root_ancestor" => e, "stripped" => e.strip_prefix(&self.root), "path" => path),
                     e => return Err(e.into()),
                 }
-                back_fill(&all_sources, &mut diagnostics);
+                // back_fill(Box::new(all_sources.keys()), &mut diagnostics);
                 return Ok(diagnostics);
             }
         }
         .collect::<Vec<_>>();
+
+        let gpu_vendor: GPUVendor = self.gl_context.lock().with_logger(logger()).await.vendor().as_str().into();
 
         for tree in trees {
             let mut tree = match tree {
@@ -81,27 +88,6 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
                     e => unreachable!("unexpected error {:?}", e),
                 },
             };
-            // let tree = match tree.and_then(|t| t.collect::<Result<Vec<_>, TreeError>>()) {
-            //     Ok(t) => t,
-            //     Err(e) => {
-            //         match e {
-            //             TreeError::NonTopLevel(f) => {
-            //                 warn!("got a non-valid toplevel file"; "root_ancestor" => f, "stripped" => f.strip_prefix(&self.root));
-            //                 continue;
-            //             }
-            //             TreeError::FileNotFound(f) => {
-            //                 warn!("child not found"; "child" => f);
-            //                 continue;
-            //             }
-            //             TreeError::DfsError(e) => {
-            //                 diagnostics.insert(Url::from_file_path(path).unwrap(), vec![e.into()]);
-            //                 back_fill(&all_sources, &mut diagnostics); // TODO: confirm
-            //                 return Ok(diagnostics);
-            //             }
-            //             e => unreachable!("should only yield non-toplevel file error, got {:?}", e),
-            //         };
-            //     }
-            // };
 
             let tree_size = tree.size_hint().0;
 
@@ -124,51 +110,51 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
                 match entry {
                     Ok(node) => built_tree.push(node),
                     Err(e) => match e {
-                        TreeError::FileNotFound {
-                            ref importing,
-                            ref missing,
-                        } => diagnostics
-                            .entry(Url::from_file_path(importing).unwrap())
-                            .or_default()
-                            .push(Diagnostic {
+                        TreeError::FileNotFound { ref importing, .. } => {
+                            let diag = Diagnostic {
                                 range: Range::new(Position::new(0, 0), Position::new(0, u32::MAX)),
                                 severity: Some(DiagnosticSeverity::WARNING),
                                 source: Some("mcglsl".to_string()),
                                 message: e.to_string(),
                                 ..Diagnostic::default()
-                            }),
-                        TreeError::DfsError(_) => todo!(),
+                            };
+                            eprintln!("NOT FOUND {:?} {:?}", importing, diag);
+                            diagnostics.entry(Url::from_file_path(importing).unwrap()).or_default().push(diag)
+                        }
+                        TreeError::DfsError(e) => {
+                            diagnostics.entry(Url::from_file_path(path).unwrap()).or_default().push(e.into());
+                            return Ok(diagnostics);
+                        }
                         e => unreachable!("unexpected error {:?}", e),
                     },
                 }
             }
 
-            let view = MergeViewBuilder::new(
-                &built_tree,
-                &mut source_mapper,
-                self.gl_context.lock().with_logger(logger()).await.vendor().as_str().into(),
-                document_glsl_version,
-            )
-            .build();
+            let view = MergeViewBuilder::new(&self.root, &built_tree, &mut source_mapper).build();
 
             let stdout = match self.compile_shader_source(&view, tree_type, path).with_logger(logger()).await {
                 Some(s) => s,
                 None => {
-                    back_fill(&all_sources, &mut diagnostics);
+                    let paths: Vec<_> = built_tree.iter().map(|s| &s.child.path).collect();
+                    back_fill(&paths, &mut diagnostics);
                     return Ok(diagnostics);
                 }
             };
 
-            diagnostics.extend(
-                DiagnosticsParser::new(&*self.gl_context.lock().with_logger(logger()).await).parse_diagnostics_output(
-                    stdout,
-                    path,
-                    &source_mapper,
-                ),
-            );
+            for diagnostic in DiagnosticsParser::new(gpu_vendor, document_glsl_version).parse_diagnostics_output(
+                stdout,
+                path,
+                &source_mapper,
+                &built_tree.iter().map(|tup| (&tup.child.path, tup.child)).collect(),
+            ) {
+                diagnostics.entry(diagnostic.0).or_default().extend(diagnostic.1);
+            }
+            let paths: Vec<_> = built_tree.iter().map(|s| &s.child.path).collect();
+            back_fill(&paths, &mut diagnostics);
         }
 
-        back_fill(&all_sources, &mut diagnostics);
+        eprintln!("DIAGS {:?}", diagnostics);
+        // back_fill(Box::new(all_sources.keys()), &mut diagnostics);
         Ok(diagnostics)
     }
 

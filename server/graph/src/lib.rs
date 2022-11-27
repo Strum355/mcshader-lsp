@@ -1,10 +1,10 @@
-mod graph;
 pub mod dfs;
+mod graph;
 pub use graph::*;
 
-pub use petgraph::stable_graph::NodeIndex;
-pub use petgraph::dot::Config;
 pub use petgraph::dot;
+pub use petgraph::dot::Config;
+pub use petgraph::stable_graph::NodeIndex;
 
 /// FilialTuple represents a tuple (not really) of a child and any legitimate
 /// parent. Parent can be nullable in the case of the child being a top level
@@ -15,4 +15,5 @@ pub struct FilialTuple<T> {
     // pub parent: Option<NodeIndex>,
     pub child: T,
     pub parent: Option<T>,
+    // pub edge: E,
 }

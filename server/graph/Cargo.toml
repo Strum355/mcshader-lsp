@@ -14,7 +14,6 @@ logging = { path = "../logging" }
 logging_macro = { path = "../logging_macro" }
 slog = { version = "2.7", features = [ "max_level_trace", "release_max_level_trace" ] }
 slog-scope = "4.4"
-sourcefile = { path = "../sourcefile" }
 tower-lsp = "0.17.0"
 thiserror = "1.0"
 

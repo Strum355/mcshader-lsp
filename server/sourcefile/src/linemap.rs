@@ -19,6 +19,13 @@ impl LineMap {
     pub fn offset_for_position(&self, position: Position) -> usize {
         self.positions[position.line as usize] + (position.character as usize)
     }
+
+    pub fn line_range_for_position(&self, position: Position) -> (usize, Option<usize>) {
+        if (position.line + 1) as usize >= self.positions.len() {
+            return (self.positions[position.line as usize], None)
+        }
+        (self.positions[position.line as usize], Some(self.positions[(position.line + 1) as usize] - 1))
+    }
 }
 
 #[cfg(test)]

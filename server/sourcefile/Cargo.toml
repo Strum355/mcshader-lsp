@@ -10,14 +10,14 @@ doctest = false
 [dependencies]
 anyhow = "1.0"
 
-tower-lsp = "0.17.0"
+tower-lsp = "0.17"
 tokio = { version = "1.18", features = ["fs"]}
 
 logging = { path = "../logging" }
 filesystem = { path = "../filesystem" }
 
-tree-sitter = "0.20.6"
-tree-sitter-glsl = "0.1.2"
+tree-sitter = "0.20"
+tree-sitter-glsl = "0.1"
 
 [dev-dependencies]
 trim-margin = "0.1"
