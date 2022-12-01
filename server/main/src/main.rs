@@ -3,12 +3,12 @@ use logging::{logger, FutureExt};
 use server::Server;
 use tower_lsp::LspService;
 
-mod configuration;
 mod navigation;
 
 #[tokio::main]
 async fn main() {
-    let _guard = logging::set_level(logging::Level::Debug);
+    // start with debug log level, and then adjust once we get the configuration from the client.
+    logging::set_level(logging::Level::Debug);
 
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();

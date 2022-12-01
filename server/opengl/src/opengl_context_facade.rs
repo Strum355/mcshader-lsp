@@ -25,8 +25,8 @@ pub struct ContextFacade {
     server_rx: Receiver<ServerMessage>,
 }
 
-impl ContextFacade {
-    pub fn default() -> Self {
+impl Default for ContextFacade {
+    fn default() -> Self {
         let (client_tx, client_rx) = mpsc::sync_channel::<ClientMessage>(1);
         let (server_tx, server_rx) = mpsc::sync_channel::<ServerMessage>(1);
         let (start_chan, start_chan_recv) = mpsc::sync_channel::<()>(1);

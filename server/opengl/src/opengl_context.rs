@@ -14,7 +14,6 @@ pub(crate) struct Context {
 impl Context {
     pub fn default() -> Context {
         let events_loop = EventLoopBuilder::new().with_any_thread(true).build();
-        // let events_loop = glutin::event_loop::EventLoop::<()>::new_any_thread();
         let gl_window = glutin::ContextBuilder::new()
             .build_headless(&*events_loop, glutin::dpi::PhysicalSize::new(1, 1))
             .unwrap();

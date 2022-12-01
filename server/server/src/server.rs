@@ -1,9 +1,10 @@
-use std::{collections::HashMap, ffi::OsStr, marker::Sync, path::Path, sync::Arc};
+use std::{collections::HashMap, ffi::OsStr, marker::Sync, path::Path, sync::Arc, str::FromStr};
 
 use filesystem::NormalizedPathBuf;
 use futures::future::join_all;
 use logging::{error, info, logger, trace, warn, FutureExt};
-use serde_json::Value;
+use serde::Deserialize;
+use serde_json::{Value, from_value};
 
 use tokio::sync::Mutex;
 
@@ -36,6 +37,7 @@ where
     pub client: Arc<Mutex<Client>>,
     workspaces: Arc<Mutex<TSTMap<Arc<Workspace<G>>>>>,
     gl_factory: F,
+    _log_guard: logging::GlobalLoggerGuard
 }
 
 impl<G, F> Server<G, F>
@@ -48,6 +50,7 @@ where
             client: Arc::new(Mutex::new(client)),
             workspaces: Default::default(),
             gl_factory,
+            _log_guard: logging::init_logger()
         }
     }
 }
@@ -390,23 +393,22 @@ where
         Ok(None)
     }
 
-    async fn did_change_configuration(&self, _params: DidChangeConfigurationParams) {
-        /* logging::slog_with_trace_id(|| {
-            #[derive(Deserialize)]
-            struct Configuration {
-                #[serde(alias = "logLevel")]
-                log_level: String,
-            }
+    #[logging_macro::with_trace_id]
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        #[derive(Deserialize)]
+        struct Configuration {
+            #[serde(alias = "logLevel")]
+            log_level: String,
+        }
 
-            let config: Configuration = from_value(params.settings.as_object().unwrap().get("mcglsl").unwrap().to_owned()).unwrap();
+        let config: Configuration = from_value(params.settings.as_object().unwrap().get("mcglsl").unwrap().to_owned()).unwrap();
 
-            info!("got updated configuration"; "config" => params.settings.as_object().unwrap().get("mcglsl").unwrap().to_string());
+        info!("got updated configuration"; "config" => params.settings.as_object().unwrap().get("mcglsl").unwrap().to_string());
 
-            configuration::handle_log_level_change(config.log_level, |level| {
-                self.log_guard = None; // set to None so Drop is invoked
-                self.log_guard = Some(logging::set_logger_with_level(level));
-            })
-        }); */
+        match logging::Level::from_str(config.log_level.as_str()) {
+            Ok(level) => logging::set_level(level),
+            Err(_) => error!("got unexpected log level from config"; "level" => &config.log_level),
+        }
     }
 }
 
