@@ -1,4 +1,4 @@
-use std::{collections::HashMap, lazy::OnceCell, path::Path};
+use std::{collections::HashMap, cell::OnceCell, path::Path};
 
 use regex::Regex;
 use rust_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
