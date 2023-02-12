@@ -1,7 +1,7 @@
 # Minecraft GLSL Shaders Language Server
 ## mcshader-lsp
 
-[![Marketplace Version](https://vsmarketplacebadge.apphb.com/version/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader) [![Installs](https://vsmarketplacebadge.apphb.com/installs/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader)
+[![Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader) [![Installs](https://img.shields.io/visual-studio-marketplace/i/strum355.vscode-mc-shader.svg)](https://marketplace.visualstudio.com/items?itemName=strum355.vscode-mc-shader)
 [![license](https://img.shields.io/github/license/Strum355/vscode-mc-shader.svg)](https://github.com/Strum355/mcshader-lsp)
 [![Issues](https://img.shields.io/github/issues-raw/Strum355/mcshader-lsp.svg)](https://github.com/Strum355/mcshader-lsp/issues)
 [![Build Status](https://img.shields.io/drone/build/Strum355/mcshader-lsp)](https://cloud.drone.io/Strum355/mcshader-lsp)

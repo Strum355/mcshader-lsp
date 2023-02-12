@@ -115,6 +115,21 @@ lazy_static! {
             set.insert(format!("shadow_cutout.{}", ext));
             set.insert(format!("shadow_solid.{}", ext));
         }
+        let base_char_num = 'a' as u8;
+        for suffix_num in 0u8..=25u8 {
+            let suffix_char = (base_char_num + suffix_num) as char;
+            set.insert(format!("composite_{}.csh", suffix_char));
+            set.insert(format!("deferred_{}.csh", suffix_char));
+            set.insert(format!("prepare_{}.csh", suffix_char));
+            set.insert(format!("shadowcomp_{}.csh", suffix_char));
+            for i in 1..=99 {
+                let total_suffix = format!("{}_{}", i, suffix_char);
+                set.insert(format!("composite{}.csh", total_suffix));
+                set.insert(format!("deferred{}.csh", total_suffix));
+                set.insert(format!("prepare{}.csh", total_suffix));
+                set.insert(format!("shadowcomp{}.csh", total_suffix));
+            }
+        }
         set
     };
 }

@@ -25,7 +25,7 @@ export class Extension {
 
   readonly package: {
     version: string
-  } = vscode.extensions.getExtension(this.extensionID)!.packageJSON;
+  } = vscode.extensions.getExtension(this.extensionID)!.packageJSON
 
   public get context(): vscode.ExtensionContext {
     return this.extensionContext
