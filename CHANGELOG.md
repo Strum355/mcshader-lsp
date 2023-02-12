@@ -4,6 +4,18 @@ All notable changes to the "vscode-mc-shader" extension will be documented in th
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## [0.9.9]
+
+### Added
+
+- Support for mod world folders, outside the standard world{-1,0,1}.
+- Support for compute shader files ending in \_a to \_z.
+
+### Fixed
+
+- Crash when running with eglot as LSP client.
+- Extension icon client not displaying (encoding issue).
+
 ## [0.9.8]
 
 ### Fixed

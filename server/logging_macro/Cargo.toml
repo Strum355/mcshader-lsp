@@ -1,6 +1,6 @@
 [package]
 name = "logging_macro"
-version = "0.9.8"
+version = "0.9.9"
 authors = ["Noah Santschi-Cooney <noah@santschi-cooney.ch>"]
 edition = "2021"
 
