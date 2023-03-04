@@ -1,10 +1,10 @@
-use std::{collections::HashMap, ffi::OsStr, marker::Sync, path::Path, sync::Arc, str::FromStr};
+use std::{collections::HashMap, ffi::OsStr, marker::Sync, path::Path, str::FromStr, sync::Arc};
 
 use filesystem::NormalizedPathBuf;
 use futures::future::join_all;
 use logging::{error, info, logger, trace, warn, FutureExt};
 use serde::Deserialize;
-use serde_json::{Value, from_value};
+use serde_json::{from_value, Value};
 
 use tokio::sync::Mutex;
 
@@ -37,7 +37,7 @@ where
     pub client: Arc<Mutex<Client>>,
     workspaces: Arc<Mutex<TSTMap<Arc<Workspace<G>>>>>,
     gl_factory: F,
-    _log_guard: logging::GlobalLoggerGuard
+    _log_guard: logging::GlobalLoggerGuard,
 }
 
 impl<G, F> Server<G, F>
@@ -50,7 +50,7 @@ where
             client: Arc::new(Mutex::new(client)),
             workspaces: Default::default(),
             gl_factory,
-            _log_guard: logging::init_logger()
+            _log_guard: logging::init_logger(),
         }
     }
 }
@@ -110,16 +110,6 @@ where
         })
     }
 
-    async fn initialized(&self, _: InitializedParams) {
-        // self.client
-        //     .lock()
-        //     .with_logger(logger())
-        //     .await
-        //     .log_message(MessageType::INFO, "command executed!")
-        //     .with_logger(logger())
-        //     .await;
-    }
-
     async fn shutdown(&self) -> tower_lsp::jsonrpc::Result<()> {
         warn!("shutting down language server...");
         Ok(())
@@ -131,16 +121,20 @@ where
 
         let path: NormalizedPathBuf = params.text_document.uri.into();
 
-        if let Some(workspace) = self.workspace_for_file(&path).await {
-            trace!("found workspace"; "root" => &workspace.root);
+        if let Some(meta) = self.workspace_for_file(&path).await {
+            trace!("found workspace"; "root" => &meta.root);
 
-            workspace
+            match meta
                 .update_sourcefile(&path, params.text_document.text)
                 .with_logger(logger())
-                .await;
-
-            match workspace.lint(&path).with_logger(logger()).await {
-                Ok(diagnostics) => self.publish_diagnostic(diagnostics, None).with_logger(logger()).await,
+                .await
+            {
+                Ok(diagnostics) => {
+                    let client = self.client.lock().with_logger(logger()).await;
+                    Server::<G, F>::publish_diagnostic(&client, diagnostics, None)
+                        .with_logger(logger())
+                        .await
+                }
                 Err(e) => error!("error linting"; "error" => format!("{:?}", e), "path" => &path),
             }
         }
@@ -155,14 +149,44 @@ where
             Some(workspace) => {
                 trace!("found workspace"; "root" => &workspace.root);
 
-                workspace.update_sourcefile(&path, params.text.unwrap()).with_logger(logger()).await;
-
-                match workspace.lint(&path).with_logger(logger()).await {
-                    Ok(diagnostics) => self.publish_diagnostic(diagnostics, None).with_logger(logger()).await,
+                match workspace
+                    .update_sourcefile(&path, params.text.unwrap())
+                    .with_logger(logger())
+                    .await
+                {
+                    Ok(diagnostics) => {
+                        let client = self.client.lock().with_logger(logger()).await;
+                        Server::<G, F>::publish_diagnostic(&client, diagnostics, None)
+                            .with_logger(logger())
+                            .await
+                    }
                     Err(e) => error!("error linting"; "error" => format!("{:?}", e), "path" => &path),
                 }
             }
             None => warn!("no workspace found"; "path" => path),
+        }
+    }
+
+    #[logging::with_trace_id]
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        for event in params.changes {
+            eprintln!("NEW EVENT {:?}", event);
+            if let FileChangeType::DELETED = event.typ {
+            let document_path: NormalizedPathBuf = event.uri.path().into();
+            let workspace = match self.workspace_for_file(&document_path).await {
+                Some(meta) => meta,
+                None => continue,
+            };
+            match workspace.delete_sourcefile(&document_path).await {
+                Ok(diagnostics) => {
+                    let client = self.client.lock().with_logger(logger()).await;
+                    Server::<G, F>::publish_diagnostic(&client, diagnostics, None)
+                        .with_logger(logger())
+                        .await
+                }
+                Err(e) => error!("error linting"; "error" => format!("{:?}", e), "path" => &document_path),
+            }
+            }
         }
     }
 
@@ -185,7 +209,7 @@ where
                 let workspace = self.workspace_for_file(&document_path).await.unwrap();
                 let mut workspace_view = workspace.workspace_view.lock().with_logger(logger()).await;
 
-                let mut roots = workspace_view.trees_for_entry(&document_path).unwrap();
+                let mut roots = workspace_view.trees_for_entry(&document_path).unwrap().into_iter();
                 let root = roots.next().unwrap();
                 if roots.next().is_some() {
                     return Err(Error {
@@ -441,9 +465,14 @@ where
             workspace: Some(WorkspaceServerCapabilities {
                 workspace_folders: Some(WorkspaceFoldersServerCapabilities{
                     supported: Some(true),
-                    change_notifications: Some(OneOf::Left(false)),
+                    change_notifications: Some(OneOf::Left(true)),
                 }),
-                file_operations: None,
+                file_operations: Some(WorkspaceFileOperationsServerCapabilities { 
+                    did_delete: Some(FileOperationRegistrationOptions { 
+                        filters: vec![FileOperationFilter{ scheme: None, pattern: FileOperationPattern { glob: "**/*".into(), matches: None, options: None } }]
+                    }), 
+                    ..Default::default() 
+                }),
             }),
             semantic_tokens_provider: Some(
                 SemanticTokensOptions {
@@ -536,21 +565,17 @@ where
 
     async fn add_workspace(&self, root: &NormalizedPathBuf) {
         let mut search = self.workspaces.lock().with_logger(logger()).await;
-        // let mut workspaces = self.workspaces.lock().with_logger(logger()).await;
 
         if !search.contains_key(&root.to_string()) {
             info!("adding workspace"; "root" => &root);
             let opengl_context = (self.gl_factory)();
             let workspace = Workspace::new(root.clone(), opengl_context);
             workspace.build().with_logger(logger()).await;
-            // workspaces.push(workspace);
-            // search.insert(&root.to_string(), WorkspaceIndex(workspaces.len() - 1));
             search.insert(&root.to_string(), Arc::new(workspace));
         }
     }
 
-    async fn publish_diagnostic(&self, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
-        let client = self.client.lock().with_logger(logger()).await;
+    async fn publish_diagnostic(client: &Client, diagnostics: HashMap<Url, Vec<Diagnostic>>, document_version: Option<i32>) {
         let mut handles = Vec::with_capacity(diagnostics.len());
         for (url, diags) in diagnostics {
             handles.push(client.publish_diagnostics(url, diags, document_version));
@@ -560,7 +585,6 @@ where
 
     pub async fn workspace_for_file(&self, file: &NormalizedPathBuf) -> Option<Arc<Workspace<G>>> {
         let search = self.workspaces.lock().with_logger(logger()).await;
-        // let workspaces = self.workspaces.lock().with_logger(logger()).await;
 
         let file = file.to_string();
         let prefix = search.longest_prefix(&file);

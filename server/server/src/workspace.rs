@@ -12,20 +12,17 @@ use url::Url;
 use workspace::TreeError;
 
 pub struct Workspace<S: opengl::ShaderValidator> {
-    pub root: NormalizedPathBuf,
-    // temporarily public
-    pub workspace_view: Arc<Mutex<workspace::WorkspaceTree>>,
-    // graph: Arc<Mutex<CachedStableGraph<NormalizedPathBuf, IncludePosition>>>,
-    pub gl_context: Arc<Mutex<S>>,
+    pub(super) root: NormalizedPathBuf,
+    pub(super) workspace_view: Arc<Mutex<workspace::WorkspaceTree>>,
+    gl_context: Arc<Mutex<S>>,
 }
 
 impl<S: opengl::ShaderValidator> Workspace<S> {
     pub fn new(root: NormalizedPathBuf, gl: S) -> Self {
         Workspace {
             workspace_view: Arc::new(Mutex::new(workspace::WorkspaceTree::new(&root))),
-            root,
-            // graph: Arc::new(Mutex::new(CachedStableGraph::new())),
             gl_context: Arc::new(Mutex::new(gl)),
+            root,
         }
     }
 
@@ -38,17 +35,67 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
         info!("build graph"; "connected" => tree.num_connected_entries()/* , "disconnected" => tree.num_disconnected_entries() */);
     }
 
-    pub async fn update_sourcefile(&self, path: &NormalizedPathBuf, text: String) {
-        let mut tree = self.workspace_view.lock().with_logger(logger()).await;
-
-        tree.update_sourcefile(path, text);
-    }
-
-    pub async fn lint(&self, path: &NormalizedPathBuf) -> Result<HashMap<Url, Vec<Diagnostic>>> {
+    pub async fn delete_sourcefile(&self, path: &NormalizedPathBuf) -> Result<HashMap<Url, Vec<Diagnostic>>> {
+        info!("path deleted on filesystem"; "path" => path);
         let mut workspace = self.workspace_view.lock().with_logger(logger()).await;
 
-        // TODO: re-lint any removed files
+        // need to get the old trees first so we know what to lint to remove now stale diagnostics
+        let old_roots: Vec<NormalizedPathBuf> = match workspace.trees_for_entry(path) {
+            Ok(trees) => trees,
+            Err(_) => {
+                warn!("path not known to the workspace, this might be a bug"; "path" => path);
+                return Ok(HashMap::new());
+            }
+        }
+        .into_iter()
+        .filter_map(|maybe_tree| maybe_tree.ok())
+        // want to extract the root of each tree so we can build the trees _after_ removing the deleted file
+        .map(|mut tree| tree.next().expect("unexpected zero-sized tree").unwrap().child.path.clone())
+        .collect::<Vec<_>>();
 
+        info!("found existing roots"; "roots" => format!("{:?}", old_roots));
+
+        workspace.remove_sourcefile(path);
+
+        let mut all_diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
+
+        for old_root in old_roots {
+            let new_trees = workspace.trees_for_entry(&old_root).expect("should be a known existing path");
+            assert_eq!(new_trees.len(), 1, "root should not be able to yield more than one tree");
+            let tree = new_trees.into_iter().next().unwrap().expect("should be a top-level path").collect();
+            all_diagnostics.extend(self.lint(path, tree).with_logger(logger()).await);
+        }
+
+        Ok(all_diagnostics)
+    }
+
+    pub async fn update_sourcefile(&self, path: &NormalizedPathBuf, text: String) -> Result<HashMap<Url, Vec<Diagnostic>>> {
+        let mut workspace = self.workspace_view.lock().with_logger(logger()).await;
+
+        workspace.update_sourcefile(path, text);
+
+        let mut all_diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
+
+        for tree in match workspace.trees_for_entry(path) {
+            Ok(trees) => trees,
+            Err(err) => {
+                return Err(err.into());
+                // back_fill(Box::new(all_sources.keys()), &mut diagnostics);
+                // return Ok(diagnostics);
+            }
+        }
+        .into_iter()
+        .filter_map(|maybe_tree| maybe_tree.ok())
+        .map(|tree| tree.collect()) {
+            all_diagnostics.extend(self.lint(path, tree).with_logger(logger()).await);
+        }
+
+        Ok(all_diagnostics)
+    }
+
+    async fn lint<'a>(
+        &'a self, path: &'a NormalizedPathBuf, tree: Result<workspace::MaterializedTree<'a>, TreeError>,
+    ) -> HashMap<Url, Vec<Diagnostic>> {
         // the set of filepath->list of diagnostics to report
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
 
@@ -64,98 +111,64 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
             }
         };
 
-        let trees = match workspace.trees_for_entry(path) {
-            Ok(trees) => trees,
-            Err(err) => {
-                match err {
-                    TreeError::NonTopLevel(e) => warn!("got a non-valid toplevel file"; "root_ancestor" => e, "stripped" => e.strip_prefix(&self.root), "path" => path),
-                    e => return Err(e.into()),
-                }
-                // back_fill(Box::new(all_sources.keys()), &mut diagnostics);
-                return Ok(diagnostics);
-            }
-        }
-        .collect::<Vec<_>>();
-
         let gpu_vendor: GPUVendor = self.gl_context.lock().with_logger(logger()).await.vendor().as_str().into();
 
-        for tree in trees {
-            let mut tree = match tree {
-                Ok(t) => t.peekable(),
-                Err(e) => match e {
-                    // dont care, didnt ask, skip
-                    TreeError::NonTopLevel(_) => continue,
-                    e => unreachable!("unexpected error {:?}", e),
-                },
-            };
-
-            let tree_size = tree.size_hint().0;
-
-            let mut source_mapper = SourceMapper::new(tree_size); // very rough count
-
-            let root = tree
-                .peek()
-                .expect("expected non-zero sized tree")
-                .as_ref()
-                .expect("unexpected cycle or not-found node")
-                .child;
-
-            let (tree_type, document_glsl_version) = (
-                root.path.extension().unwrap().into(),
-                root.version().expect("fatal error parsing file for include version"),
-            );
-
-            let mut built_tree = Vec::with_capacity(tree_size);
-            for entry in tree {
-                match entry {
-                    Ok(node) => built_tree.push(node),
-                    Err(e) => match e {
-                        TreeError::FileNotFound { ref importing, .. } => {
-                            let diag = Diagnostic {
-                                range: Range::new(Position::new(0, 0), Position::new(0, u32::MAX)),
-                                severity: Some(DiagnosticSeverity::WARNING),
-                                source: Some("mcglsl".to_string()),
-                                message: e.to_string(),
-                                ..Diagnostic::default()
-                            };
-                            eprintln!("NOT FOUND {:?} {:?}", importing, diag);
-                            diagnostics.entry(Url::from_file_path(importing).unwrap()).or_default().push(diag)
-                        }
-                        TreeError::DfsError(e) => {
-                            diagnostics.entry(Url::from_file_path(path).unwrap()).or_default().push(e.into());
-                            return Ok(diagnostics);
-                        }
-                        e => unreachable!("unexpected error {:?}", e),
-                    },
+        let tree = match tree {
+            Ok(tree) => tree,
+            Err(e) => match e {
+                TreeError::FileNotFound { ref importing, .. } => {
+                    let diag = Diagnostic {
+                        range: Range::new(Position::new(0, 0), Position::new(0, u32::MAX)),
+                        severity: Some(DiagnosticSeverity::WARNING),
+                        source: Some("mcglsl".to_string()),
+                        message: e.to_string(),
+                        ..Diagnostic::default()
+                    };
+                    // eprintln!("NOT FOUND {:?} {:?}", importing, diag);
+                    diagnostics.entry(Url::from_file_path(importing).unwrap()).or_default().push(diag);
+                    return diagnostics;
                 }
-            }
-
-            let view = MergeViewBuilder::new(&self.root, &built_tree, &mut source_mapper).build();
-
-            let stdout = match self.compile_shader_source(&view, tree_type, path).with_logger(logger()).await {
-                Some(s) => s,
-                None => {
-                    let paths: Vec<_> = built_tree.iter().map(|s| &s.child.path).collect();
-                    back_fill(&paths, &mut diagnostics);
-                    return Ok(diagnostics);
+                TreeError::DfsError(e) => {
+                    diagnostics.entry(Url::from_file_path(path).unwrap()).or_default().push(e.into());
+                    return diagnostics;
                 }
-            };
+            },
+        };
 
-            for diagnostic in DiagnosticsParser::new(gpu_vendor, document_glsl_version).parse_diagnostics_output(
-                stdout,
-                path,
-                &source_mapper,
-                &built_tree.iter().map(|tup| (&tup.child.path, tup.child)).collect(),
-            ) {
-                diagnostics.entry(diagnostic.0).or_default().extend(diagnostic.1);
+        let mut source_mapper = SourceMapper::new(tree.len()); // very rough count
+
+        let root = tree.first().expect("expected non-zero sized tree").child;
+
+        let (tree_type, document_glsl_version) = (
+            root.path.extension().unwrap().into(),
+            root.version().expect("fatal error parsing file for include version"),
+        );
+
+        let view = MergeViewBuilder::new(&self.root, &tree, &mut source_mapper).build();
+
+        let stdout = match self.compile_shader_source(&view, tree_type, path).with_logger(logger()).await {
+            Some(s) => s,
+            None => {
+                let paths: Vec<_> = tree.iter().map(|s| &s.child.path).collect();
+                back_fill(&paths, &mut diagnostics);
+                return diagnostics;
             }
-            let paths: Vec<_> = built_tree.iter().map(|s| &s.child.path).collect();
-            back_fill(&paths, &mut diagnostics);
+        };
+
+        for diagnostic in DiagnosticsParser::new(gpu_vendor, document_glsl_version).parse_diagnostics_output(
+            stdout,
+            path,
+            &source_mapper,
+            &tree.iter().map(|tup| (&tup.child.path, tup.child)).collect(),
+        ) {
+            diagnostics.entry(diagnostic.0).or_default().extend(diagnostic.1);
         }
+        let paths: Vec<_> = tree.iter().map(|s| &s.child.path).collect();
+        back_fill(&paths, &mut diagnostics);
 
         eprintln!("DIAGS {:?}", diagnostics);
         // back_fill(Box::new(all_sources.keys()), &mut diagnostics);
-        Ok(diagnostics)
+        diagnostics
     }
 
     async fn compile_shader_source(&self, source: &str, tree_type: TreeType, path: &NormalizedPathBuf) -> Option<String> {

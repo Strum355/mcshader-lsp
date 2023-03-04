@@ -65,7 +65,7 @@ export class Extension {
   }
 
   fileAssociationsToGlob = (associations: string[]): string => {
-    return '**/*.{'.concat(
+    return '**/*{'.concat(
       associations.map(s => s.substring(s.indexOf('.'))).join(',')
     ) + '}'
   }

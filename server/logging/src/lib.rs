@@ -21,7 +21,6 @@ pub fn new_trace_id() -> String {
 }
 
 pub fn init_logger() -> GlobalLoggerGuard {
-    slog_stdlog::init_with_level(log::Level::Debug).unwrap();
     slog_scope::set_global_logger(Logger::root(&*DRAIN_SWITCH, o!()))
 }
 

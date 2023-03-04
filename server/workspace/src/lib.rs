@@ -1,5 +1,6 @@
 #![feature(result_flattening)]
 #![feature(arc_unwrap_or_clone)]
+#![feature(type_alias_impl_trait)]
 
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
@@ -24,20 +25,38 @@ pub struct WorkspaceTree {
     sources: HashMap<NormalizedPathBuf, Sourcefile>,
 }
 
+// #[derive(thiserror::Error, Debug)]
+// pub enum TreesGenError {
+//     #[error("got a non-valid top-level file: {0}")]
+//     NonTopLevel(NormalizedPathBuf),
+//     #[error(transparent)]
+//     PathNotFound(#[from] graph::NotFound<NormalizedPathBuf>),
+// }
+
 #[derive(thiserror::Error, Debug)]
 pub enum TreeError {
-    #[error("got a non-valid top-level file")]
-    NonTopLevel(NormalizedPathBuf),
+    #[error(transparent)]
+    DfsError(#[from] CycleError<NormalizedPathBuf>),
     #[error("file {missing} not found; imported by {importing}.")]
     FileNotFound {
         importing: NormalizedPathBuf,
         missing: NormalizedPathBuf,
     },
-    #[error(transparent)]
-    DfsError(#[from] CycleError<NormalizedPathBuf>),
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    // #[error(transparent)]
+    // PathNotFound(#[from] graph::NotFound<NormalizedPathBuf>),
 }
+
+pub type MaterializedTree<'a> = Vec<FilialTuple<&'a Sourcefile>>;
+
+pub type ImmaterializedTree<'a> = impl Iterator<Item = Result<FilialTuple<&'a Sourcefile>, TreeError>>;
+
+#[derive(thiserror::Error, Debug)]
+#[error("got a non-valid top-level file: {0}")]
+pub struct NonTopLevelError(NormalizedPathBuf);
+
+pub type SingleTreeGenResult<'a> = Result<ImmaterializedTree<'a>, NonTopLevelError>;
+
+pub type AllTreesGenResult<'a> = Result<Vec<SingleTreeGenResult<'a>>, graph::NotFound<NormalizedPathBuf>>;
 
 impl WorkspaceTree {
     pub fn new(root: &NormalizedPathBuf) -> Self {
@@ -99,14 +118,14 @@ impl WorkspaceTree {
             // file and add a file->includes KV into the map
             match entry {
                 GraphEntry::TopLevel(file) => {
-                    eprintln!("TOP LEVEL {}", file.path);
+                    // eprintln!("TOP LEVEL {}", file.path);
                     let path = file.path.clone();
                     // roots.push(file.clone());
                     // self.sources.insert(path.clone(), file);
                     self.update_sourcefile(&path, file.source);
                 }
                 GraphEntry::Leaf(file) => {
-                    eprintln!("LEAF {}", file.path);
+                    // eprintln!("LEAF {}", file.path);
                     let path = file.path.clone();
                     // self.sources.insert(path.clone(), file);
                     self.update_sourcefile(&path, file.source);
@@ -123,18 +142,12 @@ impl WorkspaceTree {
     /// Error modes:
     ///   - Top [`Result`]
     ///     - The node is not known to the workspace
-    ///     - The node has no ancestors but is not a known valid top-level file
     ///   - Middle [`Result`] (only for >1 ancestor)
     ///     - A non-valid top-level ancestor was found
     ///   - Bottom [`Result`]
     ///     - A cycle was detected while iterating
     ///     - A node was not found on the filesystem while synthesizing a Sourcefile instance
-    pub fn trees_for_entry<'a>(
-        &'a mut self, entry: &'a NormalizedPathBuf,
-    ) -> Result<
-        impl Iterator<Item = Result<impl Iterator<Item = Result<FilialTuple<&Sourcefile>, TreeError>> + '_, TreeError>> + '_,
-        TreeError,
-    > {
+    pub fn trees_for_entry<'a>(&'a mut self, entry: &NormalizedPathBuf) -> AllTreesGenResult<'a> {
         let root_ancestors = self.graph.root_ancestors_for_key(entry)?.unwrap_or_default();
 
         let mut trees = Vec::with_capacity(root_ancestors.len().max(1));
@@ -175,7 +188,8 @@ impl WorkspaceTree {
 
         if root_ancestors.is_empty() {
             if !is_top_level(&entry.strip_prefix(&self.root)) {
-                return Err(TreeError::NonTopLevel(entry.clone()));
+                trees.push(Err(NonTopLevelError(entry.clone())));
+                return Ok(trees);
             }
 
             let dfs = Dfs::new(&self.graph, node)
@@ -188,7 +202,7 @@ impl WorkspaceTree {
                 let root_path = &self.graph[root];
                 if !is_top_level(&root_path.strip_prefix(&self.root)) {
                     warn!("got a non-valid toplevel file"; "root_ancestor" => root_path);
-                    trees.push(Err(TreeError::NonTopLevel(root_path.clone())));
+                    trees.push(Err(NonTopLevelError(root_path.clone())));
                     continue;
                 }
 
@@ -200,7 +214,7 @@ impl WorkspaceTree {
             }
         }
 
-        Ok(trees.into_iter())
+        Ok(trees)
     }
 
     /// updates the set of GLSL files connected to the given file, moving unreferenced
@@ -211,12 +225,12 @@ impl WorkspaceTree {
                 entry.insert(Sourcefile::new(text, path.clone(), self.root.clone()));
             }
         };
-        let file = self.sources.get(path).unwrap();
-        let includes = file.includes().unwrap();
 
-        info!("includes found for file"; "file" => &file.path, "includes" => format!("{:?}", includes));
+        let includes = self.sources.get(path).unwrap().includes().unwrap();
 
-        let idx = self.graph.add_node(&file.path);
+        info!("includes found for file"; "file" => path, "includes" => format!("{:?}", includes));
+
+        let idx = self.graph.add_node(path);
 
         let prev_children: HashSet<_> =
             HashSet::from_iter(self.graph.get_all_edges_from(idx).map(|tup| (self.graph[tup.0].clone(), tup.1)));
@@ -246,11 +260,24 @@ impl WorkspaceTree {
             self.graph.add_edge(idx, child, position);
         }
     }
+
+    pub fn remove_sourcefile(&mut self, path: &NormalizedPathBuf) {
+        let idx = self
+            .graph
+            .find_node(path)
+            .unwrap_or_else(|| panic!("path {:?} wasn't in the graph to begin with???", path));
+
+        self.disconnected.remove(path);
+        self.sources.remove(path);
+        self.graph.remove_node(idx);
+
+        info!("removed file from graph"; "file" => path);
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{TreeError, WorkspaceTree};
+    use crate::WorkspaceTree;
 
     #[test]
     fn test_trees() {
@@ -261,12 +288,6 @@ mod test {
 
         let parent = "/home/test/banana/test.fsh".into();
         let trees = view.trees_for_entry(&parent);
-        match trees {
-            Ok(_) => panic!("unexpected Ok result"),
-            Err(e) => match e {
-                TreeError::NonTopLevel(_) => {}
-                _ => panic!("unexpected error {:?}", e),
-            },
-        }
+        trees.unwrap()[0].as_ref().err().expect("unexpected Ok result");
     }
 }

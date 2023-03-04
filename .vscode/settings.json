@@ -1,15 +1,17 @@
 {
     "files.exclude": {
-        "out": false
+        "out": false,
+        "client/node_modules": true,
     },
     "npm.exclude": [
         "**/client",
         "**/server"
     ],
     "search.exclude": {
-        "out": true
+        "out": true,
+        "client/node_modules": true
     },
     "yaml.schemas": {
         "https://json.schemastore.org/github-workflow": [".github/*"]
-    }
+    },
 }

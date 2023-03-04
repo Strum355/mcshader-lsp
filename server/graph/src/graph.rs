@@ -1,5 +1,3 @@
-use anyhow::format_err;
-use anyhow::Result;
 use petgraph::stable_graph::EdgeIndex;
 use petgraph::stable_graph::NodeIndex;
 use petgraph::stable_graph::StableDiGraph;
@@ -11,6 +9,10 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Index;
 use std::ops::IndexMut;
+
+#[derive(thiserror::Error, Debug)]
+#[error("node not found {0}")]
+pub struct NotFound<K>(K);
 
 /// Wraps a `StableDiGraph` with caching behaviour for node search by maintaining
 /// an index for node value to node index and a reverse index.
@@ -55,8 +57,9 @@ where
     //     &self.graph
     // }
 
+    #[inline]
     pub fn parents(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + '_ {
-        self.graph.edges_directed(node, Direction::Incoming).map(|e| e.source())
+        self.graph.neighbors_directed(node, Direction::Incoming)
     }
 
     /// Returns the `NodeIndex` for a given graph node with the value of `name`
@@ -76,6 +79,11 @@ where
                 n
             }
         }
+    }
+
+    #[inline]
+    pub fn child_node_indexes(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + '_ {
+        self.graph.neighbors(node)
     }
 
     /// Returns an iterator over all the edge values of type `V`'s between a parent and its child for all the
@@ -124,6 +132,17 @@ where
         idx
     }
 
+    #[inline]
+    pub fn remove_node(&mut self, node: NodeIndex) -> Option<K> {
+        self.cache
+            .keys()
+            .find(|key| self.cache[key] == node)
+            .cloned()
+            .and_then(|key| self.cache.remove(&key));
+        // key.and_then(|key| self.cache.remove(&key));
+        self.graph.remove_node(node)
+    }
+
     /// Adds a directional edge of type `V` between `parent` and `child`.
     #[inline]
     pub fn add_edge(&mut self, parent: NodeIndex, child: NodeIndex, meta: V) -> EdgeIndex {
@@ -139,20 +158,10 @@ where
             .and_then(|edge| self.graph.remove_edge(edge));
     }
 
-    #[inline]
-    pub fn child_node_indexes(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + '_ {
-        self.graph.neighbors(node)
-    }
-
-    #[inline]
-    pub fn parent_node_indexes(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + '_ {
-        self.graph.neighbors_directed(node, Direction::Incoming)
-    }
-
-    pub fn root_ancestors_for_key(&mut self, path: &K) -> Result<Option<Vec<NodeIndex>>> {
+    pub fn root_ancestors_for_key(&mut self, path: &K) -> Result<Option<Vec<NodeIndex>>, NotFound<K>> {
         let node = match self.find_node(path) {
             Some(n) => n,
-            None => return Err(format_err!("node not found {:?}", path)),
+            None => return Err(NotFound(path.clone())),
         };
         Ok(self.root_ancestors(node))
     }
@@ -168,7 +177,7 @@ where
             return None;
         }
 
-        let parents: Vec<_> = self.parent_node_indexes(node).collect();
+        let parents: Vec<_> = self.parents(node).collect();
         let mut collection = Vec::with_capacity(parents.len());
 
         for ancestor in &parents {
@@ -176,7 +185,7 @@ where
         }
 
         for ancestor in &parents {
-            if self.parent_node_indexes(*ancestor).next().is_some() {
+            if self.parents(*ancestor).next().is_some() {
                 collection.extend(self.get_root_ancestors(initial, *ancestor, visited).unwrap_or_default());
             } else {
                 collection.push(*ancestor);
@@ -230,13 +239,6 @@ where
             .map(|n| self.reverse_index.get(&n).unwrap().clone())
             .collect()
     }
-
-    fn remove_node(&mut self, name: &K) {
-        let idx = self.cache.remove(name);
-        if let Some(idx) = idx {
-            self.graph.remove_node(idx);
-        }
-    }
 }
 
 impl<'a, K, V> From<&'a CachedStableGraph<K, V>> for &'a StableDiGraph<K, V>
@@ -280,7 +282,7 @@ mod graph_test {
         assert_eq!(parents.len(), 1);
         assert_eq!(parents[0], "sample");
 
-        let parents: Vec<_> = graph.parent_node_indexes(idx2).collect();
+        let parents: Vec<_> = graph.parents(idx2).collect();
         assert_eq!(parents.len(), 1);
         assert_eq!(parents[0], idx1);
 
@@ -291,7 +293,7 @@ mod graph_test {
         let ancestors = graph.root_ancestors(idx1).unwrap();
         assert_eq!(ancestors.len(), 0);
 
-        graph.remove_node(&"sample");
+        graph.remove_node(idx1);
         assert_eq!(graph.graph.node_count(), 1);
         assert!(graph.find_node(&"sample").is_none());
 

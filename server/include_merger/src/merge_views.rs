@@ -350,7 +350,7 @@ mod test {
     use pretty_assertions::assert_str_eq;
     use sourcefile::SourceMapper;
     use tempdir::TempDir;
-    use workspace::{TreeError, WorkspaceTree};
+    use workspace::{TreeError, WorkspaceTree, MaterializedTree};
 
     use crate::MergeViewBuilder;
 
@@ -388,17 +388,16 @@ mod test {
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
             .expect("expected successful tree initializing")
-            .collect::<Result<Vec<_>, TreeError>>()
+            .into_iter()
+            .filter_map(|treeish| treeish.ok())
+            .map(|imtree| imtree.collect())
+            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
             .expect("expected successful tree-building");
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
 
         assert!(trees.next().is_none());
-
-        let tree = tree
-            .collect::<Result<Vec<_>, TreeError>>()
-            .expect("expected successful tree-building");
 
         let mut source_mapper = SourceMapper::new(2);
 
@@ -432,17 +431,16 @@ mod test {
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
             .expect("expected successful tree initializing")
-            .collect::<Result<Vec<_>, TreeError>>()
+            .into_iter()
+            .filter_map(|treeish| treeish.ok())
+            .map(|imtree| imtree.collect())
+            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
             .expect("expected successful tree-building");
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
 
         assert!(trees.next().is_none());
-
-        let tree = tree
-            .collect::<Result<Vec<_>, TreeError>>()
-            .expect("expected successful tree-building");
 
         let mut source_mapper = SourceMapper::new(2);
 
@@ -474,17 +472,16 @@ mod test {
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
             .expect("expected successful tree initializing")
-            .collect::<Result<Vec<_>, TreeError>>()
+            .into_iter()
+            .filter_map(|treeish| treeish.ok())
+            .map(|imtree| imtree.collect())
+            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
             .expect("expected successful tree-building");
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
 
         assert!(trees.next().is_none());
-
-        let tree = tree
-            .collect::<Result<Vec<_>, TreeError>>()
-            .expect("expected successful tree-building");
 
         let mut source_mapper = SourceMapper::new(2);
 
@@ -516,17 +513,16 @@ mod test {
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
             .expect("expected successful tree initializing")
-            .collect::<Result<Vec<_>, TreeError>>()
+            .into_iter()
+            .filter_map(|treeish| treeish.ok())
+            .map(|imtree| imtree.collect())
+            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
             .expect("expected successful tree-building");
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
 
         assert!(trees.next().is_none());
-
-        let tree = tree
-            .collect::<Result<Vec<_>, TreeError>>()
-            .expect("expected successful tree-building");
 
         let mut source_mapper = SourceMapper::new(2);
 
@@ -566,17 +562,16 @@ mod test {
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
             .expect("expected successful tree initializing")
-            .collect::<Result<Vec<_>, TreeError>>()
+            .into_iter()
+            .filter_map(|treeish| treeish.ok())
+            .map(|imtree| imtree.collect())
+            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
             .expect("expected successful tree-building");
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
 
         assert!(trees.next().is_none());
-
-        let tree = tree
-            .collect::<Result<Vec<_>, TreeError>>()
-            .expect("expected successful tree-building");
 
         let mut source_mapper = SourceMapper::new(2);
 
