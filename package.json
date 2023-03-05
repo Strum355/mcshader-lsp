@@ -22,7 +22,7 @@
     "workspaceContains:shaders/"
   ],
   "extensionDependencies": [
-    "slevesque.shader"
+    "geforcelegend.vscode-glsl"
   ],
   "main": "./client/out/extension",
   "contributes": {
