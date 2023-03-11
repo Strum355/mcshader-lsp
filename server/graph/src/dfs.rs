@@ -33,7 +33,7 @@ where
 impl<'a, K, V> Dfs<'a, K, V>
 where
     K: Hash + Clone + Display + Eq + Debug,
-    V: Ord + Copy,
+    V: Hash + Ord + Copy + Debug,
 {
     pub fn new(graph: &'a CachedStableGraph<K, V>, start: NodeIndex) -> Self {
         Dfs {
@@ -54,7 +54,7 @@ where
         }
     }
 
-    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<(), CycleError<K>> {
+    fn check_for_cycle(&self, children: &[NodeIndex]) -> Result<(), CycleError<K, V>> {
         for prev in &self.cycle {
             for child in children {
                 if prev.node == *child {
@@ -70,11 +70,11 @@ where
 impl<'a, K, V> Iterator for Dfs<'a, K, V>
 where
     K: Hash + Clone + Display + Eq + Debug,
-    V: Ord + Copy,
+    V: Hash + Debug + Ord + Copy,
 {
-    type Item = Result<FilialTuple<NodeIndex>, CycleError<K>>;
+    type Item = Result<FilialTuple<NodeIndex, V>, CycleError<K, V>>;
 
-    fn next(&mut self) -> Option<Result<FilialTuple<NodeIndex>, CycleError<K>>> {
+    fn next(&mut self) -> Option<Result<FilialTuple<NodeIndex, V>, CycleError<K, V>>> {
         let parent = self.cycle.last().map(|p| p.node);
 
         if let Some(child) = self.stack.pop() {
@@ -99,66 +99,161 @@ where
                 self.reset_path_to_branch();
             }
 
-            return Some(Ok(FilialTuple { child, parent }));
+            let edges = parent.map(|p| self.graph.get_edges_between(p, child).collect()).unwrap_or_default();
+
+            return Some(Ok(FilialTuple { child, parent, edges }));
         }
         None
     }
 }
 
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Location, Position, Range, Url};
 
 use std::{error::Error as StdError, fmt::Display};
 
 #[derive(Debug)]
-// TODO: how can we include the line-of-import
-pub struct CycleError<K>(Vec<K>);
+pub struct CycleError<K, V>(Vec<FilialTuple<K, V>>);
 
-impl<K> StdError for CycleError<K> where K: Display + Debug {}
+impl<K, V> StdError for CycleError<K, V>
+where
+    K: Display + Debug,
+    V: Debug,
+{
+}
 
-impl<K> CycleError<K>
+impl<K, V> CycleError<K, V>
 where
     K: Hash + Clone + Eq + Debug,
+    V: Hash + Debug + Ord + Copy,
 {
-    pub fn new<V>(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph<K, V>) -> Self
-    where
-        V: Ord + Copy,
-    {
-        let mut resolved_nodes: Vec<K> = nodes.iter().map(|i| graph[*i].clone()).collect();
-        resolved_nodes.push(graph[current_node].clone());
-        CycleError(resolved_nodes.into_iter().collect())
+    pub fn new(nodes: &[NodeIndex], current_node: NodeIndex, graph: &CachedStableGraph<K, V>) -> Self {
+        let mut resolved_tupls = Vec::with_capacity(nodes.len());
+
+        resolved_tupls.push(FilialTuple {
+            child: graph[nodes[0]].clone(),
+            parent: None,
+            edges: vec![],
+        });
+
+        for window in nodes.array_windows::<2>() {
+            let edges: Vec<_> = graph.get_edges_between(window[0], window[1]).collect();
+            resolved_tupls.push(FilialTuple {
+                child: graph[window[1]].clone(),
+                parent: Some(graph[window[0]].clone()),
+                edges,
+            });
+        }
+
+        resolved_tupls.push(FilialTuple {
+            child: graph[current_node].clone(),
+            parent: Some(graph[nodes[nodes.len() - 1]].clone()),
+            edges: graph.get_edges_between(nodes[nodes.len() - 1], current_node).collect(),
+        });
+
+        CycleError(resolved_tupls)
+    }
+
+    pub fn path(&self) -> Vec<&K> {
+        self.0[..self.0.len() - 1].iter().map(|tup| &tup.child).collect()
     }
 }
 
-impl<K: Display> Display for CycleError<K> {
+impl<K: Display, V> Display for CycleError<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut disp = String::new();
-        disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0]).as_str());
+        disp.push_str(format!("Include cycle detected:\n{} imports ", self.0[0].child).as_str());
         for p in &self.0[1..self.0.len() - 1] {
-            disp.push_str(&format!("\n{}, which imports ", *p));
+            disp.push_str(&format!("\n{}, which imports ", p.child));
         }
-        disp.push_str(&format!("\n{}", self.0[self.0.len() - 1]));
+        disp.push_str(&format!("\n{}", self.0[self.0.len() - 1].child));
         f.write_str(disp.as_str())
     }
 }
 
-impl<K: Display> From<CycleError<K>> for Diagnostic {
-    fn from(e: CycleError<K>) -> Diagnostic {
-        Diagnostic {
+impl<K, V> From<&CycleError<K, V>> for Vec<Diagnostic>
+where
+    K: Into<Url> + Debug + Display + Clone,
+    V: Into<u32> + Copy + Debug,
+{
+    fn from(e: &CycleError<K, V>) -> Vec<Diagnostic> {
+        let root_range = Range {
+            start: Position {
+                line: e.0[1].edges[0].into(),
+                character: 0,
+            },
+            end: Position {
+                line: e.0[1].edges[0].into(),
+                character: u32::MAX,
+            },
+        };
+        eprintln!("CYCLE {:?}", e.0);
+        let mut related: Vec<DiagnosticRelatedInformation> = Vec::with_capacity(e.0[2..].len());
+
+        for node in &e.0[2..] {
+            related.push(DiagnosticRelatedInformation {
+                location: Location {
+                    uri: node.parent.as_ref().unwrap().clone().into(),
+                    range: Range {
+                        start: Position {
+                            line: node.edges[0].into(),
+                            character: 0,
+                        },
+                        end: Position {
+                            line: node.edges[0].into(),
+                            character: u32::MAX,
+                        },
+                    },
+                },
+                message: format!("{} imported here", node.child),
+            });
+        }
+
+        // we also want to show indications at the actual non-root import sites
+        let mut diagnostics: Vec<Diagnostic> = Vec::with_capacity(e.0[2..].len() + 1);
+
+        diagnostics.push(Diagnostic {
             severity: Some(DiagnosticSeverity::ERROR),
-            range: Range::new(Position::new(0, 0), Position::new(0, 500)),
+            range: root_range,
             source: Some("mcglsl".into()),
-            message: e.into(),
+            message: e.to_string(),
             code: None,
             tags: None,
-            related_information: None,
+            related_information: Some(related),
             code_description: Option::None,
             data: Option::None,
+        });
+
+        for node in &e.0[2..] {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: node.edges[0].into(),
+                        character: 0,
+                    },
+                    end: Position {
+                        line: node.edges[0].into(),
+                        character: u32::MAX,
+                    },
+                },
+                severity: Some(DiagnosticSeverity::HINT),
+                message: format!("{} imported here", node.child),
+                related_information: Some(vec![DiagnosticRelatedInformation {
+                    location: Location {
+                        uri: e.0[0].child.clone().into(),
+                        range: root_range,
+                    },
+                    message: "original diagnostic here".to_string(),
+                }]),
+                ..Default::default()
+            });
         }
+
+        diagnostics
     }
 }
 
-impl<K: Display> From<CycleError<K>> for String {
-    fn from(e: CycleError<K>) -> String {
+impl<K: Display, V> From<CycleError<K, V>> for String {
+    fn from(e: CycleError<K, V>) -> String {
         format!("{}", e)
     }
 }

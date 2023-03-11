@@ -92,6 +92,12 @@ impl Display for NormalizedPathBuf {
     }
 }
 
+impl From<NormalizedPathBuf> for Url {
+    fn from(val: NormalizedPathBuf) -> Self {
+        Url::from_file_path(val).unwrap()
+    }
+}
+
 impl From<Url> for NormalizedPathBuf {
     #[cfg(target_family = "windows")]
     fn from(u: Url) -> Self {

@@ -1,13 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::Result;
 use filesystem::NormalizedPathBuf;
+use graph::dfs::CycleError;
 use include_merger::MergeViewBuilder;
 use logging::{info, logger, warn, FutureExt};
 use opengl::{diagnostics_parser::DiagnosticsParser, GPUVendor, TreeType};
-use sourcefile::SourceMapper;
+use sourcefile::{SourceMapper, IncludeLine};
 use tokio::sync::Mutex;
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use tower_lsp::lsp_types::Diagnostic;
 use url::Url;
 use workspace::TreeError;
 
@@ -35,7 +35,7 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
         info!("build graph"; "connected" => tree.num_connected_entries()/* , "disconnected" => tree.num_disconnected_entries() */);
     }
 
-    pub async fn delete_sourcefile(&self, path: &NormalizedPathBuf) -> Result<HashMap<Url, Vec<Diagnostic>>> {
+    pub async fn delete_sourcefile(&self, path: &NormalizedPathBuf) -> Result<HashMap<Url, Vec<Diagnostic>>, anyhow::Error> {
         info!("path deleted on filesystem"; "path" => path);
         let mut workspace = self.workspace_view.lock().with_logger(logger()).await;
 
@@ -62,14 +62,24 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
         for old_root in old_roots {
             let new_trees = workspace.trees_for_entry(&old_root).expect("should be a known existing path");
             assert_eq!(new_trees.len(), 1, "root should not be able to yield more than one tree");
-            let tree = new_trees.into_iter().next().unwrap().expect("should be a top-level path").collect();
+            let tree = new_trees
+                .into_iter()
+                .next()
+                .unwrap()
+                .expect("should be a top-level path")
+                .map(|tree| match tree {
+                    Ok(t) => Ok(Ok(t)),
+                    Err(TreeError::DfsError(e)) => Err(e),
+                    Err(TreeError::FileNotFound(e)) => Ok(Err(e)),
+                })
+                .collect();
             all_diagnostics.extend(self.lint(path, tree).with_logger(logger()).await);
         }
 
         Ok(all_diagnostics)
     }
 
-    pub async fn update_sourcefile(&self, path: &NormalizedPathBuf, text: String) -> Result<HashMap<Url, Vec<Diagnostic>>> {
+    pub async fn update_sourcefile(&self, path: &NormalizedPathBuf, text: String) -> Result<HashMap<Url, Vec<Diagnostic>>, anyhow::Error> {
         let mut workspace = self.workspace_view.lock().with_logger(logger()).await;
 
         workspace.update_sourcefile(path, text);
@@ -85,8 +95,16 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
             }
         }
         .into_iter()
+        // filter out roots that aren't valid top level ones, we cant lint them
         .filter_map(|maybe_tree| maybe_tree.ok())
-        .map(|tree| tree.collect()) {
+        .map(|tree| {
+            tree.map(|tree| match tree {
+                Ok(t) => Ok(Ok(t)),
+                Err(TreeError::DfsError(e)) => Err(e),
+                Err(TreeError::FileNotFound(e)) => Ok(Err(e)),
+            })
+            .collect()
+        }) {
             all_diagnostics.extend(self.lint(path, tree).with_logger(logger()).await);
         }
 
@@ -94,7 +112,7 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
     }
 
     async fn lint<'a>(
-        &'a self, path: &'a NormalizedPathBuf, tree: Result<workspace::MaterializedTree<'a>, TreeError>,
+        &'a self, path: &'a NormalizedPathBuf, tree: Result<workspace::MaterializedTree<'a>, CycleError<NormalizedPathBuf, IncludeLine>>,
     ) -> HashMap<Url, Vec<Diagnostic>> {
         // the set of filepath->list of diagnostics to report
         let mut diagnostics: HashMap<Url, Vec<Diagnostic>> = HashMap::new();
@@ -113,36 +131,29 @@ impl<S: opengl::ShaderValidator> Workspace<S> {
 
         let gpu_vendor: GPUVendor = self.gl_context.lock().with_logger(logger()).await.vendor().as_str().into();
 
-        let tree = match tree {
-            Ok(tree) => tree,
-            Err(e) => match e {
-                TreeError::FileNotFound { ref importing, .. } => {
-                    let diag = Diagnostic {
-                        range: Range::new(Position::new(0, 0), Position::new(0, u32::MAX)),
-                        severity: Some(DiagnosticSeverity::WARNING),
-                        source: Some("mcglsl".to_string()),
-                        message: e.to_string(),
-                        ..Diagnostic::default()
-                    };
-                    // eprintln!("NOT FOUND {:?} {:?}", importing, diag);
-                    diagnostics.entry(Url::from_file_path(importing).unwrap()).or_default().push(diag);
-                    return diagnostics;
+        let tree: Vec<_> = match tree {
+            Ok(tree) => tree.into_iter().filter_map(|tup| tup.ok()).collect(),
+            Err(ref cycle) => {
+                let cycle_diagnostics: Vec<_> = cycle.into();
+                for (node, diagnostic) in cycle.path().iter().zip(cycle_diagnostics.into_iter()) {
+                    diagnostics
+                        .entry(Url::from_file_path(node).unwrap())
+                        .or_default()
+                        .push(diagnostic);
                 }
-                TreeError::DfsError(e) => {
-                    diagnostics.entry(Url::from_file_path(path).unwrap()).or_default().push(e.into());
-                    return diagnostics;
-                }
-            },
+                return diagnostics;
+            }
         };
 
-        let mut source_mapper = SourceMapper::new(tree.len()); // very rough count
+        let mut source_mapper = SourceMapper::new(tree.len());
 
-        let root = tree.first().expect("expected non-zero sized tree").child;
-
-        let (tree_type, document_glsl_version) = (
-            root.path.extension().unwrap().into(),
-            root.version().expect("fatal error parsing file for include version"),
-        );
+        let (tree_type, document_glsl_version) = {
+            let root = tree.first().expect("expected non-zero sized tree").child;
+            (
+                root.path.extension().unwrap().into(),
+                root.version().expect("fatal error parsing file for include version"),
+            )
+        };
 
         let view = MergeViewBuilder::new(&self.root, &tree, &mut source_mapper).build();
 

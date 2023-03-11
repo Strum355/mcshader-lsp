@@ -10,52 +10,59 @@ use logging::Value;
 pub use source_file::*;
 pub use source_mapper::*;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct IncludeLine(usize);
+// TODO: decide whether to alias or newtype
+// #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub type IncludeLine = u32;
 
-impl From<IncludeLine> for usize {
-    fn from(n: IncludeLine) -> Self {
-        n.0
-    }
-}
+// impl From<IncludeLine> for u32 {
+//     fn from(n: IncludeLine) -> Self {
+//         n.0
+//     }
+// }
 
-impl From<usize> for IncludeLine {
-    fn from(n: usize) -> Self {
-        IncludeLine(n)
-    }
-}
+// impl From<IncludeLine> for usize {
+//     fn from(n: IncludeLine) -> Self {
+//         n.0 as usize
+//     }
+// }
 
-impl std::ops::Add<usize> for IncludeLine {
-    type Output = IncludeLine;
+// impl From<u32> for IncludeLine {
+//     fn from(n: u32) -> Self {
+//         IncludeLine(n)
+//     }
+// }
 
-    fn add(self, rhs: usize) -> Self::Output {
-        IncludeLine(self.0 + rhs)
-    }
-}
+// impl std::ops::Add<u32> for IncludeLine {
+//     type Output = IncludeLine;
 
-impl PartialEq<usize> for IncludeLine {
-    fn eq(&self, other: &usize) -> bool {
-        self.0 == *other
-    }
-}
+//     fn add(self, rhs: u32) -> Self::Output {
+//         IncludeLine(self.0 + rhs)
+//     }
+// }
 
-impl Value for IncludeLine {
-    fn serialize(&self, record: &logging::Record, key: logging::Key, serializer: &mut dyn logging::Serializer) -> logging::Result {
-        self.0.serialize(record, key, serializer)
-    }
-}
+// impl PartialEq<u32> for IncludeLine {
+//     fn eq(&self, other: &u32) -> bool {
+//         self.0 == *other
+//     }
+// }
 
-impl Debug for IncludeLine {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{line: {}}}", self.0)
-    }
-}
+// impl Value for IncludeLine {
+//     fn serialize(&self, record: &logging::Record, key: logging::Key, serializer: &mut dyn logging::Serializer) -> logging::Result {
+//         self.0.serialize(record, key, serializer)
+//     }
+// }
 
-impl Display for IncludeLine {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{{line: {}}}", self.0)
-    }
-}
+// impl Debug for IncludeLine {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{{line: {}}}", self.0)
+//     }
+// }
+
+// impl Display for IncludeLine {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+//         write!(f, "{{line: {}}}", self.0)
+//     }
+// }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Version {

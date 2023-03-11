@@ -108,7 +108,7 @@ impl Sourcefile {
                 }
             };
 
-            includes.push((include_str, IncludeLine(include.node.start_position().row)));
+            includes.push((include_str, include.node.start_position().row as IncludeLine));
         }
 
         Ok(includes)
@@ -160,8 +160,8 @@ mod test {
         assert_eq!(
             source.includes()?,
             vec![
-                ("/myshader/shaders/world0/path/to/banana.fsh".into(), IncludeLine(2)),
-                ("/myshader/shaders/path/to/badbanana.gsh".into(), IncludeLine(3))
+                ("/myshader/shaders/world0/path/to/banana.fsh".into(), 2),
+                ("/myshader/shaders/path/to/badbanana.gsh".into(), 3)
             ]
         );
         Ok(())
@@ -181,7 +181,7 @@ mod test {
         let source = Sourcefile::new(source, "/myshader/shaders/world0/asdf.fsh", "/myshader");
         assert_eq!(
             source.includes_of_path(&"/myshader/shaders/world0/path/to/banana.fsh".into())?.collect::<Vec<_>>(),
-            vec![IncludeLine(2)]
+            vec![2]
         );
         Ok(())
     }

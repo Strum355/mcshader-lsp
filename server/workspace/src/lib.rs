@@ -25,30 +25,25 @@ pub struct WorkspaceTree {
     sources: HashMap<NormalizedPathBuf, Sourcefile>,
 }
 
-// #[derive(thiserror::Error, Debug)]
-// pub enum TreesGenError {
-//     #[error("got a non-valid top-level file: {0}")]
-//     NonTopLevel(NormalizedPathBuf),
-//     #[error(transparent)]
-//     PathNotFound(#[from] graph::NotFound<NormalizedPathBuf>),
-// }
-
 #[derive(thiserror::Error, Debug)]
 pub enum TreeError {
     #[error(transparent)]
-    DfsError(#[from] CycleError<NormalizedPathBuf>),
-    #[error("file {missing} not found; imported by {importing}.")]
-    FileNotFound {
-        importing: NormalizedPathBuf,
-        missing: NormalizedPathBuf,
-    },
-    // #[error(transparent)]
-    // PathNotFound(#[from] graph::NotFound<NormalizedPathBuf>),
+    DfsError(#[from] CycleError<NormalizedPathBuf, IncludeLine>),
+    #[error(transparent)]
+    FileNotFound(#[from] FileNotFound),
 }
 
-pub type MaterializedTree<'a> = Vec<FilialTuple<&'a Sourcefile>>;
+#[derive(thiserror::Error, Debug)]
+#[error("file {missing} not found; imported by {importing}.")]
+pub struct FileNotFound {
+    importing: NormalizedPathBuf,
+    import_locs: Vec<IncludeLine>,
+    missing: NormalizedPathBuf,
+}
 
-pub type ImmaterializedTree<'a> = impl Iterator<Item = Result<FilialTuple<&'a Sourcefile>, TreeError>>;
+pub type MaterializedTree<'a> = Vec<Result<FilialTuple<&'a Sourcefile, IncludeLine>, FileNotFound>>;
+
+pub type ImmaterializedTree<'a> = impl Iterator<Item = Result<FilialTuple<&'a Sourcefile, IncludeLine>, TreeError>>;
 
 #[derive(thiserror::Error, Debug)]
 #[error("got a non-valid top-level file: {0}")]
@@ -162,29 +157,41 @@ impl WorkspaceTree {
 
         let node = self.graph.find_node(entry).unwrap();
 
-        let transform_cycle_error =
-            |result: Result<FilialTuple<NodeIndex>, CycleError<NormalizedPathBuf>>| result.map_err(TreeError::DfsError);
-        let node_to_sourcefile = |result: Result<FilialTuple<NodeIndex>, TreeError>| -> Result<FilialTuple<&Sourcefile>, TreeError> {
-            result.and_then(|tup| {
-                let parent = tup.parent.map(|p| {
-                    let parent_path = &self.graph[p];
-                    // fatal error case, shouldnt happen
-                    self.sources
-                        .get(parent_path)
-                        .unwrap_or_else(|| panic!("no entry in sources for parent {}", parent_path))
-                });
-
-                let child_path = &self.graph[tup.child];
-                // soft-fail case, if file doesnt exist or mistype
-                // eprintln!("MISSING? {:?}", self.sources.get(child_path).is_none());
-                let child = self.sources.get(child_path).ok_or_else(|| TreeError::FileNotFound {
-                    importing: self.graph[tup.parent.unwrap()].clone(),
-                    missing: child_path.clone(),
-                })?;
-
-                Ok(FilialTuple { child, parent })
-            })
+        let transform_cycle_error = |result: Result<FilialTuple<NodeIndex, IncludeLine>, CycleError<NormalizedPathBuf, IncludeLine>>| {
+            result.map_err(TreeError::DfsError)
         };
+        let node_to_sourcefile =
+            |result: Result<FilialTuple<NodeIndex, IncludeLine>, TreeError>| -> Result<FilialTuple<&Sourcefile, IncludeLine>, TreeError> {
+                result.and_then(|tup| {
+                    let parent = tup.parent.map(|p| {
+                        let parent_path = &self.graph[p];
+                        // fatal error case, shouldnt happen
+                        self.sources
+                            .get(parent_path)
+                            .unwrap_or_else(|| panic!("no entry in sources for parent {}", parent_path))
+                    });
+
+                    let child_path = &self.graph[tup.child];
+                    // soft-fail case, if file doesnt exist or mistype
+                    // eprintln!("MISSING? {:?}", self.sources.get(child_path).is_none());
+
+                    let edges = tup
+                        .parent
+                        .map(|p| self.graph.get_edges_between(p, tup.child).collect())
+                        .unwrap_or_default();
+
+                    let child = match self.sources.get(child_path) {
+                        Some(source) => source,
+                        None => return Err(TreeError::FileNotFound(FileNotFound {
+                            importing: self.graph[tup.parent.unwrap()].clone(),
+                            import_locs: edges,
+                            missing: child_path.clone(),
+                        })),
+                    };
+
+                    Ok(FilialTuple { child, parent, edges })
+                })
+            };
 
         if root_ancestors.is_empty() {
             if !is_top_level(&entry.strip_prefix(&self.root)) {
@@ -284,7 +291,7 @@ mod test {
         let mut view = WorkspaceTree::new(&("/home/test/banana".into()));
         let parent = view.graph.add_node(&("/home/test/banana/test.fsh".into()));
         let child = view.graph.add_node(&("/home/test/banana/included.glsl".into()));
-        view.graph.add_edge(parent, child, 2.into());
+        view.graph.add_edge(parent, child, 2);
 
         let parent = "/home/test/banana/test.fsh".into();
         let trees = view.trees_for_entry(&parent);

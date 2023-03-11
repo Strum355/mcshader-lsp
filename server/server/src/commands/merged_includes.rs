@@ -4,9 +4,9 @@ use include_merger::MergeViewBuilder;
 use serde_json::Value;
 
 use anyhow::Result;
-use sourcefile::{SourceMapper, Sourcefile};
+use sourcefile::{SourceMapper, Sourcefile, IncludeLine};
 
-pub async fn run(path: &NormalizedPathBuf, sources: &[FilialTuple<&Sourcefile>]) -> Result<Option<Value>> {
+pub async fn run(path: &NormalizedPathBuf, sources: &[FilialTuple<&Sourcefile, IncludeLine>]) -> Result<Option<Value>> {
     let mut source_mapper = SourceMapper::new(sources.len());
 
     let view = MergeViewBuilder::new(path, sources, &mut source_mapper).build();

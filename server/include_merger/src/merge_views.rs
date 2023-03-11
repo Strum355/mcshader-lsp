@@ -20,7 +20,7 @@ const ERROR_DIRECTIVE: &str = "#error ";
 pub struct MergeViewBuilder<'a> {
     root: &'a NormalizedPathBuf,
 
-    nodes: Peekable<Iter<'a, FilialTuple<&'a Sourcefile>>>,
+    nodes: Peekable<Iter<'a, FilialTuple<&'a Sourcefile, IncludeLine>>>,
 
     /// contains additionally inserted lines such as #line and other directives, preamble defines etc
     extra_lines: Vec<String>,
@@ -32,15 +32,16 @@ pub struct MergeViewBuilder<'a> {
     /// A child can have multiple parents for a given tree, and be included multiple times
     /// by the same parent, hence we have to track it for a ((child, parent), line) tuple
     /// instead of just the child or (child, parent).
-    last_offset_set: HashMap<FilialTuple<&'a NormalizedPathBuf>, usize>,
+    last_offset_set: HashMap<FilialTuple<&'a NormalizedPathBuf, ()>, usize>,
     /// is included into the parent in line-sorted order. This is necessary for files that are imported
     /// more than once into the same parent, so we can easily get the next include position.
-    parent_child_edge_iterator: HashMap<FilialTuple<&'a NormalizedPathBuf>, Box<(dyn Iterator<Item = IncludeLine> + 'a)>>,
+    parent_child_edge_iterator: HashMap<FilialTuple<&'a NormalizedPathBuf, ()>, Box<(dyn Iterator<Item = IncludeLine> + 'a)>>,
 }
 
 impl<'a> MergeViewBuilder<'a> {
     pub fn new(
-        root: &'a NormalizedPathBuf, nodes: &'a [FilialTuple<&'a Sourcefile>], source_mapper: &'a mut SourceMapper<NormalizedPathBuf>,
+        root: &'a NormalizedPathBuf, nodes: &'a [FilialTuple<&'a Sourcefile, IncludeLine>],
+        source_mapper: &'a mut SourceMapper<NormalizedPathBuf>,
     ) -> Self {
         let mut all_includes: Vec<_> = nodes
             .iter()
@@ -125,10 +126,12 @@ impl<'a> MergeViewBuilder<'a> {
                 .entry(FilialTuple {
                     child: &n.child.path,
                     parent: n.parent.map(|p| &p.path),
+                    // TODO: whats this
+                    edges: vec![],
                 })
                 .or_insert_with(|| Box::new(parent.includes_of_path(child_path).unwrap()))
                 .next()
-                .unwrap();
+                .unwrap() as IncludeLine;
 
             let parent_source = &parent.source;
             let (char_for_line, char_following_line) = self.char_offset_for_line(edge, parent_source);
@@ -261,21 +264,34 @@ impl<'a> MergeViewBuilder<'a> {
             "parent" => parent,
             "child" => &child,
             "offset" => offset);
-        self.last_offset_set.insert(FilialTuple { child, parent }, offset)
+        self.last_offset_set.insert(
+            FilialTuple {
+                child,
+                parent,
+                edges: vec![],
+            },
+            offset,
+        )
     }
 
     #[inline]
     fn get_last_offset_for_tuple(&self, parent: Option<&'a NormalizedPathBuf>, child: &'a NormalizedPathBuf) -> Option<usize> {
-        self.last_offset_set.get(&FilialTuple { child, parent }).copied()
+        self.last_offset_set
+            .get(&FilialTuple {
+                child,
+                parent,
+                edges: vec![],
+            })
+            .copied()
     }
 
     // returns the character offset + 1 of the end of line number `line` and the character
     // offset + 1 for the end of the line after the previous one
-    fn char_offset_for_line(&self, line_num: impl Into<usize> + Copy, source: &str) -> (usize, usize) {
+    fn char_offset_for_line(&self, line_num: IncludeLine, source: &str) -> (usize, usize) {
         let mut char_for_line: usize = 0;
         let mut char_following_line: usize = 0;
         for (n, line) in source.lines().enumerate() {
-            if n == line_num.into() {
+            if (n as IncludeLine) == line_num {
                 char_following_line += line.len() + 1;
                 break;
             }
@@ -286,23 +302,23 @@ impl<'a> MergeViewBuilder<'a> {
     }
 
     #[inline]
-    fn find_version_offset(&self, source: &str) -> usize {
+    fn find_version_offset(&self, source: &str) -> IncludeLine {
         source
             .lines()
             .enumerate()
             .find(|(_, line)| line.starts_with("#version "))
-            .map_or(0, |(i, _)| i)
+            .map_or(0, |(i, _)| i as IncludeLine)
     }
 
     fn add_preamble(
-        &mut self, version_line_offset: impl Into<usize>, version_char_offset: usize, path: &NormalizedPathBuf, source: &'a str,
+        &mut self, version_line_offset: IncludeLine, version_char_offset: usize, path: &NormalizedPathBuf, source: &'a str,
         merge_list: &mut LinkedList<&'a str>,
     ) {
         self.process_slice_addition(merge_list, path, &source[..version_char_offset]);
         // merge_list.push_back(&source[..version_char_offset]);
         self.extra_lines.push(consts::OPTIFINE_PREAMBLE.into());
         self.unsafe_get_and_insert(merge_list);
-        self.add_closing_line_directive(version_line_offset.into() + 1, path, merge_list);
+        self.add_closing_line_directive(version_line_offset + 1, path, merge_list);
     }
 
     fn add_opening_line_directive(&mut self, path: &NormalizedPathBuf, merge_list: &mut LinkedList<&str>) {
@@ -311,16 +327,16 @@ impl<'a> MergeViewBuilder<'a> {
         self.unsafe_get_and_insert(merge_list);
     }
 
-    fn add_closing_line_directive(&mut self, line: impl Into<usize>, path: &NormalizedPathBuf, merge_list: &mut LinkedList<&str>) {
+    fn add_closing_line_directive(&mut self, line: IncludeLine, path: &NormalizedPathBuf, merge_list: &mut LinkedList<&str>) {
         // Optifine doesn't seem to add a leading newline if the previous line was a #line directive
         let line_directive = if let Some(l) = merge_list.back() {
             if l.trim().starts_with("#line") {
-                format!("#line {} {} // {}\n", line.into(), self.source_mapper.get_num(path), path)
+                format!("#line {} {} // {}\n", line, self.source_mapper.get_num(path), path)
             } else {
-                format!("\n#line {} {} // {}\n", line.into(), self.source_mapper.get_num(path), path)
+                format!("\n#line {} {} // {}\n", line, self.source_mapper.get_num(path), path)
             }
         } else {
-            format!("\n#line {} {} // {}\n", line.into(), self.source_mapper.get_num(path), path)
+            format!("\n#line {} {} // {}\n", line, self.source_mapper.get_num(path), path)
         };
 
         self.extra_lines.push(line_directive);
@@ -343,14 +359,12 @@ mod test {
         path::{Path, PathBuf},
     };
 
-    use anyhow::Result;
-
     use filesystem::{LFString, NormalizedPathBuf};
     use fs_extra::{copy_items, dir};
     use pretty_assertions::assert_str_eq;
     use sourcefile::SourceMapper;
     use tempdir::TempDir;
-    use workspace::{TreeError, WorkspaceTree, MaterializedTree};
+    use workspace::WorkspaceTree;
 
     use crate::MergeViewBuilder;
 
@@ -387,12 +401,11 @@ mod test {
 
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
-            .expect("expected successful tree initializing")
+            .unwrap()
             .into_iter()
             .filter_map(|treeish| treeish.ok())
-            .map(|imtree| imtree.collect())
-            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
-            .expect("expected successful tree-building");
+            .map(|imtree| imtree.map(|tree| tree.unwrap()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
@@ -401,7 +414,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
+        let result = MergeViewBuilder::new(&tmp_path, tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -420,22 +433,15 @@ mod test {
         let mut workspace = WorkspaceTree::new(&tmp_path.clone());
         workspace.build();
 
-        // println!(
-        //     "connected {}. leaf {}",
-        //     workspace.num_connected_entries(),
-        //     // workspace.num_disconnected_entries(),
-        // );
-
         let final_path = tmp_path.join("shaders").join("final.fsh");
 
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
-            .expect("expected successful tree initializing")
+            .unwrap()
             .into_iter()
             .filter_map(|treeish| treeish.ok())
-            .map(|imtree| imtree.collect())
-            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
-            .expect("expected successful tree-building");
+            .map(|imtree| imtree.map(|tree| tree.unwrap()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
@@ -444,7 +450,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
+        let result = MergeViewBuilder::new(&tmp_path, tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -471,12 +477,11 @@ mod test {
 
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
-            .expect("expected successful tree initializing")
+            .unwrap()
             .into_iter()
             .filter_map(|treeish| treeish.ok())
-            .map(|imtree| imtree.collect())
-            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
-            .expect("expected successful tree-building");
+            .map(|imtree| imtree.map(|tree| tree.unwrap()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
@@ -485,7 +490,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
+        let result = MergeViewBuilder::new(&tmp_path, tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -512,12 +517,11 @@ mod test {
 
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
-            .expect("expected successful tree initializing")
+            .unwrap()
             .into_iter()
             .filter_map(|treeish| treeish.ok())
-            .map(|imtree| imtree.collect())
-            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
-            .expect("expected successful tree-building");
+            .map(|imtree| imtree.map(|tree| tree.unwrap()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
@@ -526,7 +530,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
+        let result = MergeViewBuilder::new(&tmp_path, tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 
@@ -561,12 +565,11 @@ mod test {
 
         let mut trees_vec = workspace
             .trees_for_entry(&final_path)
-            .expect("expected successful tree initializing")
+            .unwrap()
             .into_iter()
             .filter_map(|treeish| treeish.ok())
-            .map(|imtree| imtree.collect())
-            .collect::<Result<Vec<MaterializedTree<'_>>, TreeError>>()
-            .expect("expected successful tree-building");
+            .map(|imtree| imtree.map(|tree| tree.unwrap()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let mut trees = trees_vec.iter_mut();
 
         let tree = trees.next().unwrap();
@@ -575,7 +578,7 @@ mod test {
 
         let mut source_mapper = SourceMapper::new(2);
 
-        let result = MergeViewBuilder::new(&tmp_path, &tree, &mut source_mapper).build();
+        let result = MergeViewBuilder::new(&tmp_path, tree, &mut source_mapper).build();
 
         let merge_file = tmp_path.join("shaders").join("final.fsh.merge");
 

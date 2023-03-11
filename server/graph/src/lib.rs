@@ -1,3 +1,5 @@
+#![feature(array_windows)]
+
 pub mod dfs;
 mod graph;
 pub use graph::*;
@@ -10,10 +12,8 @@ pub use petgraph::stable_graph::NodeIndex;
 /// parent. Parent can be nullable in the case of the child being a top level
 /// node in the tree.
 #[derive(Hash, PartialEq, Eq, Debug, Clone)]
-pub struct FilialTuple<T> {
-    // pub child: NodeIndex,
-    // pub parent: Option<NodeIndex>,
-    pub child: T,
+pub struct FilialTuple<T, E> {
     pub parent: Option<T>,
-    // pub edge: E,
+    pub child: T,
+    pub edges: Vec<E>,
 }
